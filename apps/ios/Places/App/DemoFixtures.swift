@@ -3,6 +3,19 @@ import Foundation
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedWiFiRecovery(_ store: PlacesStore) async throws {
+        let start = Calendar.current.startOfDay(for: Date())
+        let home = Place(id: "recovery-home", name: "Home", coordinate: .init(latitude: 1, longitude: 1), symbol: "house.fill")
+        try await store.savePlace(home)
+        func wifi(_ seconds: Double, learnsLocation: Bool = false) -> SensorObservation {
+            SensorObservation(timestamp: start.addingTimeInterval(seconds), source: .wifi,
+                coordinate: learnsLocation ? home.coordinate : nil, horizontalAccuracy: learnsLocation ? 10 : nil,
+                ssid: "Fixture Wi-Fi", bssid: "02:00:00:00:00:01")
+        }
+        try await store.append([wifi(-600, learnsLocation: true), wifi(42),
+            SensorObservation(timestamp: start.addingTimeInterval(1314), source: .recovery), wifi(1315)])
+    }
+
     static func seedGroupedHistory(_ store: PlacesStore) async throws {
         let start = Calendar.current.startOfDay(for: Date())
         let home = Place(id: "group-home", name: "Home", coordinate: Coordinate(latitude: 1, longitude: 1), symbol: "house.fill")

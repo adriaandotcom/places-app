@@ -177,7 +177,11 @@ public struct TimelineItem: Codable, Identifiable, Hashable, Sendable {
     public var connection: TimelineConnection?
     public var isSeparated: Bool?
     public var unrecordedDuration: TimeInterval {
-        (originalItems ?? []).filter { $0.kind == .gap }.reduce(0) { $0 + $1.duration(until: lastEvidenceAt) }
+        (originalItems ?? []).filter { $0.kind == .gap }.reduce(0) { total, gap in
+            let lower = max(start, gap.start)
+            let upper = min(end ?? .distantFuture, gap.end ?? lastEvidenceAt)
+            return total + max(0, upper.timeIntervalSince(lower))
+        }
     }
 }
 

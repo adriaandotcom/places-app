@@ -1,6 +1,33 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testLongHomeRecoveryShowsOneStayAndCanSplitAndMerge() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-wifi-recovery"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+        let visits = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-stay-"))
+        let gaps = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-"))
+        XCTAssertEqual(visits.count, 1)
+        XCTAssertEqual(gaps.count, 0)
+        XCTAssertFalse(app.staticTexts["Between recorded locations"].exists)
+        reveal(visits.firstMatch, in: app); visits.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["3 entries combined"].exists)
+        reveal(app.buttons["split-entries"], in: app); app.buttons["split-entries"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertEqual(visits.count, 2)
+        XCTAssertEqual(gaps.count, 1)
+        reveal(gaps.firstMatch, in: app); gaps.firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["An unknown interval"].exists)
+        XCTAssertFalse(app.staticTexts["Between recorded locations"].exists)
+        reveal(app.buttons["merge-entries"], in: app); app.buttons["merge-entries"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertEqual(visits.count, 1)
+        XCTAssertEqual(gaps.count, 0)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "One Home stay across a Wi-Fi recovery gap"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
     func testCombinedHomeCanSplitAndMergeWithoutLosingCorrections() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-grouped-history"]

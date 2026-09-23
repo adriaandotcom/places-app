@@ -137,16 +137,32 @@ public actor PlacesStore {
     public func timeline(on day: Date, calendar: Calendar = .current) throws -> [TimelineItem] {
         guard let interval = calendar.dateInterval(of: .day, for: day) else { return [] }
         return try queue.read { db in
-            let items = try StoreSQL.decodeAll(TimelineItem.self, db: db,
+            var items = try StoreSQL.decodeAll(TimelineItem.self, db: db,
                 sql: "SELECT payload FROM timeline WHERE start < ? AND (end IS NULL OR end > ?) ORDER BY start",
                 arguments: [interval.end.timeIntervalSince1970, interval.start.timeIntervalSince1970])
+            // A gap spanning midnight needs its neighboring entries before grouping.
+            // Clip to the requested day only after preserving that place context.
+            if let first = items.first, first.kind == .gap,
+               let previous = try StoreSQL.decodeAll(TimelineItem.self, db: db,
+                    sql: "SELECT payload FROM timeline WHERE end = ? ORDER BY start DESC LIMIT 1",
+                    arguments: [first.start.timeIntervalSince1970]).first {
+                items.insert(previous, at: 0)
+            }
+            if let last = items.last, last.kind == .gap, let end = last.end,
+               let following = try StoreSQL.decodeAll(TimelineItem.self, db: db,
+                    sql: "SELECT payload FROM timeline WHERE start = ? ORDER BY start LIMIT 1",
+                    arguments: [end.timeIntervalSince1970]).first {
+                items.append(following)
+            }
+            let contextStart = min(interval.start, items.first?.start ?? interval.start)
+            let contextEnd = max(interval.end, items.last?.end ?? items.last?.lastEvidenceAt ?? interval.end)
             let edits = try StoreSQL.decodeAll(UserOverride.self, db: db,
                 sql: "SELECT payload FROM overrides WHERE start < ? AND end > ? ORDER BY createdAt",
-                arguments: [interval.end.timeIntervalSince1970, interval.start.timeIntervalSince1970])
+                arguments: [max(interval.end, items.last?.end ?? .distantFuture).timeIntervalSince1970,
+                            contextStart.timeIntervalSince1970])
             let observations = try StoreSQL.decodeAll(SensorObservation.self, db: db,
                 sql: "SELECT payload FROM observations WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
-                arguments: [items.first?.start.timeIntervalSince1970 ?? interval.start.timeIntervalSince1970,
-                            max(interval.end, items.last?.end ?? items.last?.lastEvidenceAt ?? interval.end).timeIntervalSince1970])
+                arguments: [contextStart.timeIntervalSince1970, contextEnd.timeIntervalSince1970])
             let places = try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places")
             let separatedAt = try Double.fetchAll(db, sql: "SELECT timestamp FROM timelineSeparations").map(Date.init(timeIntervalSince1970:))
             let presented = TimelinePresentation.make(items: InferenceEngine.applying(edits, to: items),

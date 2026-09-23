@@ -39,13 +39,11 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
     #expect(split.map(\.kind) == [.stay, .gap, .stay])
 }
 
-@Test func explicitUnknownLongGapPauseAndMovementAreNotHidden() {
+@Test func explicitUnknownPauseAndMovementAreNotHidden() {
     let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
     let input = [entry("a", 0, 100), entry("gap", 100, 200, kind: .gap, place: nil), entry("b", 200, nil)]
     var corrected = input; corrected[1].isUserEdited = true
     #expect(TimelinePresentation.make(items: corrected, observations: [], places: [home]).count == 3)
-    var long = input; long[1].end = at(1000); long[2].start = at(1000)
-    #expect(TimelinePresentation.make(items: long, observations: [], places: [home]).count == 3)
     for source in [ObservationSource.paused, .regionExit, .visitDeparture] {
         let observation = SensorObservation(timestamp: at(150), source: source)
         #expect(TimelinePresentation.make(items: input, observations: [observation], places: [home]).count == 3)
@@ -55,6 +53,60 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
     #expect(TimelinePresentation.make(items: input, observations: [walking], places: [home]).count == 3)
 }
 
+@Test func sameSavedPlaceJoinsLongRecoveryAndSplitsWithoutInventingTravel() {
+    let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
+    let input = [entry("a", 0, 42), entry("gap", 42, 1315, kind: .gap, place: nil), entry("b", 1315, nil)]
+    let values = [fix(42), SensorObservation(timestamp: at(1315), source: .recovery), fix(1315)]
+    let result = TimelinePresentation.make(items: input, observations: values, places: [home])
+    #expect(result.count == 1 && result[0].end == nil)
+    #expect(result[0].originalItems == input)
+    #expect(result[0].unrecordedDuration == 1273)
+    let split = TimelinePresentation.make(items: input, observations: values, places: [home], separatedAt: [at(42), at(1315)])
+    #expect(split.map(\.kind) == [.stay, .gap, .stay])
+    #expect(split[1].connection == nil)
+    let unnamed = input.map { item in var copy = item; copy.placeID = nil; return copy }
+    #expect(TimelinePresentation.make(items: unnamed, observations: values, places: []).count == 3)
+}
+
+@Test func sameLocationGapDoesNotDrawARouteWhenExplicitlyLeftUnknown() {
+    var input = [entry("a", 0, 42), entry("gap", 42, 1315, kind: .gap, place: nil, edited: true), entry("b", 1315, nil)]
+    let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
+    let result = TimelinePresentation.make(items: input, observations: [], places: [home])
+    #expect(result.count == 3 && result[1].isUserEdited)
+    #expect(result[1].connection == nil)
+    input[0].placeID = nil; input[2].placeID = nil
+    input[2].coordinate = .init(latitude: 0, longitude: 0.0001)
+    #expect(TimelinePresentation.make(items: input, observations: [], places: [])[1].connection == nil)
+}
+
+@Test func wifiRecoveryAcrossMidnightGroupsStoredHistoryAndPreservesSplit() async throws {
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let midnight = calendar.startOfDay(for: day)
+    let store = try PlacesStore()
+    let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
+    try await store.savePlace(home)
+    func wifi(_ seconds: Double, learnsLocation: Bool = false) -> SensorObservation {
+        SensorObservation(timestamp: midnight.addingTimeInterval(seconds), source: .wifi,
+            coordinate: learnsLocation ? origin : nil, horizontalAccuracy: learnsLocation ? 10 : nil,
+            ssid: "Fixture Wi-Fi", bssid: "02:00:00:00:00:01")
+    }
+    try await store.append([wifi(-1800, learnsLocation: true), wifi(-600),
+        SensorObservation(timestamp: midnight.addingTimeInterval(41), source: .recovery), wifi(42), wifi(43),
+        SensorObservation(timestamp: midnight.addingTimeInterval(1314), source: .recovery), wifi(1315)])
+    let today = try await store.timeline(on: midnight, calendar: calendar)
+    #expect(today.count == 1)
+    let item = try #require(today.first)
+    #expect(item.start == midnight && item.placeID == home.id)
+    // The earlier recovery crosses midnight: count only today's missing coverage.
+    #expect(item.unrecordedDuration == 1314)
+    #expect(item.originalItems?.filter { $0.kind == .gap }.count == 2)
+    try await store.split(item)
+    let split = try await store.timeline(on: midnight, calendar: calendar)
+    #expect(split.map(\.kind) == [.gap, .stay, .gap, .stay])
+    #expect(split.filter { $0.kind == .gap }.allSatisfy { $0.connection == nil })
+    #expect(try await store.observations().count == 7)
+}
+
 @Test func groupingDoesNotConfuseDifferentPlacesOrHideATrip() {
     let input = [entry("a", 0, 100), entry("b", 100, 200, place: "work"), entry("c", 200, nil)]
     #expect(TimelinePresentation.make(items: input, observations: [], places: []).count == 3)
@@ -62,6 +114,29 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
     #expect(TimelinePresentation.make(items: trip, observations: [], places: []).count == 3)
     var discontinuous = [input[0], input[2]]; discontinuous[1].start = at(101)
     #expect(TimelinePresentation.make(items: discontinuous, observations: [], places: []).count == 2)
+}
+
+@Test func endOfDayGapUsesFollowingPlaceAndItsCorrections() async throws {
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let midnight = calendar.startOfDay(for: day)
+    let store = try PlacesStore()
+    let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
+    let work = Place(id: "work", name: "Fixture Work", coordinate: .init(latitude: 0, longitude: 0.01))
+    try await store.savePlace(home); try await store.savePlace(work)
+    func location(_ seconds: Double) -> SensorObservation {
+        SensorObservation(timestamp: midnight.addingTimeInterval(seconds), source: .location,
+                          coordinate: origin, horizontalAccuracy: 10)
+    }
+    try await store.append([location(85800), location(86300),
+        SensorObservation(timestamp: midnight.addingTimeInterval(87600), source: .recovery), location(87601)])
+    let joined = try await store.timeline(on: midnight, calendar: calendar)
+    #expect(joined.count == 1 && joined[0].kind == .stay)
+    #expect(joined[0].unrecordedDuration == 100)
+    try await store.correct(UserOverride(start: midnight.addingTimeInterval(87601),
+        end: midnight.addingTimeInterval(88000), kind: .stay, placeID: work.id))
+    let corrected = try await store.timeline(on: midnight, calendar: calendar)
+    #expect(corrected.map(\.kind) == [.stay, .gap])
+    #expect(corrected.last?.connection?.to.placeID == work.id)
 }
 
 @Test func unnamedStopsUseAnchoredProximityAndTransportModesRemainDistinct() {

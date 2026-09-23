@@ -18,7 +18,7 @@ public enum TimelinePresentation {
                 if compatible(members[0], next) {
                     members.append(next); index += 1
                 } else if next.kind == .gap, !next.isUserEdited, let end = next.end,
-                          end.timeIntervalSince(next.start) <= 600, index + 1 < originals.count,
+                          (members[0].placeID != nil || end.timeIntervalSince(next.start) <= 600), index + 1 < originals.count,
                           touches(next, originals[index + 1]), !boundaries.contains(originals[index + 1].start),
                           members[0].kind == .stay, compatible(members[0], originals[index + 1]),
                           supportsContinuity(members[0], gap: next, observations: observations, places: places) {
@@ -67,7 +67,8 @@ public enum TimelinePresentation {
         guard let anchor = place?.coordinate ?? stay.coordinate else { return false }
         let radius = place?.radius ?? TrackingPolicy.stationaryRadius
         // A pause, observed departure, or contradictory fix must remain explicit.
-        // A short recovery alone is not proof that someone left this place.
+        // Recovery duration alone is not proof that someone left a saved place.
+        // The missing coverage remains in originalItems even when the cards join.
         return !observations.contains { observation in
             guard observation.timestamp >= gap.start, observation.timestamp <= (gap.end ?? gap.start) else { return false }
             if [.paused, .regionExit, .visitDeparture].contains(observation.source) { return true }
@@ -96,6 +97,13 @@ public enum TimelinePresentation {
             TimelineConnection.Endpoint(coordinate: $0.usableCoordinate!, timestamp: $0.timestamp)
         }
         guard let from, let to, to.timestamp > from.timestamp else { return nil }
+        if item.kind == .gap {
+            if let fromID = from.placeID, let toID = to.placeID {
+                guard fromID != toID else { return nil }
+            } else if from.coordinate.distance(to: to.coordinate) <= TrackingPolicy.stationaryRadius {
+                return nil
+            }
+        }
         return TimelineConnection(from: from, to: to)
     }
 }
