@@ -31,20 +31,38 @@ private struct AppleMapSurface: View {
     @Environment(AppModel.self) private var model
     let items: [TimelineItem]
     @State private var selectedPlace: Place?
+    @State private var camera: MapCameraPosition = .automatic
     private var shownPlaces: [Place] {
         let ids = Set(items.compactMap(\.placeID))
-        return ids.isEmpty ? model.places : model.places.filter { ids.contains($0.id) }
+        return items.isEmpty ? model.places : model.places.filter { ids.contains($0.id) }
+    }
+    private var unnamedStays: [TimelineItem] {
+        items.filter { $0.kind == .stay && model.place(for: $0) == nil && $0.coordinate?.isValid == true }
+    }
+    private var shownRoutes: [TimelineItem] { items.filter { $0.kind == .journey } }
+    private func points(for item: TimelineItem) -> [RoutePoint] {
+        model.routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) }
+    }
+    private var framingCoordinates: [Coordinate] {
+        shownPlaces.map(\.coordinate) + unnamedStays.compactMap(\.coordinate)
+            + shownRoutes.flatMap { points(for: $0).map(\.coordinate) }
     }
     var body: some View {
-        Map {
+        Map(position: $camera) {
             ForEach(shownPlaces) { place in
                 Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)) {
                     Button { selectedPlace = place } label: { PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex, size: 40) }
                         .accessibilityLabel(place.name)
                 }
             }
-            ForEach(items.filter { $0.kind == .journey }) { item in
-                let points = model.routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) }
+            ForEach(unnamedStays) { item in
+                if let coordinate = item.coordinate {
+                    Marker("Somewhere new", coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude))
+                        .tint(Palette.accent(4))
+                }
+            }
+            ForEach(shownRoutes) { item in
+                let points = points(for: item)
                 if points.count > 1 {
                     MapPolyline(coordinates: points.map { CLLocationCoordinate2D(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) })
                         .stroke(Palette.green, lineWidth: 4)
@@ -53,6 +71,16 @@ private struct AppleMapSurface: View {
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControls { MapCompass(); MapScaleView() }
+        .onChange(of: framingCoordinates, initial: true) { _, coordinates in
+            if Set(coordinates).count == 1, let coordinate = coordinates.first {
+                let span = max(1000, (shownPlaces.map(\.radius).max() ?? 100) * 4)
+                camera = .region(MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                    latitudinalMeters: span, longitudinalMeters: span))
+            } else {
+                camera = .automatic
+            }
+        }
         .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) } }
     }
 }
