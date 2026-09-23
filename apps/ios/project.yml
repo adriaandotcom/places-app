@@ -52,7 +52,6 @@ targets:
       path: Places/Places.entitlements
       properties:
         com.apple.developer.networking.wifi-info: true
-        com.apple.developer.default-data-protection: NSFileProtectionCompleteUntilFirstUserAuthentication
   PlacesUITests:
     type: bundle.ui-testing
     platform: iOS

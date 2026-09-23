@@ -7,6 +7,9 @@ enum ProtectedStorage {
         let manager = FileManager.default
         let parent = try manager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         var directory = parent.appendingPathComponent("PrivateHistory", isDirectory: true)
+        // Class C is also iOS's default for newly created app files, including
+        // SQLite sidecars. Keep it explicit here without overriding it through
+        // a Data Protection entitlement that automatic profiles set to class A.
         try manager.createDirectory(at: directory, withIntermediateDirectories: true,
                                     attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         var values = URLResourceValues(); values.isExcludedFromBackup = true
