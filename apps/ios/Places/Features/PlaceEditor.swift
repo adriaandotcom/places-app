@@ -166,12 +166,12 @@ struct PlaceEditor: View {
             }
             .interactiveDismissDisabled(saving)
             .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: $symbol, colorIndex: colorIndex) } }
-            .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removingWiFi != nil }, set: { if !$0 { removingWiFi = nil } }), titleVisibility: .visible) {
+            .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removingWiFi != nil }, set: { if !$0 { removingWiFi = nil } }), titleVisibility: .visible, presenting: removingWiFi) { ssid in
                 Button("Remove Wi-Fi name", role: .destructive) {
-                    if let removingWiFi { wifiNames.removeAll { $0 == removingWiFi } }
+                    wifiNames.removeAll { $0 == ssid }
                     removingWiFi = nil
                 }
-            } message: { Text("It will be removed from this place when you save. Recorded history stays intact.") }
+            } message: { _ in Text("It will be removed from this place when you save. Recorded history stays intact.") }
             .alert("Couldn’t save this place", isPresented: Binding(get: { validation != nil }, set: { if !$0 { validation = nil } })) {
                 Button("OK") { validation = nil }
             } message: { Text(validation ?? "") }

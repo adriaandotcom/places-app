@@ -221,7 +221,7 @@ import XCTest
         app.buttons["Remove"].tap()
         XCTAssertTrue(app.buttons["Remove Wi-Fi name"].waitForExistence(timeout: 5))
         app.buttons["Remove Wi-Fi name"].tap()
-        XCTAssertFalse(row.exists)
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     }
 
     func testEditorCreatesMapOnlyAfterConsentAndSavesSelectedPin() {
@@ -285,8 +285,10 @@ import XCTest
         XCTAssertTrue(app.buttons["Export test case"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "expected result")).firstMatch.exists)
         app.buttons["Export test case"].tap()
-        XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.textFields.matching(NSPredicate(format: "value == %@", "Places-test-case")).firstMatch.exists)
+        // The editable export name identifies the system picker regardless of its current folder.
+        let filename = app.textFields.matching(NSPredicate(format: "value == %@", "Places-test-case")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 15))
+        XCTAssertTrue(filename.isHittable)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Test case file export"; screenshot.lifetime = .keepAlways; add(screenshot)
     }

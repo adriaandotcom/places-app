@@ -67,6 +67,10 @@ public actor PlacesStore {
         migrator.registerMigration("v3-reversible-timeline-grouping") { db in
             try db.execute(sql: "CREATE TABLE timelineSeparations (timestamp REAL PRIMARY KEY)")
         }
+        migrator.registerMigration("v4-connected-wifi-evidence") { db in
+            try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
         try migrator.migrate(queue)
     }
 

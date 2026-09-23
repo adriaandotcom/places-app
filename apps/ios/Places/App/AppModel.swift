@@ -101,6 +101,7 @@ final class AppModel {
             let newEvents = nerdMode ? try await store.trackingEvents(limit: 60) : []
             guard !deleting, generation == expectedGeneration else { return }
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
+            if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
             recentObservations = nerdMode ? newObservations : []
             events = nerdMode ? newEvents : []

@@ -22,7 +22,7 @@ public enum InferenceEngine {
                    mode: TransportMode = .unknown, reason: String) {
             current = TimelineItem(id: "\(observation.id)-\(kind.rawValue)", kind: kind, start: time,
                                    placeID: place?.id, mode: mode, reasons: [reason], evidenceIDs: [observation.id],
-                                   lastEvidenceAt: time, coordinate: observation.usableCoordinate)
+                                   lastEvidenceAt: time, coordinate: observation.usableCoordinate ?? place?.coordinate)
         }
         func addEvidence(_ observation: SensorObservation) {
             guard current != nil else { return }
@@ -61,7 +61,8 @@ public enum InferenceEngine {
                 continue
             }
 
-            guard let coordinate = observation.usableCoordinate else { continue }
+            let wifiPlace = TrackingPolicy.connectedPlace(for: observation, places: places, networks: networks, accessPoints: accessPoints)
+            guard observation.usableCoordinate != nil || wifiPlace != nil else { continue }
 
             if let item = current, item.kind != .stay,
                time.timeIntervalSince(item.lastEvidenceAt) > TrackingPolicy.evidenceGap {
@@ -76,32 +77,24 @@ public enum InferenceEngine {
                 stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
             }
 
-            var place = TrackingPolicy.matchingPlace(for: observation, places: places)
-            var wifiMatched = false
-            if let ssid = observation.ssid, let bssid = observation.bssid,
-               let network = networks.first(where: { $0.ssid == ssid }),
-               [.fixed, .shared].contains(network.classification),
-               let accessPoint = accessPoints.first(where: { $0.networkID == network.id && $0.bssid == bssid }),
-               let wifiPlace = places.first(where: { $0.id == accessPoint.placeID }),
-               coordinate.distance(to: wifiPlace.coordinate) <= wifiPlace.radius,
-               (observation.horizontalAccuracy ?? .infinity) <= min(100, wifiPlace.radius) {
-                place = wifiPlace; wifiMatched = true
-            }
+            let place = wifiPlace ?? TrackingPolicy.matchingPlace(for: observation, places: places)
+            let wifiReason = "Connected to an access point previously learned at this place."
 
             if let place {
                 stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
                 if current?.kind == .stay && current?.placeID == place.id {
                     addEvidence(observation)
-                    if wifiMatched, current?.reasons.contains("Connected fixed-place Wi-Fi agrees with your location.") == false {
-                        current?.reasons.append("Connected fixed-place Wi-Fi agrees with your location.")
+                    if wifiPlace != nil, current?.reasons.contains(wifiReason) == false {
+                        current?.reasons.append(wifiReason)
                     }
                 } else {
                     close(at: time)
                     start(.stay, at: time, observation: observation, place: place,
-                          reason: "Location observations fall inside this place. Arrival and departure boundaries are estimates.")
+                          reason: wifiPlace != nil ? wifiReason : "Location observations fall inside this place. Arrival and departure boundaries are estimates.")
                 }
                 continue
             }
+            guard let coordinate = observation.usableCoordinate else { continue }
 
             if let item = current, item.kind == .stay, item.placeID != nil,
                let previous = item.coordinate, previous.distance(to: coordinate) > 250,

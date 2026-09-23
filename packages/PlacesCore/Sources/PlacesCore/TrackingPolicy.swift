@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TrackingState: String, Codable, CaseIterable, Sendable {
-    case recovery, unknown, moving, stationaryCandidate, knownPlace, stationaryUnknown, lowPowerFallback, paused
+    case recovery, unknown, moving, stationaryCandidate, knownPlace, knownWiFi, stationaryUnknown, lowPowerFallback, paused
     public var title: String {
         switch self {
         case .recovery: "Finding your place"
@@ -9,6 +9,7 @@ public enum TrackingState: String, Codable, CaseIterable, Sendable {
         case .moving: "Recording your journey"
         case .stationaryCandidate: "Checking your stop"
         case .knownPlace: "At a known place"
+        case .knownWiFi: "At a known place · Wi-Fi"
         case .stationaryUnknown: "Stopped somewhere new"
         case .lowPowerFallback: "Using low-power signals"
         case .paused: "Tracking paused"
@@ -23,7 +24,7 @@ public struct SensorPolicy: Equatable, Sendable {
 }
 
 public enum TrackingPolicy {
-    public static let version = "1.1"
+    public static let version = "1.2"
     public static let stationaryDuration: TimeInterval = 180
     public static let evidenceGap: TimeInterval = 20 * 60
     public static let stationaryRadius: Double = 60
@@ -59,6 +60,23 @@ public enum TrackingPolicy {
             if second - first < max(25, accuracy) { return nil }
         }
         return closest
+    }
+
+    /// The observation must describe a freshly read connection, not a cached SSID.
+    /// Shared names are safe only when this specific access point has a unique learned place.
+    public static func connectedPlace(for observation: SensorObservation, places: [Place],
+                                      networks: [WiFiNetwork], accessPoints: [WiFiAccessPoint]) -> Place? {
+        guard observation.source == .wifi, let ssid = observation.ssid,
+              let bssid = observation.bssid?.lowercased(), !bssid.isEmpty,
+              let network = networks.first(where: { $0.ssid == ssid }),
+              [.fixed, .shared].contains(network.classification) else { return nil }
+        let ids = Set(accessPoints.filter { $0.networkID == network.id && $0.bssid.lowercased() == bssid }.compactMap(\.placeID))
+        guard ids.count == 1, let place = places.first(where: { ids.contains($0.id) }) else { return nil }
+        if let coordinate = observation.usableCoordinate,
+           coordinate.distance(to: place.coordinate) > place.radius + min(100, observation.horizontalAccuracy ?? 0) {
+            return nil
+        }
+        return place
     }
 
     public static func mode(for motion: MotionKind?) -> TransportMode {

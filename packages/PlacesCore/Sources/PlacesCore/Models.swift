@@ -143,6 +143,11 @@ public struct WiFiAccessPoint: Codable, Identifiable, Hashable, Sendable {
     public var bssid: String
     public var placeID: String?
     public var lastSeen: Date
+
+    public init(id: String, networkID: String, bssid: String, placeID: String?, lastSeen: Date) {
+        self.id = id; self.networkID = networkID; self.bssid = bssid.lowercased()
+        self.placeID = placeID; self.lastSeen = lastSeen
+    }
 }
 
 public enum TimelineKind: String, Codable, Sendable { case stay, journey, gap }

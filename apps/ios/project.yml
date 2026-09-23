@@ -52,6 +52,17 @@ targets:
       path: Places/Places.entitlements
       properties:
         com.apple.developer.networking.wifi-info: true
+  PlacesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PlacesTests]
+    dependencies:
+      - target: Places
+      - package: PlacesCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.tests
   PlacesUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -68,4 +79,4 @@ schemes:
       targets:
         Places: all
     test:
-      targets: [PlacesUITests]
+      targets: [PlacesTests, PlacesUITests]
