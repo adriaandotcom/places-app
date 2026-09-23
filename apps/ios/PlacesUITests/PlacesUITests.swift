@@ -125,6 +125,13 @@ import XCTest
         XCTAssertFalse(app.alerts.firstMatch.exists)
         app.buttons["onboarding-skip"].tap()
         XCTAssertTrue(app.staticTexts["A little movement context"].exists)
+        app.buttons["onboarding-skip"].tap()
+        app.buttons["preset-home"].tap()
+        XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["place-name"].value as? String, "Home")
+        app.buttons["Cancel"].tap()
+        app.buttons["preset-work"].tap()
+        XCTAssertEqual(app.textFields["place-name"].value as? String, "Work")
     }
 
     func testEditorHidesCoordinatesUntilMapsAreDeclinedAndSearchesIconAliases() {
@@ -176,6 +183,12 @@ import XCTest
         map.tap()
         XCTAssertTrue(app.staticTexts["Tap the map to move your pin"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.textFields["place-latitude"].exists)
+        // Start outside the map so this scrolls the form instead of panning tiles.
+        app.buttons["use-current-location"].swipeUp()
+        let radius = app.sliders["Recognition radius in metres"]
+        reveal(radius, in: app)
+        radius.adjust(toNormalizedSliderPosition: 0.5)
+        XCTAssertFalse(app.staticTexts["100 m"].exists)
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Pin"].waitForExistence(timeout: 5))
     }

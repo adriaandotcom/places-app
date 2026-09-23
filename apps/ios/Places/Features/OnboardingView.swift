@@ -4,12 +4,15 @@ import CoreMotion
 import PlacesCore
 
 private enum OnboardingStep: Int, CaseIterable { case welcome, privacy, location, motion, places, wifi, notifications, ready }
+private enum PlacePreset: String, Identifiable {
+    case home = "Home", work = "Work", another = ""
+    var id: String { rawValue }
+}
 
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @State private var step = OnboardingStep.welcome
-    @State private var addingPlace = false
-    @State private var suggestedName = ""
+    @State private var placePreset: PlacePreset?
     @State private var locationValidation: String?
     @State private var requestedBackground = false
     private var steps: [OnboardingStep] { OnboardingStep.allCases.filter { $0 != .wifi || model.tracking.currentSSID != nil } }
@@ -55,7 +58,7 @@ struct OnboardingView: View {
                     if step != .ready { Button("Skip setup") { Task { await model.finishOnboarding() } }.accessibilityIdentifier("skip-setup") }
                 }
             }
-            .sheet(isPresented: $addingPlace) { NavigationStack { PlaceEditor(suggestedName: suggestedName) } }
+            .sheet(item: $placePreset) { preset in NavigationStack { PlaceEditor(suggestedName: preset.rawValue) } }
             .onChange(of: model.tracking.locationSetupReady) { _, complete in
                 if complete { locationValidation = nil }
             }
@@ -120,12 +123,14 @@ struct OnboardingView: View {
             Text("Start with the places that feel like you.").font(BrandFont.body).foregroundStyle(Palette.muted)
             ForEach(model.places) { place in InfoRow(symbol: place.symbol, title: place.name, subtitle: "Saved", colorIndex: place.colorIndex) }
             if !model.places.contains(where: { $0.name.lowercased() == "home" }) {
-                PlacePresetCard(title: "Home", subtitle: "Your own little corner", symbol: "house.fill", colorIndex: 0) { suggestedName = "Home"; addingPlace = true }
+                PlacePresetCard(title: "Home", subtitle: "Your own little corner", symbol: "house.fill", colorIndex: 0) { placePreset = .home }
+                    .accessibilityIdentifier("preset-home")
             }
             if !model.places.contains(where: { $0.name.lowercased() == "work" }) {
-                PlacePresetCard(title: "Work", subtitle: "Where things get done", symbol: "briefcase.fill", colorIndex: 1) { suggestedName = "Work"; addingPlace = true }
+                PlacePresetCard(title: "Work", subtitle: "Where things get done", symbol: "briefcase.fill", colorIndex: 1) { placePreset = .work }
+                    .accessibilityIdentifier("preset-work")
             }
-            PlacePresetCard(title: "Another place", subtitle: "A café, a gym, somewhere you love", symbol: "mappin", colorIndex: 2) { suggestedName = ""; addingPlace = true }
+            PlacePresetCard(title: "Another place", subtitle: "A café, a gym, somewhere you love", symbol: "mappin", colorIndex: 2) { placePreset = .another }
         case .wifi:
             permissionHero(symbol: "wifi", title: "Where does this Wi-Fi live?", index: 5)
             Text("Most Wi-Fi stays in one place. Change the type if this one doesn’t.").font(BrandFont.body)
