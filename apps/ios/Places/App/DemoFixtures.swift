@@ -3,6 +3,18 @@ import Foundation
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedUnnamedStay(_ store: PlacesStore, withSavedPlace: Bool) async throws {
+        if withSavedPlace {
+            try await store.savePlace(Place(name: "Fixture Existing", coordinate: Coordinate(latitude: 0, longitude: 0.02)))
+        }
+        let start = Date().addingTimeInterval(-600)
+        let coordinate = Coordinate(latitude: 0, longitude: 0)
+        try await store.append([
+            SensorObservation(timestamp: start, source: .visitArrival, coordinate: coordinate, horizontalAccuracy: 10),
+            SensorObservation(timestamp: start.addingTimeInterval(300), source: .location, coordinate: coordinate, horizontalAccuracy: 10)
+        ])
+    }
+
     static func seed(_ store: PlacesStore) async throws {
         let start = Calendar.current.startOfDay(for: Date())
         let home = Place(id: "demo-home", name: "Home", coordinate: Coordinate(latitude: 52.37, longitude: 4.85), symbol: "house.fill", colorIndex: 0)

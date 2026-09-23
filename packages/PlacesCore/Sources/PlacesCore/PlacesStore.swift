@@ -78,10 +78,11 @@ public actor PlacesStore {
         try queue.read { try StoreSQL.decodeAll(Place.self, db: $0, sql: "SELECT payload FROM places ORDER BY name COLLATE NOCASE") }
     }
 
-    public func savePlace(_ place: Place) throws {
+    public func savePlace(_ place: Place, assigning edit: UserOverride? = nil) throws {
         guard !place.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius) else { throw PlacesError.invalidPlace }
         try queue.write { db in
+            if let edit, edit.kind != .stay || edit.placeID != place.id { throw PlacesError.invalidCorrection }
             try db.execute(sql: "INSERT INTO places(id, name, address, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, address = excluded.address, payload = excluded.payload",
                            arguments: [place.id, place.name, place.address, try StoreSQL.encode(place)])
             try db.execute(sql: "DELETE FROM placeSearch WHERE placeID = ?", arguments: [place.id])
@@ -94,6 +95,7 @@ public actor PlacesStore {
                 try StoreSQL.saveNetwork(network, db: db)
                 try db.execute(sql: "INSERT OR IGNORE INTO placeWifiLinks(placeID, networkID) VALUES (?, ?)", arguments: [place.id, network.id])
             }
+            if let edit { try StoreSQL.saveCorrection(edit, db: db) }
             try StoreSQL.rebuild(db: db, since: nil)
         }
     }
@@ -139,17 +141,7 @@ public actor PlacesStore {
     }
 
     public func correct(_ edit: UserOverride) throws {
-        guard edit.end > edit.start, edit.end.timeIntervalSince1970.isFinite,
-              edit.start.timeIntervalSince1970.isFinite else { throw PlacesError.invalidCorrection }
-        try queue.write { db in
-            if let placeID = edit.placeID,
-               try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM places WHERE id = ?)", arguments: [placeID])! {
-                throw PlacesError.invalidCorrection
-            }
-            try db.execute(sql: "INSERT INTO overrides(id, start, end, createdAt, payload) VALUES (?, ?, ?, ?, ?)",
-                           arguments: [edit.id, edit.start.timeIntervalSince1970, edit.end.timeIntervalSince1970,
-                                       edit.createdAt.timeIntervalSince1970, try StoreSQL.encode(edit)])
-        }
+        try queue.write { try StoreSQL.saveCorrection(edit, db: $0) }
     }
 
     public func networks() throws -> [WiFiNetwork] {
@@ -261,6 +253,17 @@ public actor PlacesStore {
 }
 
 private enum StoreSQL {
+    static func saveCorrection(_ edit: UserOverride, db: Database) throws {
+        guard edit.end > edit.start, edit.end.timeIntervalSince1970.isFinite,
+              edit.start.timeIntervalSince1970.isFinite else { throw PlacesError.invalidCorrection }
+        if let placeID = edit.placeID,
+           try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM places WHERE id = ?)", arguments: [placeID])! {
+            throw PlacesError.invalidCorrection
+        }
+        try db.execute(sql: "INSERT INTO overrides(id, start, end, createdAt, payload) VALUES (?, ?, ?, ?, ?)",
+                       arguments: [edit.id, edit.start.timeIntervalSince1970, edit.end.timeIntervalSince1970,
+                                   edit.createdAt.timeIntervalSince1970, try encode(edit)])
+    }
     static var exportEncoder: JSONEncoder {
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; return encoder

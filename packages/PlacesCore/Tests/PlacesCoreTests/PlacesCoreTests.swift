@@ -162,6 +162,41 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
     #expect(try await reopened.places().count == 1)
 }
 
+@Test func newPlaceAndVisitAssignmentPersistTogether() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let path = directory.appendingPathComponent("history.sqlite").path
+    let store = try PlacesStore(path: path)
+    try await store.append([fix(0), fix(180), fix(600)])
+    // A changed pin must not undo the user's explicit assignment to this visit.
+    let place = Place(name: "Fixture Corner", coordinate: Coordinate(latitude: 1, longitude: 1))
+    let edit = UserOverride(start: epoch.addingTimeInterval(20), end: epoch.addingTimeInterval(500), kind: .stay, placeID: place.id)
+    try await store.savePlace(place, assigning: edit)
+    try await store.append([fix(900)])
+    let reopened = try PlacesStore(path: path)
+    let items = try await reopened.timeline(on: epoch)
+    let assigned = try #require(items.first { $0.isUserEdited })
+    #expect(assigned.placeID == place.id)
+    #expect(assigned.start == edit.start && assigned.end == edit.end)
+    #expect(items.filter { !$0.isUserEdited }.allSatisfy { $0.placeID == nil })
+    #expect(try await reopened.places().map(\.id) == [place.id])
+    #expect(try await reopened.observations().count == 4)
+}
+
+@Test func invalidAssignmentRollsBackNewPlaceAndSearch() async throws {
+    let store = try PlacesStore()
+    try await store.append([fix(0), fix(180)])
+    let place = Place(name: "Fixture Corner", coordinate: origin, expectedSSIDs: ["Fixture Network"])
+    let edit = UserOverride(start: epoch, end: epoch, kind: .stay, placeID: place.id)
+    await #expect(throws: PlacesError.invalidCorrection) { try await store.savePlace(place, assigning: edit) }
+    #expect(try await store.places().isEmpty)
+    #expect(try await store.search("Corner").isEmpty)
+    #expect(try await store.networks().isEmpty)
+    #expect(try await store.timeline(on: epoch).allSatisfy { $0.placeID == nil && !$0.isUserEdited })
+    #expect(try await store.observations().count == 2)
+}
+
 @Test func mostRecentCorrectionWinsOnlyItsInterval() {
     let item = TimelineItem(id: "fixture", kind: .stay, start: epoch, end: epoch.addingTimeInterval(100), lastEvidenceAt: epoch)
     let a = UserOverride(start: epoch, end: epoch.addingTimeInterval(100), kind: .gap, createdAt: epoch)

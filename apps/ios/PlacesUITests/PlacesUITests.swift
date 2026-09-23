@@ -235,4 +235,36 @@ import XCTest
         screenshot.name = "Test case file export"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
+    func testCreatePlaceFromVisitAssignsItThroughBothEntryPoints() {
+        for withSavedPlace in [false, true] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-unnamed-stay"] + (withSavedPlace ? ["--ui-saved-place"] : [])
+            app.launch()
+            let stay = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch
+            XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
+            XCTAssertEqual(app.buttons["assign-place"].label, "Name this place")
+            if withSavedPlace {
+                reveal(app.buttons["choose-saved-place"], in: app)
+                app.buttons["choose-saved-place"].tap()
+                XCTAssertTrue(app.buttons["Fixture Existing"].waitForExistence(timeout: 5))
+                app.buttons["create-assigned-place"].tap()
+            } else {
+                app.buttons["assign-place"].tap()
+                XCTAssertFalse(app.staticTexts["Choose a place"].exists)
+            }
+            let name = app.textFields["place-name"]
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["Using this visit’s location"].exists)
+            XCTAssertFalse(app.maps.firstMatch.exists)
+            XCTAssertFalse(app.textFields["place-latitude"].exists)
+            name.tap(); name.typeText("Fixture Corner")
+            app.buttons["save-place"].tap()
+            XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+            let assigned = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Corner")).firstMatch
+            XCTAssertTrue(assigned.waitForExistence(timeout: 5)); assigned.tap()
+            XCTAssertTrue(app.staticTexts["Your correction"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["Name this place"].exists)
+        }
+    }
+
 }

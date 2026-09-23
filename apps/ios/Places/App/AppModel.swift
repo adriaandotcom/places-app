@@ -63,7 +63,10 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-fixture") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-unnamed-stay") {
+                        try await DemoFixtures.seedUnnamedStay(opened, withSavedPlace: ProcessInfo.processInfo.arguments.contains("--ui-saved-place"))
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-fixture") {
                         try await DemoFixtures.seed(opened); onboardingComplete = true
                     }
                     #endif
@@ -174,9 +177,14 @@ final class AppModel {
             if !uiTesting { tracking.configure(places: places, enabled: value) }
         } catch { fail("Could not save your tracking preference.") }
     }
-    func save(_ place: Place) async -> Bool {
+    func save(_ place: Place, assigning item: TimelineItem? = nil) async -> Bool {
+        guard let store else { fail("Your history is not available yet. Please try again."); return false }
         do {
-            try await store?.savePlace(place); await refresh()
+            let edit = item.map {
+                UserOverride(start: $0.start, end: max($0.end ?? Date(), $0.start.addingTimeInterval(1)),
+                             kind: .stay, placeID: place.id)
+            }
+            try await store.savePlace(place, assigning: edit); await refresh()
             if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
             return true
         } catch let error as PlacesError { fail(error.localizedDescription); return false }

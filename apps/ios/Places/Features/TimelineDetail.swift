@@ -5,9 +5,14 @@ struct TimelineDetail: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let item: TimelineItem
-    @State private var choosingPlace = false
-    @State private var addingPlace = false
+    @State private var placeFlow: PlaceFlow?
+    @State private var createdPlace = false
+    private enum PlaceFlow: String, Identifiable {
+        case create, choose
+        var id: String { rawValue }
+    }
     private var place: Place? { model.place(for: item) }
+    private var isUnnamedStay: Bool { item.kind == .stay && place == nil }
     private var title: String {
         switch item.kind {
         case .stay: place?.name ?? "Somewhere new"
@@ -44,9 +49,12 @@ struct TimelineDetail: View {
                     Text("Last evidence: \(item.lastEvidenceAt.formatted())").font(.caption.monospaced()).foregroundStyle(Palette.muted)
                 }
                 VStack(spacing: 12) {
-                    Button(item.kind == .gap ? "I was at a place" : "Change assigned place") { choosingPlace = true }.buttonStyle(PrimaryButton())
-                    if item.kind == .stay && place == nil && item.coordinate != nil {
-                        Button("Name this place") { addingPlace = true }.frame(minHeight: 44)
+                    Button(isUnnamedStay ? "Name this place" : item.kind == .gap ? "I was at a place" : "Change assigned place") {
+                        placeFlow = isUnnamedStay || model.places.isEmpty ? .create : .choose
+                    }.buttonStyle(PrimaryButton()).accessibilityIdentifier("assign-place")
+                    if isUnnamedStay && !model.places.isEmpty {
+                        Button("Choose a saved place") { placeFlow = .choose }.frame(minHeight: 44)
+                            .accessibilityIdentifier("choose-saved-place")
                     }
                     Menu(item.kind == .gap ? "I was travelling" : "Change transport mode") {
                         ForEach(TransportMode.allCases, id: \.self) { mode in
@@ -61,20 +69,31 @@ struct TimelineDetail: View {
             }.padding(Layout.gutter)
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .sheet(isPresented: $choosingPlace) {
+            .sheet(item: $placeFlow, onDismiss: { if createdPlace { dismiss() } }) { flow in
                 NavigationStack {
-                    List {
-                        if model.places.isEmpty { Text("Add a place in the Places tab first, then assign it here.") }
-                        ForEach(model.places) { place in
-                            Button { choosingPlace = false; correct(kind: .stay, placeID: place.id) } label: {
-                                Label(place.name, systemImage: place.symbol).frame(minHeight: 44)
+                    if flow == .create {
+                        newPlaceEditor
+                    } else {
+                        List {
+                            NavigationLink { newPlaceEditor } label: {
+                                Label("Create a new place", systemImage: "plus.circle.fill").frame(minHeight: 44)
+                            }.accessibilityIdentifier("create-assigned-place")
+                            ForEach(model.places) { place in
+                                Button { placeFlow = nil; correct(kind: .stay, placeID: place.id) } label: {
+                                    Label(place.name, systemImage: place.symbol).frame(minHeight: 44)
+                                }
                             }
-                        }
-                    }.navigationTitle("Choose a place")
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { choosingPlace = false } } }
+                        }.navigationTitle("Choose a place")
+                            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { placeFlow = nil } } }
+                    }
                 }
             }
-            .sheet(isPresented: $addingPlace) { NavigationStack { PlaceEditor(coordinate: item.coordinate) } }
+    }
+    private var newPlaceEditor: some View {
+        PlaceEditor(coordinate: item.coordinate, assigning: item) {
+            createdPlace = true
+            placeFlow = nil
+        }
     }
     private func correct(kind: TimelineKind, placeID: String? = nil, mode: TransportMode = .unknown) {
         Task { if await model.correct(item, kind: kind, placeID: placeID, mode: mode) { dismiss() } }

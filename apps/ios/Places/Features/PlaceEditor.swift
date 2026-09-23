@@ -5,6 +5,8 @@ struct PlaceEditor: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     private let original: Place?
+    private let assigning: TimelineItem?
+    private let onSave: (() -> Void)?
     @State private var name: String
     @State private var address: String
     @State private var latitude: String
@@ -19,6 +21,7 @@ struct PlaceEditor: View {
     @State private var removingWiFi: String?
     @State private var choosingIcon = false
     @State private var manualCoordinates = false
+    @State private var changingLocation = false
     @State private var locationRequest = CurrentLocationRequest()
     @State private var locationError: String?
     @State private var locationSelected = false
@@ -28,8 +31,11 @@ struct PlaceEditor: View {
     private enum Field { case name, address, latitude, longitude, wifi }
     private var usesCoordinates: Bool { !model.mapsEnabled && (manualCoordinates || model.mapsChoiceMade) }
 
-    init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil) {
+    init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil,
+         assigning: TimelineItem? = nil, onSave: (() -> Void)? = nil) {
         original = place
+        self.assigning = assigning
+        self.onSave = onSave
         let point = place?.coordinate ?? coordinate
         _name = State(initialValue: place?.name ?? suggestedName)
         _address = State(initialValue: place?.address ?? "")
@@ -70,49 +76,58 @@ struct PlaceEditor: View {
                 }
             }
             Section("Location") {
-                if model.mapsEnabled {
-                    PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex)
-                        .frame(height: Layout.mapHeight).listRowInsets(EdgeInsets())
-                    Label(coordinate == nil ? "Tap the map to place your pin" : "Tap the map to move your pin", systemImage: "hand.tap")
-                        .font(.subheadline).foregroundStyle(Palette.muted)
-                } else if !usesCoordinates {
-                    VStack(alignment: .leading, spacing: Layout.spacing) {
-                        Text("Choose your place on a map").font(BrandFont.title)
-                        Text("Apple Maps requests map data from Apple for the area you view.").font(.subheadline).foregroundStyle(Palette.muted)
-                        Button("Use Apple Maps") { Task { await model.setMapsEnabled(true) } }
-                            .buttonStyle(.borderedProminent).tint(Palette.controlGreen).foregroundStyle(.white).accessibilityIdentifier("editor-enable-maps")
-                        Button("Enter coordinates instead") {
-                            manualCoordinates = true
-                            Task { await model.setMapsEnabled(false) }
-                        }.accessibilityIdentifier("enter-coordinates")
-                    }.padding(.vertical, Layout.compact)
-                }
-                Button { useCurrentLocation() } label: {
-                    HStack(spacing: Layout.compact) {
-                        if locationRequest.isRequesting { ProgressView() }
-                        else { Image(systemName: "location.fill") }
-                        Text(locationRequest.isRequesting ? "Finding your location…" : "Use my current location")
-                    }.frame(minHeight: Layout.touchTarget)
-                }.disabled(locationRequest.isRequesting).accessibilityIdentifier("use-current-location")
-                if let locationError {
-                    InlineNotice(title: "Location unavailable", message: locationError, isError: true)
-                        .listRowInsets(EdgeInsets()).accessibilityIdentifier("current-location-error")
-                    if locationRequest.needsSettings {
-                        Button("Open location settings") { model.tracking.openSettings() }
+                if assigning != nil && coordinate != nil && !changingLocation {
+                    HStack {
+                        Label("Using this visit’s location", systemImage: "mappin.circle.fill")
+                        Spacer()
+                        Button("Change") { changingLocation = true }
+                            .accessibilityLabel("Change this place’s location")
                     }
-                } else if locationSelected {
-                    Label("Current location selected", systemImage: "checkmark.circle.fill")
-                        .font(.subheadline).foregroundStyle(Palette.green)
-                }
-                if usesCoordinates {
-                    TextField("Latitude", text: $latitude).keyboardType(.numbersAndPunctuation)
-                        .accessibilityIdentifier("place-latitude").focused($focusedField, equals: .latitude)
-                    TextField("Longitude", text: $longitude).keyboardType(.numbersAndPunctuation)
-                        .accessibilityIdentifier("place-longitude").focused($focusedField, equals: .longitude)
-                }
-                if model.mapsEnabled || usesCoordinates {
-                    HStack { Text("Recognition radius"); Spacer(); Text("\(Int(radius)) m").foregroundStyle(Palette.muted) }
-                    Slider(value: $radius, in: 50...1000, step: 25).accessibilityLabel("Recognition radius in metres")
+                } else {
+                    if model.mapsEnabled {
+                        PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex)
+                            .frame(height: Layout.mapHeight).listRowInsets(EdgeInsets())
+                        Label(coordinate == nil ? "Tap the map to place your pin" : "Tap the map to move your pin", systemImage: "hand.tap")
+                            .font(.subheadline).foregroundStyle(Palette.muted)
+                    } else if !usesCoordinates {
+                        VStack(alignment: .leading, spacing: Layout.spacing) {
+                            Text("Choose your place on a map").font(BrandFont.title)
+                            Text("Apple Maps requests map data from Apple for the area you view.").font(.subheadline).foregroundStyle(Palette.muted)
+                            Button("Use Apple Maps") { Task { await model.setMapsEnabled(true) } }
+                                .buttonStyle(.borderedProminent).tint(Palette.controlGreen).foregroundStyle(.white).accessibilityIdentifier("editor-enable-maps")
+                            Button("Enter coordinates instead") {
+                                manualCoordinates = true
+                                Task { await model.setMapsEnabled(false) }
+                            }.accessibilityIdentifier("enter-coordinates")
+                        }.padding(.vertical, Layout.compact)
+                    }
+                    Button { useCurrentLocation() } label: {
+                        HStack(spacing: Layout.compact) {
+                            if locationRequest.isRequesting { ProgressView() }
+                            else { Image(systemName: "location.fill") }
+                            Text(locationRequest.isRequesting ? "Finding your location…" : "Use my current location")
+                        }.frame(minHeight: Layout.touchTarget)
+                    }.disabled(locationRequest.isRequesting).accessibilityIdentifier("use-current-location")
+                    if let locationError {
+                        InlineNotice(title: "Location unavailable", message: locationError, isError: true)
+                            .listRowInsets(EdgeInsets()).accessibilityIdentifier("current-location-error")
+                        if locationRequest.needsSettings {
+                            Button("Open location settings") { model.tracking.openSettings() }
+                        }
+                    } else if locationSelected {
+                        Label("Current location selected", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline).foregroundStyle(Palette.green)
+                    }
+                    if usesCoordinates {
+                        TextField("Latitude", text: $latitude).keyboardType(.numbersAndPunctuation)
+                            .accessibilityIdentifier("place-latitude").focused($focusedField, equals: .latitude)
+                        TextField("Longitude", text: $longitude).keyboardType(.numbersAndPunctuation)
+                            .accessibilityIdentifier("place-longitude").focused($focusedField, equals: .longitude)
+                    }
+                    if model.mapsEnabled || usesCoordinates {
+                        HStack { Text("Recognition radius"); Spacer(); Text("\(Int(radius)) m").foregroundStyle(Palette.muted) }
+                        Slider(value: $radius, in: 50...1000, step: 25).accessibilityLabel("Recognition radius in metres")
+                    }
                 }
             }
             Section {
@@ -143,12 +158,13 @@ struct PlaceEditor: View {
                 Text("Add the networks you use here.")
             }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
-            .navigationTitle(original == nil ? "Add a place" : "Edit place").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) { Button(saving ? "Saving…" : "Save", action: save).disabled(saving).accessibilityIdentifier("save-place") }
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil }.accessibilityIdentifier("dismiss-keyboard") }
             }
+            .interactiveDismissDisabled(saving)
             .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: $symbol, colorIndex: colorIndex) } }
             .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removingWiFi != nil }, set: { if !$0 { removingWiFi = nil } }), titleVisibility: .visible) {
                 Button("Remove Wi-Fi name", role: .destructive) {
@@ -204,6 +220,11 @@ struct PlaceEditor: View {
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
             expectedSSIDs: wifiNames, createdAt: original?.createdAt ?? Date())
         saving = true; focusedField = nil
-        Task { if await model.save(place) { dismiss() }; saving = false }
+        Task {
+            if await model.save(place, assigning: assigning) {
+                if let onSave { onSave() } else { dismiss() }
+            }
+            saving = false
+        }
     }
 }
