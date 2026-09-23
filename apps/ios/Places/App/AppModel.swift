@@ -20,6 +20,7 @@ final class AppModel {
     private(set) var routePoints: [RoutePoint] = []
     private(set) var diagnostics: DiagnosticReport?
     private(set) var mapsEnabled = false
+    private(set) var mapsChoiceMade = false
     private(set) var nerdMode = false
     private(set) var trackingEnabled = true
     private(set) var onboardingComplete = false
@@ -56,6 +57,7 @@ final class AppModel {
             Task {
                 do {
                     mapsEnabled = try await opened.setting("mapsEnabled") == "true"
+                    mapsChoiceMade = try await opened.setting("mapsChoiceMade") == "true" || mapsEnabled
                     nerdMode = try await opened.setting("nerdMode") == "true"
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
@@ -148,7 +150,12 @@ final class AppModel {
     func setMapsEnabled(_ value: Bool) async {
         // Revoke immediately, even when a disk write fails. Only enable after persistence succeeds.
         if !value { mapsEnabled = false }
-        do { try await store?.setSetting("mapsEnabled", value: String(value)); mapsEnabled = value }
+        do {
+            guard let store else { return }
+            try await store.setSetting("mapsEnabled", value: String(value))
+            try await store.setSetting("mapsChoiceMade", value: "true")
+            mapsChoiceMade = true; mapsEnabled = value
+        }
         catch { fail("Could not save your map preference. Apple Maps remains off for this session."); mapsEnabled = false }
     }
     func setNerdMode(_ value: Bool) async {

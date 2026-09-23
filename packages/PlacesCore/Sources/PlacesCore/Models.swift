@@ -117,7 +117,7 @@ public struct WiFiNetwork: Codable, Identifiable, Hashable, Sendable {
     public var userClassified: Bool
     public var firstSeen: Date
     public var lastSeen: Date
-    public init(id: String = UUID().uuidString, ssid: String, classification: WiFiClassification = .unclassified,
+    public init(id: String = UUID().uuidString, ssid: String, classification: WiFiClassification = .fixed,
                 userClassified: Bool = false, firstSeen: Date, lastSeen: Date) {
         self.id = id; self.ssid = ssid; self.classification = classification; self.userClassified = userClassified
         self.firstSeen = firstSeen; self.lastSeen = lastSeen

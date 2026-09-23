@@ -67,11 +67,62 @@ struct MapScreen: View {
                 VStack(spacing: 8) {
                     Text(model.selectedDay.formatted(date: .abbreviated, time: .omitted)).font(BrandFont.title)
                     Text("Routes connect recorded samples. Unknown intervals have no route.").font(.caption).foregroundStyle(Palette.muted)
-                    Button("Turn off Apple Maps") { Task { await model.setMapsEnabled(false) } }.font(.footnote).frame(minHeight: 44)
-                        .accessibilityIdentifier("disable-apple-maps")
-                }.padding(.horizontal, 20).padding(.top, 12).frame(maxWidth: .infinity).background(Palette.paper)
+                }.padding(.horizontal, 20).padding(.vertical, 12).frame(maxWidth: .infinity).background(Palette.paper)
             }
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationTitle("Map").navigationBarTitleDisplayMode(.inline)
             .toolbar { SettingsToolbar() }
+    }
+}
+
+// This wrapper checks live consent before constructing the editor's MapKit view.
+struct PlaceLocationMap: View {
+    @Environment(AppModel.self) private var model
+    @Binding var coordinate: Coordinate?
+    let radius: Double
+    let colorIndex: Int
+    var body: some View {
+        if model.mapsEnabled {
+            PlacePinSurface(coordinate: $coordinate, radius: radius, colorIndex: colorIndex)
+        }
+    }
+}
+
+private struct PlacePinSurface: View {
+    @Binding var coordinate: Coordinate?
+    let radius: Double
+    let colorIndex: Int
+    @State private var camera: MapCameraPosition = .automatic
+    var body: some View {
+        MapReader { proxy in
+            Map(position: $camera) {
+                if let coordinate {
+                    let center = CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                    MapCircle(center: center, radius: radius).foregroundStyle(Palette.accent(colorIndex).opacity(0.18))
+                        .stroke(Palette.accent(colorIndex), lineWidth: 2)
+                    Annotation("Place", coordinate: center) {
+                        Image(systemName: "mappin.circle.fill").font(.largeTitle)
+                            .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.accent(colorIndex))
+                    }
+                }
+            }
+            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+            .mapControls { MapCompass(); MapScaleView() }
+            .simultaneousGesture(SpatialTapGesture().onEnded { event in
+                if let point = proxy.convert(event.location, from: .local) {
+                    coordinate = Coordinate(latitude: point.latitude, longitude: point.longitude)
+                }
+            })
+            .accessibilityIdentifier("place-pin-map")
+            .accessibilityLabel("Place location. Tap to choose a pin, or use your current location below.")
+        }
+        .onAppear { centerOnPin() }
+        .onChange(of: coordinate) { old, new in
+            if let new, old.map({ $0.distance(to: new) > 500 }) ?? true { centerOnPin() }
+        }
+    }
+    private func centerOnPin() {
+        guard let coordinate else { return }
+        camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                                             latitudinalMeters: max(radius * 4, 1000), longitudinalMeters: max(radius * 4, 1000)))
     }
 }

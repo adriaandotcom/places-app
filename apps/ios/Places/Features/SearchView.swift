@@ -6,7 +6,7 @@ struct SearchView: View {
         @Bindable var model = model
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Find a familiar\nlittle corner.").font(BrandFont.hero)
+                Text("Find that place.").font(BrandFont.hero)
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(Palette.muted)
                     TextField("Search places and addresses", text: $model.searchText).font(BrandFont.body)
@@ -16,7 +16,7 @@ struct SearchView: View {
                     }
                 }.padding(16).background(Palette.paper, in: RoundedRectangle(cornerRadius: 18))
                 if model.searchText.isEmpty {
-                    EmptyHistory(symbol: "magnifyingglass", title: "Remember the name, or just the street", message: "Search names and addresses you’ve saved. Everything is searched on this iPhone.")
+                    Text("Search your saved names and addresses.").font(BrandFont.body).foregroundStyle(Palette.muted)
                 } else if model.searchResults.isEmpty {
                     EmptyHistory(symbol: "text.magnifyingglass", title: "No places found", message: "Try a shorter name or an address you’ve saved.")
                 }
@@ -26,7 +26,7 @@ struct SearchView: View {
                     }.buttonStyle(.plain)
                 }
             }.padding(Layout.gutter)
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationTitle("Search").navigationBarTitleDisplayMode(.inline)
+        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .task(id: model.searchText) { await model.search() }
     }
 }

@@ -83,6 +83,8 @@ def audit(root):
     maps = (native / 'Features/AppleMapsView.swift').read_text()
     if not re.search(r'if model\.mapsEnabled\s*\{\s*AppleMapSurface\(', maps):
         errors.append('MapKit surface is not behind the consent gate')
+    if not re.search(r'if model\.mapsEnabled\s*\{\s*PlacePinSurface\(', maps):
+        errors.append('Place editor map is not behind the consent gate')
     manifest = plistlib.loads((native / 'Resources/PrivacyInfo.xcprivacy').read_bytes())
     if manifest.get('NSPrivacyTracking') or manifest.get('NSPrivacyTrackingDomains') or manifest.get('NSPrivacyCollectedDataTypes'):
         errors.append('privacy manifest unexpectedly declares tracking or collection')

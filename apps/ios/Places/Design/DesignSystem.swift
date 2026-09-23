@@ -7,8 +7,10 @@ enum Palette {
     static let paper = adaptive(light: 0xFFFFFF, dark: 0x262823)
     static let line = adaptive(light: 0xE7E1D5, dark: 0x41443B)
     static let muted = adaptive(light: 0x716A5E, dark: 0xB9B5AA)
-    static let green = Color(red: 0.20, green: 0.57, blue: 0.33)
-    static let accents: [Color] = [green, Color(red: 0.23, green: 0.50, blue: 0.85),
+    static let warning = adaptive(light: 0x805400, dark: 0xF5C56B)
+    static let green = adaptive(light: 0x287D45, dark: 0x6BC58A)
+    static let controlGreen = Color(red: 40 / 255, green: 125 / 255, blue: 69 / 255)
+    static let accents: [Color] = [controlGreen, Color(red: 0.23, green: 0.50, blue: 0.85),
         Color(red: 0.82, green: 0.48, blue: 0.17), Color(red: 0.79, green: 0.36, blue: 0.24),
         Color(red: 0.58, green: 0.39, blue: 0.76), Color(red: 0.15, green: 0.54, blue: 0.58)]
     static func accent(_ index: Int) -> Color { accents[abs(index % accents.count)] }
@@ -36,6 +38,10 @@ enum Layout {
     static let gutter: CGFloat = 20
     static let cardRadius: CGFloat = 24
     static let spacing: CGFloat = 16
+    static let compact: CGFloat = 8
+    static let touchTarget: CGFloat = 44
+    static let iconTile: CGFloat = 76
+    static let mapHeight: CGFloat = 280
 }
 
 struct PlaceIcon: View {
@@ -99,5 +105,23 @@ enum Display {
     static func range(_ item: TimelineItem) -> String {
         let start = item.start.formatted(date: .omitted, time: .shortened)
         return start + " – " + (item.end?.formatted(date: .omitted, time: .shortened) ?? "now")
+    }
+}
+
+struct InlineNotice: View {
+    var title: String
+    var message: String
+    var isError = false
+    var body: some View {
+        HStack(alignment: .top, spacing: Layout.compact) {
+            Image(systemName: isError ? "exclamationmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(isError ? Color.red : Palette.warning)
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                Text(title).font(BrandFont.title)
+                Text(message).font(.subheadline).foregroundStyle(Palette.muted)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Layout.spacing).background(Palette.soft(2), in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+            .accessibilityElement(children: .combine)
     }
 }

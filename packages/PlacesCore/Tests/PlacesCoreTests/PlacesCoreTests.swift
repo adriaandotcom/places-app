@@ -65,7 +65,9 @@ private func wifi(_ seconds: Double, ssid: String = "Fixture Network", bssid: St
 @Test func incrementalInferenceRetainsMotionBeforeJourneyBoundary() async throws {
     let store = try PlacesStore(); try await store.savePlace(home())
     var values = [fix(0), SensorObservation(timestamp: epoch.addingTimeInterval(60), source: .motion, motion: .cycling)]
-    values += [120.0, 600, 1200, 1800, 2400].map { fix($0, coordinate: Coordinate(latitude: 0, longitude: 0.02), speed: 4) }
+    values += [120.0, 600, 1200, 1800, 2400].enumerated().map { index, seconds in
+        fix(seconds, coordinate: Coordinate(latitude: 0, longitude: 0.02 + Double(index) * 0.01), speed: 4)
+    }
     for value in values { try await store.append([value]) }
     let inferred = try await store.timeline(on: epoch, calendar: utcCalendar())
     #expect(inferred.first { $0.kind == .journey }?.mode == .cycling)

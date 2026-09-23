@@ -23,7 +23,7 @@ public struct SensorPolicy: Equatable, Sendable {
 }
 
 public enum TrackingPolicy {
-    public static let version = "1.0"
+    public static let version = "1.1"
     public static let stationaryDuration: TimeInterval = 180
     public static let evidenceGap: TimeInterval = 20 * 60
     public static let stationaryRadius: Double = 60
@@ -37,6 +37,12 @@ public enum TrackingPolicy {
         }
         return SensorPolicy(standardUpdates: active, desiredAccuracy: lowPower ? 100 : 10,
                             distanceFilter: distance * (lowPower ? 2 : 1))
+    }
+
+    public static func sameStationaryArea(_ first: SensorObservation, _ second: SensorObservation) -> Bool {
+        guard let a = first.usableCoordinate, let b = second.usableCoordinate else { return false }
+        let uncertainty = min(150, (first.horizontalAccuracy ?? 0) + (second.horizontalAccuracy ?? 0))
+        return a.distance(to: b) <= max(stationaryRadius, uncertainty)
     }
 
     public static func matchingPlace(for observation: SensorObservation, places: [Place]) -> Place? {

@@ -17,7 +17,7 @@ struct SettingsView: View {
                     .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
             }
             Section("Recording") {
-                Toggle("Record my history", isOn: Binding(get: { model.trackingEnabled }, set: { value in Task { await model.setTrackingEnabled(value) } }))
+                Toggle("Record my history", isOn: Binding(get: { model.trackingEnabled }, set: { value in Task { await model.setTrackingEnabled(value) } })).tint(Palette.controlGreen)
                     .accessibilityIdentifier("tracking-toggle")
                 LabeledContent("Status", value: model.tracking.state.title)
                 Button("Retry storage", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }
@@ -35,7 +35,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Apple Maps", isOn: Binding(get: { model.mapsEnabled }, set: { value in
                     if value { confirmMaps = true } else { Task { await model.setMapsEnabled(false) } }
-                })).accessibilityIdentifier("maps-toggle")
+                })).tint(Palette.controlGreen).accessibilityIdentifier("maps-toggle")
             } header: { Text("Optional Apple service") } footer: {
                 Text("Enabling maps sends requests to Apple for the areas you view. Turn this off to remove maps immediately. Places, history, and local search keep working.")
             }
@@ -48,7 +48,7 @@ struct SettingsView: View {
                         }.padding(20)
                     }.background(Palette.background).navigationTitle("Wi-Fi networks")
                 }
-                Toggle("Nerd mode", isOn: Binding(get: { model.nerdMode }, set: { value in Task { await model.setNerdMode(value) } }))
+                Toggle("Nerd mode", isOn: Binding(get: { model.nerdMode }, set: { value in Task { await model.setNerdMode(value) } })).tint(Palette.controlGreen)
                     .accessibilityIdentifier("nerd-toggle")
                 if model.nerdMode { NavigationLink("Local diagnostics") { DiagnosticsView() } }
             } header: { Text("A little more detail") } footer: {

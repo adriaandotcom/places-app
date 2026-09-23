@@ -27,7 +27,7 @@ import UIKit
                 else { MainView() }
             }
             .environment(model)
-            .tint(.primary)
+            .tint(Palette.green)
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in model.start() }
             .onChange(of: scenePhase) { _, phase in
                 if !model.uiTesting { model.tracking.sceneChanged(isForeground: phase != .background) }

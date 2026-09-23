@@ -36,6 +36,16 @@ public actor PlacesStore {
                 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 """)
         }
+        migrator.registerMigration("v2-stationary-history") { db in
+            // Rebuild derived history only. Raw evidence and durable corrections
+            // remain unchanged when installing the improved inference policy.
+            for var network in try StoreSQL.decodeAll(WiFiNetwork.self, db: db, sql: "SELECT payload FROM wifiNetworks")
+                where network.classification == .unclassified && !network.userClassified {
+                network.classification = .fixed
+                try StoreSQL.saveNetwork(network, db: db)
+            }
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
         try migrator.migrate(queue)
     }
 
@@ -278,9 +288,10 @@ private enum StoreSQL {
     static func rebuild(db: Database, since earliest: Date?) throws {
         var start: Date?
         if let earliest {
-            // Rewind to a complete preceding segment and enough samples to resolve a stationary cluster.
+            // Rewind to a stay: a journey needs its preceding location anchor to
+            // distinguish genuine departure from an initial stationary candidate.
             let cutoff = earliest.addingTimeInterval(-TrackingPolicy.evidenceGap)
-            if let prior = try Double.fetchOne(db, sql: "SELECT start FROM timeline WHERE start <= ? ORDER BY start DESC LIMIT 1", arguments: [cutoff.timeIntervalSince1970]) {
+            if let prior = try Double.fetchOne(db, sql: "SELECT start FROM timeline WHERE start <= ? AND json_extract(payload, '$.kind') = 'stay' ORDER BY start DESC LIMIT 1", arguments: [cutoff.timeIntervalSince1970]) {
                 start = Date(timeIntervalSince1970: prior)
             }
         }

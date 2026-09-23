@@ -71,6 +71,14 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     var canLocate: Bool { authorization == .authorizedAlways || authorization == .authorizedWhenInUse }
 
+    var locationSetupReady: Bool { authorization == .authorizedAlways && accuracy == .fullAccuracy }
+    var locationSetupMessage: String {
+        if !canLocate { return "Allow location access to record your history." }
+        if authorization != .authorizedAlways && accuracy != .fullAccuracy { return "Choose Always and turn on Precise Location in Settings." }
+        if authorization != .authorizedAlways { return "Choose Always to record while Places is closed." }
+        return "Turn on Precise Location to tell nearby places apart."
+    }
+
     func configure(places: [Place], enabled: Bool) {
         self.places = places; self.enabled = enabled
         reconcile()
@@ -248,8 +256,9 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             candidate = nil; settlingTask?.cancel(); recoveryTask?.cancel()
             transition(.knownPlace, reason: "A recent fix matches a saved place.")
             configureRegions(); readWiFi()
-        } else if recentMotion == .stationary || location.speed < 0.8 {
-            if let candidate, candidate.distance(from: location) <= TrackingPolicy.stationaryRadius {
+        } else if candidate.map({ TrackingPolicy.sameStationaryArea(makeObservation($0, source: .location), observation) }) ?? true {
+
+            if let candidate, TrackingPolicy.sameStationaryArea(makeObservation(candidate, source: .location), observation) {
                 if location.timestamp.timeIntervalSince(candidate.timestamp) >= TrackingPolicy.stationaryDuration {
                     settlingTask?.cancel(); transition(.stationaryUnknown, reason: "Location observations indicate a stop.")
                     monitorStop(location); readWiFi()
@@ -262,7 +271,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
                     try? await Task.sleep(for: .seconds(TrackingPolicy.stationaryDuration))
                     guard !Task.isCancelled, let self, self.state == .stationaryCandidate,
                           let latest = self.currentLocation, let anchor = self.candidate,
-                          latest.distance(from: anchor) <= TrackingPolicy.stationaryRadius else { return }
+                          TrackingPolicy.sameStationaryArea(self.makeObservation(anchor, source: .location), self.makeObservation(latest, source: .location)) else { return }
                     // Obtain a fresh sample before treating a quiet sensor as proof of a stop.
                     self.live.stopUpdatingLocation(); self.standardActive = false
                     self.live.requestLocation()
@@ -304,7 +313,14 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         let old = authorization, oldAccuracy = accuracy
         refreshAuthorization()
         if accuracy != .fullAccuracy { currentSSID = nil; currentBSSID = nil }
-        if hasStarted && (old != authorization || oldAccuracy != accuracy) { stopAll() }
+        // Upgrading access does not interrupt recording and must not fabricate a
+        // pause/recovery gap. Revocation and background foreground-only access
+        // still go through stopAll via reconcile.
+        if hasStarted, canLocate, oldAccuracy != accuracy {
+            candidate = nil; settlingTask?.cancel()
+            transition(.recovery, reason: "Location precision changed; checking a fresh fix.")
+            beginRecoveryDeadline()
+        }
         reconcile()
         if old == .authorizedAlways && authorization != .authorizedAlways && enabled {
             Task { await notifyPermissionProblem() }

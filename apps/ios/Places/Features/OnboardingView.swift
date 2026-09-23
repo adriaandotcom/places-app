@@ -10,11 +10,12 @@ struct OnboardingView: View {
     @State private var step = OnboardingStep.welcome
     @State private var addingPlace = false
     @State private var suggestedName = ""
+    @State private var locationValidation: String?
+    @State private var requestedBackground = false
     private var steps: [OnboardingStep] { OnboardingStep.allCases.filter { $0 != .wifi || model.tracking.currentSSID != nil } }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
     private var primaryTitle: String {
         switch step {
-        case .location where model.tracking.authorization == .notDetermined: "Enable location"
         case .motion where model.tracking.motionAuthorization == .notDetermined: "Allow Motion & Fitness"
         case .notifications where model.tracking.notificationAuthorization == .notDetermined: "Enable notifications"
         case .ready: "Start my history"
@@ -34,6 +35,10 @@ struct OnboardingView: View {
             .background(Palette.background).foregroundStyle(Palette.ink)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 5) {
+                    if step == .location, let locationValidation {
+                        Text(locationValidation).font(.footnote).foregroundStyle(Palette.warning)
+                            .accessibilityIdentifier("location-validation").padding(.bottom, Layout.compact)
+                    }
                     Button(primaryTitle) { primary() }.buttonStyle(PrimaryButton()).accessibilityIdentifier("onboarding-primary")
                     if step != .ready {
                         Button(step == .welcome ? "How privacy works" : "Not now") { next() }
@@ -51,6 +56,9 @@ struct OnboardingView: View {
                 }
             }
             .sheet(isPresented: $addingPlace) { NavigationStack { PlaceEditor(suggestedName: suggestedName) } }
+            .onChange(of: model.tracking.locationSetupReady) { _, complete in
+                if complete { locationValidation = nil }
+            }
         }
     }
 
@@ -75,16 +83,31 @@ struct OnboardingView: View {
             InfoRow(symbol: "lock.shield.fill", title: "No hidden connections", subtitle: "No analytics, advertising, third-party services, or hosted AI. History is excluded from automatic device backups.", colorIndex: 4)
             Text("Apple’s system location services operate under your device privacy settings. A full history export leaves the app only when you save it somewhere yourself.").font(.footnote).foregroundStyle(Palette.muted)
         case .location:
-            permissionHero(symbol: "location.fill", title: "Know where your day takes you", index: 1)
-            Text("Location lets Places record journeys and recognize when you stop. Background access helps your history continue when you put your phone away.").font(BrandFont.body)
-            InfoRow(symbol: "location.circle", title: "Current access", subtitle: model.tracking.locationStatus, colorIndex: 1)
-            if model.tracking.authorization == .authorizedWhenInUse {
-                Button("Allow background location") { model.tracking.requestLocation() }.buttonStyle(.borderedProminent)
-                Text("You can keep foreground-only access. Your history will have gaps while Places is closed.").font(.footnote).foregroundStyle(Palette.muted)
-            } else if model.tracking.authorization == .denied || model.tracking.authorization == .restricted {
-                Button("Open location settings") { model.tracking.openSettings() }.buttonStyle(.bordered)
+            HStack(spacing: Layout.spacing) {
+                PlaceIcon(symbol: "location.fill", colorIndex: 1, size: 52)
+                Text("Location access").font(BrandFont.heading)
             }
-            Text("Precise Location helps distinguish nearby places. Battery use adapts automatically; there is no accuracy mode to manage.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            Text("Record your day, even with your phone in your pocket.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            VStack(spacing: Layout.spacing) {
+                LocationAccessRow(title: "Background location", detail: model.tracking.authorization == .authorizedAlways ? "Always allowed" : "Still needed", complete: model.tracking.authorization == .authorizedAlways)
+                LocationAccessRow(title: "Precise Location", detail: model.tracking.accuracy == .fullAccuracy && model.tracking.canLocate ? "Enabled" : "Still needed", complete: model.tracking.accuracy == .fullAccuracy && model.tracking.canLocate)
+            }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+            if !model.tracking.locationSetupReady {
+                InlineNotice(title: "Location setup is incomplete", message: model.tracking.locationSetupMessage)
+                if !model.tracking.canLocate {
+                    Button(model.tracking.authorization == .notDetermined ? "Allow location" : "Open location settings") {
+                        model.tracking.requestLocation()
+                    }.buttonStyle(.borderedProminent).tint(Palette.controlGreen).foregroundStyle(.white).controlSize(.large)
+                } else if model.tracking.authorization != .authorizedAlways {
+                    Button(requestedBackground ? "Open location settings" : "Allow background location") {
+                        if requestedBackground { model.tracking.openSettings() }
+                        else { requestedBackground = true; model.tracking.requestLocation() }
+                    }.buttonStyle(.borderedProminent).tint(Palette.controlGreen).foregroundStyle(.white).controlSize(.large)
+                } else {
+                    Button("Turn on Precise Location in Settings") { model.tracking.openSettings() }
+                        .buttonStyle(.borderedProminent).tint(Palette.controlGreen).foregroundStyle(.white).controlSize(.large)
+                }
+            }
         case .motion:
             permissionHero(symbol: "figure.walk", title: "A little movement context", index: 3)
             Text("Motion helps tell walking from cycling or driving, and helps the tracker notice when movement resumes.").font(BrandFont.body)
@@ -94,22 +117,21 @@ struct OnboardingView: View {
             }
         case .places:
             Text("Places you\nalready know").font(BrandFont.hero)
-            Text("Give your usual stops a name. You can add their Wi-Fi names too; they become evidence only when your location agrees.").font(BrandFont.body).foregroundStyle(Palette.muted)
-            ForEach(model.places) { place in InfoRow(symbol: place.symbol, title: place.name, subtitle: place.address.isEmpty ? "Saved on this iPhone" : place.address, colorIndex: place.colorIndex) }
-            HStack {
-                Button("Add Home", systemImage: "house") { suggestedName = "Home"; addingPlace = true }
-                Spacer()
-                Button("Add Work", systemImage: "briefcase") { suggestedName = "Work"; addingPlace = true }
-            }.buttonStyle(.bordered).controlSize(.large)
-            Button("Add another place") { suggestedName = ""; addingPlace = true }.frame(minHeight: 44)
+            Text("Start with the places that feel like you.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            ForEach(model.places) { place in InfoRow(symbol: place.symbol, title: place.name, subtitle: "Saved", colorIndex: place.colorIndex) }
+            if !model.places.contains(where: { $0.name.lowercased() == "home" }) {
+                PlacePresetCard(title: "Home", subtitle: "Your own little corner", symbol: "house.fill", colorIndex: 0) { suggestedName = "Home"; addingPlace = true }
+            }
+            if !model.places.contains(where: { $0.name.lowercased() == "work" }) {
+                PlacePresetCard(title: "Work", subtitle: "Where things get done", symbol: "briefcase.fill", colorIndex: 1) { suggestedName = "Work"; addingPlace = true }
+            }
+            PlacePresetCard(title: "Another place", subtitle: "A café, a gym, somewhere you love", symbol: "mappin", colorIndex: 2) { suggestedName = ""; addingPlace = true }
         case .wifi:
             permissionHero(symbol: "wifi", title: "Where does this Wi-Fi live?", index: 5)
-            Text(model.tracking.currentSSID ?? "Current Wi-Fi unavailable").font(BrandFont.heading)
-            Text("When this network and your location agree, Places can learn it automatically. Shared networks and portable hotspots need different treatment.").font(BrandFont.body)
+            Text("Most Wi-Fi stays in one place. Change the type if this one doesn’t.").font(BrandFont.body)
             if let network = model.networks.first(where: { $0.ssid == model.tracking.currentSSID }) {
                 WiFiClassificationPicker(network: network)
             }
-            Text("You can manage saved networks in Settings at any time.").font(.footnote).foregroundStyle(Palette.muted)
         case .notifications:
             permissionHero(symbol: "bell.fill", title: "Only when\nit matters", index: 2)
             Text("Places can let you know if background location access changes and your history may develop gaps. There are no daily nudges or promotional notifications.").font(BrandFont.body)
@@ -119,7 +141,7 @@ struct OnboardingView: View {
             Text("Your history begins with the permissions you chose. You can change them later in Settings.").font(BrandFont.body)
             InfoRow(symbol: "location.fill", title: "Location", subtitle: model.tracking.locationStatus, colorIndex: 1)
             InfoRow(symbol: "mappin", title: "Familiar places", subtitle: "\(model.places.count) saved", colorIndex: 2)
-            InfoRow(symbol: "lock.fill", title: "Storage", subtitle: "On this iPhone. Apple Maps is off.")
+            InfoRow(symbol: "lock.fill", title: "Storage", subtitle: model.mapsEnabled ? "On this iPhone. Apple Maps is enabled." : "On this iPhone. Apple Maps is off.")
         }
     }
 
@@ -131,18 +153,64 @@ struct OnboardingView: View {
         }
     }
     private func next() {
+        locationValidation = nil
         if index + 1 < steps.count { step = steps[index + 1] }
         else { Task { await model.finishOnboarding() } }
         if step == .places { model.tracking.refreshCurrentWiFi() }
     }
     private func primary() {
         switch step {
-        case .location where model.tracking.authorization == .notDetermined: model.tracking.requestLocation()
+        case .location:
+            guard model.tracking.locationSetupReady else {
+                locationValidation = model.tracking.locationSetupMessage + " Or choose Not now."
+                return
+            }
+            next()
         case .motion where model.tracking.motionAuthorization == .notDetermined: model.tracking.requestMotion()
         case .notifications where model.tracking.notificationAuthorization == .notDetermined:
             Task { await model.tracking.requestNotifications(); next() }
         case .ready: Task { await model.finishOnboarding() }
         default: next()
         }
+    }
+}
+
+private struct LocationAccessRow: View {
+    let title: String
+    let detail: String
+    let complete: Bool
+    var body: some View {
+        HStack(spacing: Layout.spacing) {
+            Image(systemName: complete ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundStyle(complete ? Palette.green : Palette.warning).font(.title2)
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                Text(title).font(BrandFont.title)
+                Text(detail).font(.subheadline).foregroundStyle(Palette.muted)
+            }
+            Spacer(minLength: 0)
+        }.accessibilityElement(children: .combine)
+    }
+}
+
+private struct PlacePresetCard: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let colorIndex: Int
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Layout.spacing) {
+                PlaceIcon(symbol: symbol, colorIndex: colorIndex, size: 52)
+                VStack(alignment: .leading, spacing: Layout.compact) {
+                    Text(title).font(BrandFont.heading)
+                    Text(subtitle).font(BrandFont.body).foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Palette.accent(colorIndex))
+            }.padding(Layout.gutter).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Palette.soft(colorIndex), in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                .foregroundStyle(Palette.ink)
+        }.buttonStyle(.plain).accessibilityLabel("Add " + title)
     }
 }
