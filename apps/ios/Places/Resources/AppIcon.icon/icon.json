@@ -1,0 +1,108 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.30933,0.48462,0.32788,1.00000",
+          "display-p3:0.13220,0.21680,0.16333,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.07346,0.11604,0.07876,1.00000",
+          "display-p3:0.02093,0.03422,0.02605,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "display-p3:0.25806,0.40503,0.27905,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "display-p3:0.05893,0.09290,0.06348,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Forest-Center.svg",
+          "name" : "Forest-Center",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "display-p3:0.15255,0.23838,0.16381,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Glass-Pin.svg",
+          "name" : "Glass-Pin"
+        },
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "display-p3:0.27703,0.13000,0.16602,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Terracotta-Route.svg",
+          "name" : "Terracotta-Route",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              6,
+              -19
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "linear-gradient" : [
+              "display-p3:0.30933,0.48462,0.32788,1.00000",
+              "display-p3:0.13220,0.21680,0.16333,1.00000"
+            ]
+          },
+          "glass" : true,
+          "hidden" : true,
+          "image-name" : "Forest-Background.svg",
+          "name" : "Forest-Background"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

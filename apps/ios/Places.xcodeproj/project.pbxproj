@@ -18,6 +18,7 @@
 		595DA971976AEDA5373D9931 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE309F70353EBEDB7069F031 /* MainView.swift */; };
 		623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */; };
 		66549826CB59C29A042DBFAB /* PlacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19157741242CE715116913F2 /* PlacesView.swift */; };
+		796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 763BB8E666C49E7CFF673E53 /* AppIcon.icon */; };
 		7D8274BFBC6054B26A47EEBB /* ProtectedStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B116AB54E14230415ABC727 /* ProtectedStorage.swift */; };
 		7EBB269AAA837E5F5C546BFC /* PlacesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */; };
 		841E94E0B0181A9A68A8E9A7 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E16CB5D0FBE5CF702B4018 /* SearchView.swift */; };
@@ -71,6 +72,7 @@
 		4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Regular.ttf"; sourceTree = "<group>"; };
 		64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiClassificationPicker.swift; sourceTree = "<group>"; };
 		6ED1792B97EE623188206D05 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		763BB8E666C49E7CFF673E53 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineDetail.swift; sourceTree = "<group>"; };
 		8128F6BB84B25BE437EE88D2 /* BricolageGrotesque-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Bold.ttf"; sourceTree = "<group>"; };
 		82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMapsView.swift; sourceTree = "<group>"; };
@@ -218,6 +220,7 @@
 			isa = PBXGroup;
 			children = (
 				47FC3F7A2A120AAA307EE160 /* Fonts */,
+				763BB8E666C49E7CFF673E53 /* AppIcon.icon */,
 				6ED1792B97EE623188206D05 /* Assets.xcassets */,
 				96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */,
 				0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */,
@@ -357,6 +360,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */,
 				A48B0DD0D51FE08FD52CA6EA /* Assets.xcassets in Resources */,
 				E99EF9C7B7D61B58D2B7B6DF /* BricolageGrotesque-Bold.ttf in Resources */,
 				A3FB6C17CAEF0EE2EBFE79D6 /* BricolageGrotesque-ExtraBold.ttf in Resources */,
