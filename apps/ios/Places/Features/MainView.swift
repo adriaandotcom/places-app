@@ -145,10 +145,6 @@ struct TimelineRow: View {
                         if item.isUserEdited { Image(systemName: "checkmark.circle.fill") }
                         Text(Display.duration(item.duration()))
                     }.font(.caption.weight(.semibold)).foregroundStyle(Palette.ink)
-                    if item.unrecordedDuration > 0 {
-                        Text(item.unrecordedDuration < 60 ? "Includes a short recording gap" : "Includes \(Display.duration(item.unrecordedDuration)) unrecorded")
-                            .font(.caption).foregroundStyle(Palette.muted)
-                    }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(Palette.muted).padding(.top, 16)
