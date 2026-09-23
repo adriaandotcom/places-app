@@ -22,6 +22,15 @@ import XCTest
         XCTAssertFalse(app.maps.firstMatch.exists)
     }
 
+    func testNormalFirstLaunchOpensProtectedStorage() {
+        let app = XCUIApplication()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.buttons["skip-setup"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Unlock to open your history"].exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
     func testManualPlaceAndLocalSearchWithoutLocationPermission() {
         let app = launch()
         XCTAssertTrue(app.buttons["skip-setup"].waitForExistence(timeout: 10))
