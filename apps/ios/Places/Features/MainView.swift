@@ -92,7 +92,6 @@ struct TimelineView: View {
                                 .buttonStyle(.plain)
                         }
                     }
-                    Label("Saved on this iPhone", systemImage: "lock.shield").font(.caption).foregroundStyle(Palette.muted).frame(maxWidth: .infinity)
                 }
             }.padding(.horizontal, Layout.gutter).padding(.bottom, 24)
         }.background(Palette.background).foregroundStyle(Palette.ink)
