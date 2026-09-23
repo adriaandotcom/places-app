@@ -116,6 +116,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     func clearSensitiveState() {
         sensorGeneration += 1
         currentLocation = nil; currentSSID = nil; currentBSSID = nil; candidate = nil; places = []
+        motion = .unknown; motionTime = .distantPast; lastWiFiRead = .distantPast
     }
     func refreshCurrentWiFi() { readWiFi(force: true) }
 
@@ -367,8 +368,9 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         transition(.stationaryUnknown, reason: "iOS paused location updates while stationary."); monitorStop(location)
     }
     private func notifyPermissionProblem() async {
+        let expectedGeneration = sensorGeneration
         await refreshNotifications()
-        guard notificationAuthorization == .authorized else { return }
+        guard enabled, sensorGeneration == expectedGeneration, notificationAuthorization == .authorized else { return }
         let content = UNMutableNotificationContent()
         content.title = "Your history may have gaps"
         content.body = "Background location is no longer enabled. You can review access in Places."

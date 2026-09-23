@@ -4,6 +4,20 @@ import GRDB
 public actor PlacesStore {
     private let queue: DatabaseQueue
 
+    /// A support code only: never expose SQLite statements, arguments, or paths.
+    public nonisolated static func failureCode(_ error: any Error) -> String {
+        if let database = error as? DatabaseError {
+            let constraint: String
+            if database.message?.contains("UNIQUE constraint failed: timeline.id") == true { constraint = "-timeline" }
+            else if database.message?.contains("UNIQUE constraint failed: evidenceLinks") == true { constraint = "-evidence" }
+            else if database.message?.contains("UNIQUE constraint failed: routePoints") == true { constraint = "-route" }
+            else { constraint = "" }
+            return "database-\(database.extendedResultCode.rawValue)\(constraint)"
+        }
+        if let cocoa = error as? CocoaError { return "file-\(cocoa.code.rawValue)" }
+        return "storage-unavailable"
+    }
+
     public init(path: String = ":memory:") throws {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
@@ -44,6 +58,10 @@ public actor PlacesStore {
                 network.classification = .fixed
                 try StoreSQL.saveNetwork(network, db: db)
             }
+            // GRDB disables foreign keys while this migration runs, then checks
+            // them before commit. Delete derived children explicitly: ON DELETE
+            // CASCADE cannot remove their old timeline IDs during the rebuild.
+            try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
         try migrator.migrate(queue)
@@ -201,28 +219,39 @@ public actor PlacesStore {
     }
 
     public func exportHistory() throws -> Data {
+        try StoreSQL.exportEncoder.encode(historyArchive())
+    }
+    public func exportTestCase() throws -> Data {
+        try InferenceTestCase.redacting(historyArchive()).encoded()
+    }
+    private func historyArchive() throws -> HistoryArchive {
         try queue.read { db in
             let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")
             let edits = try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
-            return try StoreSQL.exportEncoder.encode(HistoryArchive(formatVersion: 1, exportedAt: Date(),
+            return try HistoryArchive(formatVersion: 1, exportedAt: Date(),
                 places: StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places"),
                 observations: StoreSQL.decodeAll(SensorObservation.self, db: db, sql: "SELECT payload FROM observations ORDER BY timestamp"),
                 timeline: InferenceEngine.applying(edits, to: items), corrections: edits,
                 networks: StoreSQL.decodeAll(WiFiNetwork.self, db: db, sql: "SELECT payload FROM wifiNetworks"),
                 accessPoints: StoreSQL.decodeAll(WiFiAccessPoint.self, db: db, sql: "SELECT payload FROM wifiAccessPoints"),
                 routePoints: StoreSQL.decodeAll(RoutePoint.self, db: db, sql: "SELECT payload FROM routePoints ORDER BY timestamp"),
-                trackingEvents: StoreSQL.decodeAll(TrackingEvent.self, db: db, sql: "SELECT payload FROM trackingEvents ORDER BY timestamp")))
+                trackingEvents: StoreSQL.decodeAll(TrackingEvent.self, db: db, sql: "SELECT payload FROM trackingEvents ORDER BY timestamp"))
         }
     }
     public func exportDiagnostics() throws -> Data { try StoreSQL.exportEncoder.encode(diagnostics()) }
 
-    public func eraseHistory() throws {
+    public func eraseHistory(resetSettings: Bool = false) throws {
         try queue.write { db in
             try db.execute(sql: """
                 DELETE FROM evidenceLinks; DELETE FROM routePoints; DELETE FROM timeline; DELETE FROM overrides;
                 DELETE FROM observations; DELETE FROM placeWifiLinks; DELETE FROM wifiAccessPoints;
                 DELETE FROM wifiNetworks; DELETE FROM placeSearch; DELETE FROM places; DELETE FROM trackingEvents;
                 """)
+            if resetSettings {
+                try db.execute(sql: "DELETE FROM settings")
+                // A relaunch during setup must not resume previously authorized tracking.
+                try db.execute(sql: "INSERT INTO settings(key, value) VALUES ('trackingEnabled', 'false')")
+            }
         }
         try queue.writeWithoutTransaction { db in
             try db.execute(sql: "VACUUM")

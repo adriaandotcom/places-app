@@ -180,4 +180,46 @@ import XCTest
         XCTAssertTrue(app.staticTexts["Fixture Pin"].waitForExistence(timeout: 5))
     }
 
+    func testResetRequiresConfirmationAndReturnsToEmptyOnboarding() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["tab-places"].tap()
+        XCTAssertTrue(app.staticTexts["Home"].exists)
+        app.buttons["tab-timeline"].tap()
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["reset-all-data"], in: app)
+        app.buttons["reset-all-data"].tap()
+        XCTAssertTrue(app.buttons["Delete all data and restart"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["reset-all-data"].exists)
+        app.buttons["reset-all-data"].tap()
+        app.buttons["Delete all data and restart"].tap()
+        XCTAssertTrue(app.buttons["skip-setup"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.maps.firstMatch.exists)
+        app.buttons["skip-setup"].tap()
+        app.buttons["tab-places"].tap()
+        XCTAssertFalse(app.staticTexts["Home"].exists)
+        app.buttons["add-place"].tap()
+        XCTAssertTrue(app.buttons["editor-enable-maps"].exists)
+        XCTAssertFalse(app.textFields["place-latitude"].exists)
+        app.buttons["Cancel"].tap()
+        app.buttons["tab-map"].tap()
+        XCTAssertTrue(app.buttons["enable-apple-maps"].exists)
+    }
+
+    func testTestCaseExportExplainsExpectedResultsAndOpensFilePicker() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["export-test-case"], in: app)
+        app.buttons["export-test-case"].tap()
+        XCTAssertTrue(app.buttons["Export test case"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "expected result")).firstMatch.exists)
+        app.buttons["Export test case"].tap()
+        XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields.matching(NSPredicate(format: "value == %@", "Places-test-case")).firstMatch.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Test case file export"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
 }

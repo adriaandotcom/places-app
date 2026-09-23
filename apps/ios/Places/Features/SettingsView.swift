@@ -8,9 +8,11 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmMaps = false
     @State private var confirmExport = false
+    @State private var confirmTestExport = false
     @State private var confirmDelete = false
     @State private var deleting = false
     var body: some View {
+        @Bindable var model = model
         Form {
             Section {
                 InfoRow(symbol: "iphone", title: "Your history stays here", subtitle: "Stored on this iPhone. No account, analytics, or automatic cloud backup.")
@@ -57,8 +59,10 @@ struct SettingsView: View {
             Section("Your data") {
                 Button("Export full history…", systemImage: "square.and.arrow.up") { confirmExport = true }
                 Button("Export redacted diagnostics…", systemImage: "doc.text") { Task { await model.export(fullHistory: false) } }
-                Button(deleting ? "Deleting…" : "Delete all history…", role: .destructive) { confirmDelete = true }.disabled(deleting)
-                    .accessibilityIdentifier("delete-history")
+                Button("Export a test case…", systemImage: "checkmark.rectangle.stack") { confirmTestExport = true }
+                    .accessibilityIdentifier("export-test-case")
+                Button(deleting ? "Starting again…" : "Delete all data and start again…", role: .destructive) { confirmDelete = true }
+                    .accessibilityIdentifier("reset-all-data")
             }
             Section("About Places") {
                 Text("Built independently by Adriaan, founder of Simple Analytics. This is a separate personal project.").font(.footnote)
@@ -70,7 +74,7 @@ struct SettingsView: View {
                 Text("Background recording depends on iOS permissions and delivery. Force-quitting Places can stop recording until you reopen it. This foundation still needs physical-device battery and lifecycle validation.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-        }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
+        }.disabled(deleting).scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .confirmationDialog("Enable Apple Maps?", isPresented: $confirmMaps, titleVisibility: .visible) {
                 Button("Enable Apple Maps") { Task { await model.setMapsEnabled(true) } }
@@ -78,12 +82,27 @@ struct SettingsView: View {
             .confirmationDialog("Export your private history?", isPresented: $confirmExport, titleVisibility: .visible) {
                 Button("Export full history") { Task { await model.export(fullHistory: true) } }
             } message: { Text("This file includes exact locations, Wi-Fi identifiers, raw observations, and corrections. Anyone with the file can read them. Where you save it may synchronize it to a cloud service.") }
-            .confirmationDialog("Delete all local history?", isPresented: $confirmDelete, titleVisibility: .visible) {
-                Button("Delete history and pause recording", role: .destructive) {
+            .confirmationDialog("Export a test case?", isPresented: $confirmTestExport, titleVisibility: .visible) {
+                Button("Export test case") { Task { await model.exportTestCase() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Correct your timeline first: it becomes the expected result alongside the recorded evidence. Names, Wi-Fi identifiers, dates, and locations are replaced. Route shapes and durations remain, so review the JSON before sharing it. Nothing is uploaded automatically.")
+            }
+            .alert("Delete everything and start again?", isPresented: $confirmDelete) {
+                Button("Delete all data and restart", role: .destructive) {
                     deleting = true
-                    Task { await model.deleteHistory(); deleting = false }
+                    Task {
+                        let reset = await model.deleteAllDataAndRestart()
+                        deleting = false
+                        if reset { dismiss() }
+                    }
                 }
-            } message: { Text("This permanently removes observations, places, routes, corrections, Wi-Fi, and local diagnostics. Recording and Apple Maps will be turned off. Files you already exported are not deleted.") }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("Permanently delete all history, places, Wi-Fi, corrections, diagnostics, and app settings, then return to setup. Recording stays paused until you finish setup. iOS permissions and files you already exported are not removed. This cannot be undone.") }
+            .fileExporter(isPresented: $model.showExporter, document: model.exportDocument, contentType: .json, defaultFilename: model.exportFilename) { result in
+                model.exportDocument = nil
+                if case .failure = result { model.errorMessage = "The export could not be saved. Your history has not changed." }
+            }
     }
 }
 

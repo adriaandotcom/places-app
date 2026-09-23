@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 import PlacesCore
 
 @MainActor @Observable
@@ -70,11 +71,11 @@ final class AppModel {
                     ready = true; starting = false
                     if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
                     await tracking.refreshNotifications()
-                } catch { store = nil; starting = false; fail("Could not open your history. Your existing data has been kept.") }
+                } catch { store = nil; starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
             }
         } catch is ProtectedStorage.Locked {
             starting = false; waitingForUnlock = true
-        } catch { starting = false; fail("Could not open your history. Your existing data has been kept.") }
+        } catch { starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
     }
 
     func refresh() async {
@@ -144,7 +145,11 @@ final class AppModel {
     }
     func finishOnboarding() async {
         guard let store else { return }
-        do { try await store.setSetting("onboardingComplete", value: "true"); onboardingComplete = true }
+        do {
+            try await store.setSetting("onboardingComplete", value: "true")
+            await setTrackingEnabled(true)
+            onboardingComplete = true
+        }
         catch { fail("Could not save onboarding progress. Please try again.") }
     }
     func setMapsEnabled(_ value: Bool) async {
@@ -209,21 +214,40 @@ final class AppModel {
             showExporter = true
         } catch { fail("Could not prepare the export. Your data has not changed.") }
     }
-    func deleteHistory() async {
+    func exportTestCase() async {
         guard let store else { return }
+        let expectedGeneration = generation
+        await pendingWrite?.value
+        do {
+            let data = try await store.exportTestCase()
+            guard !deleting, generation == expectedGeneration else { return }
+            exportDocument = JSONDocument(data: data)
+            exportFilename = "Places-test-case"
+            showExporter = true
+        } catch { fail("Could not prepare the test case. Your history has not changed.") }
+    }
+    func deleteAllDataAndRestart() async -> Bool {
+        guard let store, !deleting else { return false }
         deleting = true; generation += 1
         mapsEnabled = false; trackingEnabled = false
         tracking.configure(places: [], enabled: false)
         await pendingWrite?.value
         do {
-            try await store.setSetting("trackingEnabled", value: "false")
-            try await store.setSetting("mapsEnabled", value: "false")
-            try await store.eraseHistory()
+            try await store.eraseHistory(resetSettings: true)
             retryObservations = []; timeline = []; places = []; networks = []; accessPoints = []
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()
+            exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil
+            mapsChoiceMade = false; nerdMode = false; selectedDay = Date(); selectedTab = .timeline
+            UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+            UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+            onboardingComplete = false
             deleting = false; await refresh()
-        } catch { deleting = false; fail("Deletion could not finish. Recording remains paused. Please try again.") }
+            return true
+        } catch {
+            deleting = false; fail("Reset could not finish. Recording remains paused. Please try again.")
+            return false
+        }
     }
     private func fail(_ message: String) { errorMessage = message }
 }

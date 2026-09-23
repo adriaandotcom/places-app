@@ -37,10 +37,6 @@ import UIKit
                 if !model.ready { Button("Retry") { model.errorMessage = nil; model.start() } }
                 Button("OK") { model.errorMessage = nil }
             } message: { Text(model.errorMessage ?? "") }
-            .fileExporter(isPresented: $model.showExporter, document: model.exportDocument, contentType: .json, defaultFilename: model.exportFilename) { result in
-                model.exportDocument = nil
-                if case .failure = result { model.errorMessage = "The export could not be saved. Your history has not changed." }
-            }
         }
     }
 }
