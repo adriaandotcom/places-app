@@ -50,7 +50,7 @@ struct SettingsToolbar: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Settings", systemImage: "slider.horizontal.3") { open = true }
-                .labelStyle(.iconOnly).accessibilityIdentifier("open-settings")
+                .labelStyle(.iconOnly).foregroundStyle(Palette.ink).accessibilityIdentifier("open-settings")
                 .sheet(isPresented: $open) { NavigationStack { SettingsView() } }
         }
     }

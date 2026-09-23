@@ -62,6 +62,33 @@ private func wifi(_ seconds: Double, ssid: String = "Fixture Network", bssid: St
     #expect(items.first?.end == epoch.addingTimeInterval(90))
 }
 
+@Test func incrementalInferenceRetainsMotionBeforeJourneyBoundary() async throws {
+    let store = try PlacesStore(); try await store.savePlace(home())
+    var values = [fix(0), SensorObservation(timestamp: epoch.addingTimeInterval(60), source: .motion, motion: .cycling)]
+    values += [120.0, 600, 1200, 1800, 2400].map { fix($0, coordinate: Coordinate(latitude: 0, longitude: 0.02), speed: 4) }
+    for value in values { try await store.append([value]) }
+    let inferred = try await store.timeline(on: epoch, calendar: utcCalendar())
+    #expect(inferred.first { $0.kind == .journey }?.mode == .cycling)
+}
+
+@Test func portableLearningReevaluatesEarlierAmbiguousWiFiEvidence() async throws {
+    let store = try PlacesStore()
+    let neighbour = Place(name: "Fixture Neighbour", coordinate: Coordinate(latitude: 0, longitude: 0.0015))
+    let destination = Place(name: "Fixture Destination", coordinate: Coordinate(latitude: 0, longitude: 0.02))
+    for place in [home(), neighbour, destination] { try await store.savePlace(place) }
+    let values = [wifi(0), wifi(10, coordinate: Coordinate(latitude: 0, longitude: 0.00075)),
+                  fix(300, coordinate: destination.coordinate)]
+    try await store.append(values)
+    try await store.append([wifi(4000, coordinate: Coordinate(latitude: 1, longitude: 1))])
+    let items = try await store.timeline(on: epoch, calendar: utcCalendar())
+    #expect(try await store.networks().first?.classification == .portable)
+    #expect(items.first?.end == epoch.addingTimeInterval(10))
+}
+
+private func utcCalendar() -> Calendar {
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!; return calendar
+}
+
 @Test func staleOrCoarseEvidenceDoesNotNamePlace() {
     var coarse = fix(0); coarse.horizontalAccuracy = 500
     var stale = wifi(600); stale.coordinateTimestamp = epoch

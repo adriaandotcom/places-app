@@ -75,6 +75,7 @@ public actor PlacesStore {
         try queue.write { db in
             var inserted = 0
             var earliest: Date?
+            var networkEvidenceChanged = false
             let places = try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places")
             for observation in observations {
                 guard observation.timestamp.timeIntervalSince1970.isFinite,
@@ -87,9 +88,11 @@ public actor PlacesStore {
                 guard db.changesCount > 0 else { continue }
                 inserted += 1
                 earliest = min(earliest ?? observation.timestamp, observation.timestamp)
-                if observation.source == .wifi { try StoreSQL.learnWiFi(observation, places: places, db: db) }
+                if observation.source == .wifi {
+                    networkEvidenceChanged = try StoreSQL.learnWiFi(observation, places: places, db: db) || networkEvidenceChanged
+                }
             }
-            if let earliest { try StoreSQL.rebuild(db: db, since: earliest) }
+            if let earliest { try StoreSQL.rebuild(db: db, since: networkEvidenceChanged ? nil : earliest) }
             return inserted
         }
     }
@@ -233,11 +236,12 @@ private enum StoreSQL {
                        arguments: [network.id, network.ssid, try encode(network)])
     }
 
-    static func learnWiFi(_ observation: SensorObservation, places: [Place], db: Database) throws {
-        guard let ssid = observation.ssid, !ssid.isEmpty else { return }
+    static func learnWiFi(_ observation: SensorObservation, places: [Place], db: Database) throws -> Bool {
+        guard let ssid = observation.ssid, !ssid.isEmpty else { return false }
         var network = try decodeAll(WiFiNetwork.self, db: db,
             sql: "SELECT payload FROM wifiNetworks WHERE ssid = ?", arguments: [ssid]).first
             ?? WiFiNetwork(ssid: ssid, firstSeen: observation.timestamp, lastSeen: observation.timestamp)
+        let previousClassification = network.classification
         network.firstSeen = min(network.firstSeen, observation.timestamp)
         network.lastSeen = max(network.lastSeen, observation.timestamp)
         let place = TrackingPolicy.matchingPlace(for: observation, places: places)
@@ -253,9 +257,10 @@ private enum StoreSQL {
             network.classification = hasOtherPlace || network.classification == .shared ? .shared : .fixed
         }
         try saveNetwork(network, db: db)
-        guard let bssid = observation.bssid, !bssid.isEmpty else { return }
+        guard let bssid = observation.bssid, !bssid.isEmpty else { return previousClassification != network.classification }
         var point = points.first { $0.bssid == bssid }
             ?? WiFiAccessPoint(id: UUID().uuidString, networkID: network.id, bssid: bssid, placeID: nil, lastSeen: observation.timestamp)
+        let previousPlaceID = point.placeID
         point.lastSeen = max(point.lastSeen, observation.timestamp)
         if [.fixed, .shared].contains(network.classification), let place {
             // Contradictory observations cannot silently move an access point.
@@ -267,6 +272,7 @@ private enum StoreSQL {
         try db.execute(sql: "INSERT INTO wifiAccessPoints(id, networkID, bssid, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
                        arguments: [point.id, point.networkID, point.bssid, try encode(point)])
         points.removeAll()
+        return previousClassification != network.classification || previousPlaceID != point.placeID
     }
 
     static func rebuild(db: Database, since earliest: Date?) throws {
@@ -278,9 +284,17 @@ private enum StoreSQL {
                 start = Date(timeIntervalSince1970: prior)
             }
         }
-        let observations = try decodeAll(SensorObservation.self, db: db,
+        var observations = try decodeAll(SensorObservation.self, db: db,
             sql: start == nil ? "SELECT payload FROM observations ORDER BY timestamp" : "SELECT payload FROM observations WHERE timestamp >= ? ORDER BY timestamp",
             arguments: start.map { StatementArguments([$0.timeIntervalSince1970]) } ?? [])
+        if let start {
+            // A motion transition just before this segment still informs its transport mode.
+            // Motion-only context cannot create a segment or invent location evidence.
+            let context = try decodeAll(SensorObservation.self, db: db,
+                sql: "SELECT payload FROM observations WHERE source = 'motion' AND timestamp < ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT 1",
+                arguments: [start.timeIntervalSince1970, start.addingTimeInterval(-300).timeIntervalSince1970])
+            observations.insert(contentsOf: context, at: 0)
+        }
         let places = try decodeAll(Place.self, db: db, sql: "SELECT payload FROM places")
         let networks = try decodeAll(WiFiNetwork.self, db: db, sql: "SELECT payload FROM wifiNetworks")
         let accessPoints = try decodeAll(WiFiAccessPoint.self, db: db, sql: "SELECT payload FROM wifiAccessPoints")
