@@ -90,6 +90,7 @@ struct TimelineView: View {
                         ForEach(model.timeline) { item in
                             Button { selected = item } label: { TimelineRow(item: item, place: model.place(for: item)) }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("timeline-\(item.kind.rawValue)-\(item.id)")
                         }
                     }
                 }
@@ -144,6 +145,10 @@ struct TimelineRow: View {
                         if item.isUserEdited { Image(systemName: "checkmark.circle.fill") }
                         Text(Display.duration(item.duration()))
                     }.font(.caption.weight(.semibold)).foregroundStyle(Palette.ink)
+                    if item.unrecordedDuration > 0 {
+                        Text(item.unrecordedDuration < 60 ? "Includes a short recording gap" : "Includes \(Display.duration(item.unrecordedDuration)) unrecorded")
+                            .font(.caption).foregroundStyle(Palette.muted)
+                    }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(Palette.muted).padding(.top, 16)
@@ -156,10 +161,13 @@ struct TimelineRow: View {
                 DottedLine().stroke(Palette.muted.opacity(0.6), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 7]))
                     .frame(width: 2).padding(.leading, 38).accessibilityHidden(true)
                 HStack(spacing: 8) {
-                    Image(systemName: item.kind == .gap ? "questionmark.circle" : item.mode.symbol)
+                    Image(systemName: item.kind == .gap ? (item.connection == nil ? "questionmark.circle" : "point.topleft.down.to.point.bottomright.curvepath") : item.mode.symbol)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(item.kind == .gap ? "An unknown interval" : item.mode.title).font(.subheadline.weight(.semibold))
+                        Text(item.kind == .gap ? (item.connection == nil ? "An unknown interval" : "Between recorded locations") : item.mode.title).font(.subheadline.weight(.semibold))
                         Text(Display.duration(item.duration())).font(.caption).foregroundStyle(Palette.muted)
+                        if item.kind == .gap && item.connection != nil {
+                            Text("Path not recorded").font(.caption).foregroundStyle(Palette.muted)
+                        }
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.caption2)

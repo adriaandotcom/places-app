@@ -212,7 +212,8 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
                    fix(1000, coordinate: Coordinate(latitude: 0, longitude: 0.02), speed: 4), fix(2400), fix(3600)]
     for sample in samples { try await store.append([sample]) }
     let expected = InferenceEngine.infer(observations: samples, places: [home()])
-    #expect(try await store.timeline(on: epoch) == InferenceEngine.onDay(epoch, items: expected))
+    let presented = TimelinePresentation.make(items: expected, observations: samples, places: [home()])
+    #expect(try await store.timeline(on: epoch) == InferenceEngine.onDay(epoch, items: presented))
 }
 
 @Test func localSearchHandlesAccentsAndQuerySyntax() async throws {

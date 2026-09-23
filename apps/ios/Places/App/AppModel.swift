@@ -63,7 +63,10 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-unnamed-stay") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-grouped-history") {
+                        try await DemoFixtures.seedGroupedHistory(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-unnamed-stay") {
                         try await DemoFixtures.seedUnnamedStay(opened, withSavedPlace: ProcessInfo.processInfo.arguments.contains("--ui-saved-place"))
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-fixture") {
@@ -108,6 +111,19 @@ final class AppModel {
         Task { await refresh() }
     }
     func place(for item: TimelineItem) -> Place? { places.first { $0.id == item.placeID } }
+    func endpointName(_ endpoint: TimelineConnection.Endpoint, fallback: String) -> String {
+        places.first { $0.id == endpoint.placeID }?.name ?? fallback
+    }
+
+    func setCombined(_ item: TimelineItem, combined: Bool) async -> Bool {
+        guard let store else { return false }
+        do {
+            if combined { try await store.mergeAdjacent(to: item) }
+            else { try await store.split(item) }
+            await refresh()
+            return true
+        } catch { fail("Could not update these entries. Please try again."); return false }
+    }
 
     private func enqueue(_ values: [SensorObservation]) {
         guard let store, !deleting, !values.isEmpty else { return }

@@ -3,6 +3,22 @@ import Foundation
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedGroupedHistory(_ store: PlacesStore) async throws {
+        let start = Calendar.current.startOfDay(for: Date())
+        let home = Place(id: "group-home", name: "Home", coordinate: Coordinate(latitude: 1, longitude: 1), symbol: "house.fill")
+        try await store.savePlace(home)
+        func fix(_ seconds: Double, coordinate: Coordinate = home.coordinate) -> SensorObservation {
+            SensorObservation(id: "group-fix-\(seconds)", timestamp: start.addingTimeInterval(seconds), source: .location,
+                              coordinate: coordinate, horizontalAccuracy: 10)
+        }
+        try await store.append([
+            fix(0, coordinate: Coordinate(latitude: 1, longitude: 1.01)), fix(1800), fix(2000),
+            SensorObservation(timestamp: start.addingTimeInterval(2001), source: .recovery), fix(2010), fix(2100)
+        ])
+        try await store.correct(UserOverride(start: start.addingTimeInterval(2000), end: start.addingTimeInterval(2010),
+                                            kind: .stay, placeID: home.id))
+    }
+
     static func seedUnnamedStay(_ store: PlacesStore, withSavedPlace: Bool) async throws {
         if withSavedPlace {
             try await store.savePlace(Place(name: "Fixture Existing", coordinate: Coordinate(latitude: 0, longitude: 0.02)))

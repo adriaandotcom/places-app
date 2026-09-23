@@ -166,6 +166,25 @@ public struct TimelineItem: Codable, Identifiable, Hashable, Sendable {
         self.isUserEdited = isUserEdited; self.lastEvidenceAt = lastEvidenceAt; self.coordinate = coordinate
     }
     public func duration(until now: Date = Date()) -> TimeInterval { max(0, (end ?? now).timeIntervalSince(start)) }
+
+    // Presentation metadata. Inferred records and raw observations remain intact.
+    public var originalItems: [TimelineItem]?
+    public var connection: TimelineConnection?
+    public var isSeparated: Bool?
+    public var unrecordedDuration: TimeInterval {
+        (originalItems ?? []).filter { $0.kind == .gap }.reduce(0) { $0 + $1.duration(until: lastEvidenceAt) }
+    }
+}
+
+/// Two known locations around an interval, never a reconstructed route.
+public struct TimelineConnection: Codable, Hashable, Sendable {
+    public struct Endpoint: Codable, Hashable, Sendable {
+        public var coordinate: Coordinate
+        public var placeID: String?
+        public var timestamp: Date
+    }
+    public var from: Endpoint
+    public var to: Endpoint
 }
 
 public struct UserOverride: Codable, Identifiable, Sendable {
@@ -218,6 +237,7 @@ public struct HistoryArchive: Codable, Sendable {
     public let accessPoints: [WiFiAccessPoint]
     public let routePoints: [RoutePoint]
     public let trackingEvents: [TrackingEvent]
+    public var separatedAt: [Date]? = nil
 }
 
 public struct DiagnosticReport: Codable, Sendable {

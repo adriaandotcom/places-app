@@ -64,6 +64,9 @@ public actor PlacesStore {
             try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
+        migrator.registerMigration("v3-reversible-timeline-grouping") { db in
+            try db.execute(sql: "CREATE TABLE timelineSeparations (timestamp REAL PRIMARY KEY)")
+        }
         try migrator.migrate(queue)
     }
 
@@ -136,7 +139,32 @@ public actor PlacesStore {
             let edits = try StoreSQL.decodeAll(UserOverride.self, db: db,
                 sql: "SELECT payload FROM overrides WHERE start < ? AND end > ? ORDER BY createdAt",
                 arguments: [interval.end.timeIntervalSince1970, interval.start.timeIntervalSince1970])
-            return InferenceEngine.onDay(day, calendar: calendar, items: InferenceEngine.applying(edits, to: items))
+            let observations = try StoreSQL.decodeAll(SensorObservation.self, db: db,
+                sql: "SELECT payload FROM observations WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+                arguments: [items.first?.start.timeIntervalSince1970 ?? interval.start.timeIntervalSince1970,
+                            max(interval.end, items.last?.end ?? items.last?.lastEvidenceAt ?? interval.end).timeIntervalSince1970])
+            let places = try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places")
+            let separatedAt = try Double.fetchAll(db, sql: "SELECT timestamp FROM timelineSeparations").map(Date.init(timeIntervalSince1970:))
+            let presented = TimelinePresentation.make(items: InferenceEngine.applying(edits, to: items),
+                observations: observations, places: places, separatedAt: separatedAt)
+            return InferenceEngine.onDay(day, calendar: calendar, items: presented)
+        }
+    }
+
+    public func split(_ item: TimelineItem) throws {
+        guard let originals = item.originalItems, originals.count > 1 else { return }
+        try queue.write { db in
+            for member in originals.dropFirst() {
+                try db.execute(sql: "INSERT OR IGNORE INTO timelineSeparations(timestamp) VALUES (?)",
+                               arguments: [member.start.timeIntervalSince1970])
+            }
+        }
+    }
+
+    public func mergeAdjacent(to item: TimelineItem) throws {
+        try queue.write { db in
+            try db.execute(sql: "DELETE FROM timelineSeparations WHERE timestamp = ? OR timestamp = ?",
+                           arguments: [item.start.timeIntervalSince1970, item.end?.timeIntervalSince1970])
         }
     }
 
@@ -228,14 +256,18 @@ public actor PlacesStore {
         try queue.read { db in
             let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")
             let edits = try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
+            let places = try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places")
+            let observations = try StoreSQL.decodeAll(SensorObservation.self, db: db, sql: "SELECT payload FROM observations ORDER BY timestamp")
+            let separatedAt = try Double.fetchAll(db, sql: "SELECT timestamp FROM timelineSeparations ORDER BY timestamp").map(Date.init(timeIntervalSince1970:))
             return try HistoryArchive(formatVersion: 1, exportedAt: Date(),
-                places: StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places"),
-                observations: StoreSQL.decodeAll(SensorObservation.self, db: db, sql: "SELECT payload FROM observations ORDER BY timestamp"),
-                timeline: InferenceEngine.applying(edits, to: items), corrections: edits,
+                places: places, observations: observations,
+                timeline: TimelinePresentation.make(items: InferenceEngine.applying(edits, to: items), observations: observations,
+                                                    places: places, separatedAt: separatedAt), corrections: edits,
                 networks: StoreSQL.decodeAll(WiFiNetwork.self, db: db, sql: "SELECT payload FROM wifiNetworks"),
                 accessPoints: StoreSQL.decodeAll(WiFiAccessPoint.self, db: db, sql: "SELECT payload FROM wifiAccessPoints"),
                 routePoints: StoreSQL.decodeAll(RoutePoint.self, db: db, sql: "SELECT payload FROM routePoints ORDER BY timestamp"),
-                trackingEvents: StoreSQL.decodeAll(TrackingEvent.self, db: db, sql: "SELECT payload FROM trackingEvents ORDER BY timestamp"))
+                trackingEvents: StoreSQL.decodeAll(TrackingEvent.self, db: db, sql: "SELECT payload FROM trackingEvents ORDER BY timestamp"),
+                separatedAt: separatedAt)
         }
     }
     public func exportDiagnostics() throws -> Data { try StoreSQL.exportEncoder.encode(diagnostics()) }
@@ -243,7 +275,7 @@ public actor PlacesStore {
     public func eraseHistory(resetSettings: Bool = false) throws {
         try queue.write { db in
             try db.execute(sql: """
-                DELETE FROM evidenceLinks; DELETE FROM routePoints; DELETE FROM timeline; DELETE FROM overrides;
+                DELETE FROM evidenceLinks; DELETE FROM routePoints; DELETE FROM timeline; DELETE FROM overrides; DELETE FROM timelineSeparations;
                 DELETE FROM observations; DELETE FROM placeWifiLinks; DELETE FROM wifiAccessPoints;
                 DELETE FROM wifiNetworks; DELETE FROM placeSearch; DELETE FROM places; DELETE FROM trackingEvents;
                 """)

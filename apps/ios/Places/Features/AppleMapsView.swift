@@ -40,12 +40,16 @@ private struct AppleMapSurface: View {
         items.filter { $0.kind == .stay && model.place(for: $0) == nil && $0.coordinate?.isValid == true }
     }
     private var shownRoutes: [TimelineItem] { items.filter { $0.kind == .journey } }
+    private var endpointConnections: [TimelineItem] {
+        items.filter { $0.connection != nil && ($0.kind == .gap || ($0.kind == .journey && points(for: $0).count < 2)) }
+    }
     private func points(for item: TimelineItem) -> [RoutePoint] {
         model.routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) }
     }
     private var framingCoordinates: [Coordinate] {
         shownPlaces.map(\.coordinate) + unnamedStays.compactMap(\.coordinate)
             + shownRoutes.flatMap { points(for: $0).map(\.coordinate) }
+            + endpointConnections.flatMap { [$0.connection!.from.coordinate, $0.connection!.to.coordinate] }
     }
     var body: some View {
         Map(position: $camera) {
@@ -68,6 +72,20 @@ private struct AppleMapSurface: View {
                         .stroke(Palette.green, lineWidth: 4)
                 }
             }
+            ForEach(endpointConnections) { item in
+                if let connection = item.connection {
+                    let from = CLLocationCoordinate2D(latitude: connection.from.coordinate.latitude, longitude: connection.from.coordinate.longitude)
+                    let to = CLLocationCoordinate2D(latitude: connection.to.coordinate.latitude, longitude: connection.to.coordinate.longitude)
+                    Annotation(model.endpointName(connection.from, fallback: "Earlier location"), coordinate: from) {
+                        endpointMarker("A", color: Palette.accent(1))
+                    }
+                    Annotation(model.endpointName(connection.to, fallback: "Later location"), coordinate: to) {
+                        endpointMarker("B", color: Palette.green)
+                    }
+                    MapPolyline(coordinates: [from, to])
+                        .stroke(Palette.muted, style: StrokeStyle(lineWidth: 3, dash: [6, 6]))
+                }
+            }
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControls { MapCompass(); MapScaleView() }
@@ -83,6 +101,14 @@ private struct AppleMapSurface: View {
         }
         .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) } }
     }
+
+    private func endpointMarker(_ letter: String, color: Color) -> some View {
+        Text(letter).font(.headline.bold()).foregroundStyle(.white)
+            .frame(width: 32, height: 32).background(color, in: Circle())
+            .overlay(Circle().stroke(.white, lineWidth: 2))
+            .accessibilityLabel("Endpoint \(letter)")
+            .accessibilityIdentifier("endpoint-\(letter)")
+    }
 }
 
 struct MapScreen: View {
@@ -94,7 +120,7 @@ struct MapScreen: View {
             if model.mapsEnabled {
                 VStack(spacing: 8) {
                     Text(model.selectedDay.formatted(date: .abbreviated, time: .omitted)).font(BrandFont.title)
-                    Text("Routes connect recorded samples. Unknown intervals have no route.").font(.caption).foregroundStyle(Palette.muted)
+                    Text("Solid lines follow recorded samples. Dashed lines link known endpoints; the path is unknown.").font(.caption).foregroundStyle(Palette.muted)
                 }.padding(.horizontal, 20).padding(.vertical, 12).frame(maxWidth: .infinity).background(Palette.paper)
             }
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationTitle("Map").navigationBarTitleDisplayMode(.inline)

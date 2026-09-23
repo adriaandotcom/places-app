@@ -16,6 +16,7 @@ public struct InferenceTestCase: Codable, Sendable {
         public let networks: [WiFiNetwork]
         public let accessPoints: [WiFiAccessPoint]
         public let corrections: [UserOverride]
+        public var separatedAt: [Date]? = nil
     }
 
     /// Compare behavior instead of generated IDs, explanatory copy, or GPS rounding.
@@ -41,7 +42,8 @@ public struct InferenceTestCase: Codable, Sendable {
     public func replay() -> [TimelineExpectation] {
         let inferred = InferenceEngine.infer(observations: input.observations, places: input.places,
                                              networks: input.networks, accessPoints: input.accessPoints)
-        return InferenceEngine.applying(input.corrections, to: inferred).map(TimelineExpectation.init)
+        return TimelinePresentation.make(items: InferenceEngine.applying(input.corrections, to: inferred),
+            observations: input.observations, places: input.places, separatedAt: input.separatedAt ?? []).map(TimelineExpectation.init)
     }
 
     public func encoded() throws -> Data {
@@ -121,7 +123,8 @@ public struct InferenceTestCase: Codable, Sendable {
         return Self(formatVersion: 1, policyVersion: TrackingPolicy.version,
                     instructions: "Dates are Unix seconds. expectedTimeline snapshots the saved, corrected history. Review it against what happened, or edit it to describe the desired result. In Swift: InferenceTestCase.decode(data), then compare replay() with expectedTimeline. Millisecond precision is used for timeline comparisons.",
                     privacy: "Names, addresses, identifiers, dates, geographic time zone names, and absolute locations are replaced. Distances, route shapes, time of day, UTC offsets, and durations remain and can still be identifying. Review before sharing. Diagnostic free text and device metadata are excluded.",
-                    input: Input(observations: observations, places: places, networks: networks, accessPoints: points, corrections: corrections),
+                    input: Input(observations: observations, places: places, networks: networks, accessPoints: points,
+                                 corrections: corrections, separatedAt: archive.separatedAt?.map(date)),
                     expectedTimeline: expected)
     }
 

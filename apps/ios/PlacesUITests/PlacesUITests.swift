@@ -1,6 +1,62 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testCombinedHomeCanSplitAndMergeWithoutLosingCorrections() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-grouped-history"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+        let visits = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-stay-"))
+        XCTAssertEqual(visits.count, 1)
+        reveal(visits.firstMatch, in: app); visits.firstMatch.tap()
+        XCTAssertFalse(app.maps.firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["3 entries combined"].exists)
+        reveal(app.buttons["split-entries"], in: app); app.buttons["split-entries"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertEqual(visits.count, 3)
+        let corrected = visits.element(boundBy: 1)
+        reveal(corrected, in: app); corrected.tap()
+        XCTAssertTrue(app.staticTexts["Your correction"].exists)
+        reveal(app.buttons["merge-entries"], in: app); app.buttons["merge-entries"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertEqual(visits.count, 1)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "One combined Home visit"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
+    func testUnrecordedIntervalHasEndpointsAndConsentGatedMap() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-grouped-history"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Between recorded locations"].exists)
+        XCTAssertTrue(app.staticTexts["Earlier location"].exists)
+        XCTAssertTrue(app.staticTexts["Home"].exists)
+        XCTAssertFalse(app.maps.firstMatch.exists)
+        app.buttons["Done"].tap()
+        app.buttons["tab-map"].tap(); app.buttons["enable-apple-maps"].tap()
+        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
+        app.buttons["tab-timeline"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.tap()
+        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Dashed lines link known endpoints; they aren’t a recorded route."].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["endpoint-A"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["endpoint-B"].waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Known endpoints with an unrecorded path"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["Done"].tap()
+        app.buttons["open-settings"].tap()
+        reveal(app.switches["maps-toggle"], in: app)
+        let mapsSwitch = app.switches["maps-toggle"]
+        XCTAssertEqual(mapsSwitch.value as? String, "1")
+        mapsSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(mapsSwitch.value as? String, "0")
+        app.buttons["Done"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.tap()
+        XCTAssertFalse(app.maps.firstMatch.exists)
+    }
+
     private func launch(fixture: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"] + (fixture ? ["--ui-fixture"] : [])
