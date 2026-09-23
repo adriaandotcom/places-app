@@ -235,6 +235,29 @@ import XCTest
         screenshot.name = "Test case file export"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
+    func testTransportChoicesAndManualFerryCorrection() {
+        let app = launch(fixture: true)
+        let cycling = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Cycled")).firstMatch
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+        reveal(cycling, in: app); cycling.tap()
+        let menu = app.buttons["change-transport"]
+        reveal(menu, in: app); menu.tap()
+        XCTAssertTrue(app.buttons["transport-ferry"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Car"].exists)
+        XCTAssertTrue(app.buttons["Public transport"].exists)
+        XCTAssertTrue(app.buttons["Plane"].exists)
+        XCTAssertFalse(app.buttons["Drove"].exists)
+        XCTAssertFalse(app.buttons["Took the train"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Suggested")).firstMatch.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Ranked transport choices"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.buttons["transport-ferry"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        let ferry = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Ferry")).firstMatch
+        reveal(ferry, in: app); ferry.tap()
+        XCTAssertTrue(app.staticTexts["Your correction"].waitForExistence(timeout: 5))
+    }
+
     func testCreatePlaceFromVisitAssignsItThroughBothEntryPoints() {
         for withSavedPlace in [false, true] {
             let app = XCUIApplication()

@@ -24,14 +24,26 @@ public enum ObservationSource: String, Codable, Sendable {
     case motion, wifi, recovery, paused, resumed
 }
 public enum TransportMode: String, Codable, CaseIterable, Sendable {
-    case unknown, walking, cycling, driving, train
+    // Keep the existing raw values so saved journeys and corrections remain readable.
+    case unknown, walking, cycling, driving, train, plane, ferry
+    public static let choiceOrder: [Self] = [.walking, .cycling, .driving, .train, .ferry, .plane, .unknown]
+    public var choiceTitle: String {
+        switch self {
+        case .unknown: "Not sure"
+        case .walking: "Walking"
+        case .cycling: "Cycling"
+        default: title
+        }
+    }
     public var title: String {
         switch self {
         case .unknown: "Travelled"
         case .walking: "Walked"
         case .cycling: "Cycled"
-        case .driving: "Drove"
-        case .train: "Took the train"
+        case .driving: "Car"
+        case .train: "Public transport"
+        case .plane: "Plane"
+        case .ferry: "Ferry"
         }
     }
     public var symbol: String {
@@ -41,6 +53,8 @@ public enum TransportMode: String, Codable, CaseIterable, Sendable {
         case .cycling: "bicycle"
         case .driving: "car.fill"
         case .train: "tram.fill"
+        case .plane: "airplane"
+        case .ferry: "ferry.fill"
         }
     }
 }

@@ -7,6 +7,7 @@ struct TimelineDetail: View {
     let item: TimelineItem
     @State private var placeFlow: PlaceFlow?
     @State private var createdPlace = false
+    @State private var transportSuggestions = TransportSuggestions.none
     private enum PlaceFlow: String, Identifiable {
         case create, choose
         var id: String { rawValue }
@@ -57,10 +58,15 @@ struct TimelineDetail: View {
                             .accessibilityIdentifier("choose-saved-place")
                     }
                     Menu(item.kind == .gap ? "I was travelling" : "Change transport mode") {
-                        ForEach(TransportMode.allCases, id: \.self) { mode in
-                            Button(mode.title, systemImage: mode.symbol) { correct(kind: .journey, mode: mode) }
+                        if let speed = transportSuggestions.estimatedSpeedKilometersPerHour {
+                            Section("Suggested · about \(Int(speed.rounded())) km/h") {
+                                transportButtons(transportSuggestions.suggested)
+                            }
+                            Section("Other ways") { transportButtons(transportSuggestions.otherModes) }
+                        } else {
+                            transportButtons(TransportMode.choiceOrder)
                         }
-                    }.frame(minHeight: 44)
+                    }.menuOrder(.fixed).frame(minHeight: 44).accessibilityIdentifier("change-transport")
                     if item.kind != .gap { Button("Mark as unknown") { correct(kind: .gap) }.frame(minHeight: 44) }
                     if item.end == nil {
                         Text("Corrections to an ongoing interval apply through now. Future observations remain separate.").font(.caption).foregroundStyle(Palette.muted)
@@ -68,6 +74,9 @@ struct TimelineDetail: View {
                 }
             }.padding(Layout.gutter)
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+            .task(id: item) {
+                transportSuggestions = (try? await model.store?.transportSuggestions(for: item)) ?? .none
+            }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $placeFlow, onDismiss: { if createdPlace { dismiss() } }) { flow in
                 NavigationStack {
@@ -93,6 +102,12 @@ struct TimelineDetail: View {
         PlaceEditor(coordinate: item.coordinate, assigning: item) {
             createdPlace = true
             placeFlow = nil
+        }
+    }
+    private func transportButtons(_ modes: [TransportMode]) -> some View {
+        ForEach(modes, id: \.self) { mode in
+            Button(mode.choiceTitle, systemImage: mode.symbol) { correct(kind: .journey, mode: mode) }
+                .accessibilityIdentifier("transport-\(mode.rawValue)")
         }
     }
     private func correct(kind: TimelineKind, placeID: String? = nil, mode: TransportMode = .unknown) {

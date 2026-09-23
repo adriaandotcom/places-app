@@ -175,6 +175,14 @@ public actor PlacesStore {
         try queue.read { try StoreSQL.decodeAll(SensorObservation.self, db: $0,
             sql: "SELECT payload FROM observations ORDER BY timestamp DESC LIMIT ?", arguments: [max(0, min(limit, 500))]) }
     }
+    public func transportSuggestions(for item: TimelineItem) throws -> TransportSuggestions {
+        try queue.read { db in
+            let values = try StoreSQL.decodeAll(SensorObservation.self, db: db,
+                sql: "SELECT payload FROM observations WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+                arguments: [item.start.timeIntervalSince1970, (item.end ?? item.lastEvidenceAt).timeIntervalSince1970])
+            return TransportSuggestions.make(for: item, observations: values)
+        }
+    }
     public func routePoints(from start: Date, to end: Date) throws -> [RoutePoint] {
         try queue.read { try StoreSQL.decodeAll(RoutePoint.self, db: $0,
             sql: "SELECT payload FROM routePoints WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
