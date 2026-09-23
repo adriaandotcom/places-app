@@ -42,8 +42,13 @@ private func wifi(_ seconds: Double, ssid: String = "Fixture Network", bssid: St
 }
 
 @Test func missingMovingEvidenceMakesGap() {
-    let items = InferenceEngine.infer(observations: [fix(0, speed: 4), fix(60, speed: 4), fix(2000, speed: 4)], places: [])
-    #expect(items.contains { $0.kind == .gap && $0.start == epoch.addingTimeInterval(60) && $0.end == epoch.addingTimeInterval(2000) })
+    let items = InferenceEngine.infer(observations: [fix(0, speed: 4),
+        fix(60, coordinate: Coordinate(latitude: 0, longitude: 0.01), speed: 4),
+        fix(2000, coordinate: Coordinate(latitude: 0, longitude: 0.02), speed: 4),
+        fix(2060, coordinate: Coordinate(latitude: 0, longitude: 0.03), speed: 4)], places: [])
+    // A first returning fix alone cannot establish travel; the gap ends once
+    // a second displaced fix establishes movement again.
+    #expect(items.contains { $0.kind == .gap && $0.start == epoch.addingTimeInterval(60) && $0.end == epoch.addingTimeInterval(2060) })
 }
 
 @Test func stationaryClusterBecomesUnnamedStay() {

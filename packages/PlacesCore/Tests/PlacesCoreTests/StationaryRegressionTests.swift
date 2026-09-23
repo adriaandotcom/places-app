@@ -92,3 +92,39 @@ private func sample(_ seconds: Double, metres: Double = 0, speed: Double = -1, s
     #expect(items[1].isUserEdited)
     #expect(!items.contains { $0.kind == .journey })
 }
+
+@Test func sparseUnknownEvidenceKeepsOneGapAndUniqueIdentifiers() async throws {
+    let observations = [sample(0), sample(1500), sample(1590), sample(1700)]
+    let inferred = InferenceEngine.infer(observations: observations, places: [])
+    #expect(Set(inferred.map(\.id)).count == inferred.count)
+    #expect(inferred.map(\.kind) == [.gap, .stay])
+    let store = try PlacesStore()
+    for observation in observations { try await store.append([observation]) }
+    #expect(try await store.timeline(on: start).count == 2)
+}
+
+@Test func journeyEvidenceGapDoesNotReuseThePendingStopIdentifier() async throws {
+    let observations = [sample(0), sample(190), sample(240, metres: 500, speed: 4),
+                        sample(2000, metres: 1000), sample(2100, metres: 1005), sample(2200, metres: 1000)]
+    let inferred = InferenceEngine.infer(observations: observations, places: [])
+    #expect(Set(inferred.map(\.id)).count == inferred.count)
+    #expect(inferred.map(\.kind) == [.stay, .gap, .stay])
+    let store = try PlacesStore()
+    for observation in observations { try await store.append([observation]) }
+    #expect(try await store.timeline(on: start).count == 3)
+}
+
+@Test func versionTwoMigratesAnUnconfirmedFixAfterALongGap() async throws {
+    let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let store = try PlacesStore(path: path)
+    try await store.append([sample(0), sample(1500)])
+    let queue = try DatabaseQueue(path: path)
+    try await queue.write { db in
+        try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v2-stationary-history'")
+        try db.execute(sql: "DELETE FROM timeline")
+    }
+    let reopened = try PlacesStore(path: path)
+    #expect(try await reopened.observations().count == 2)
+    #expect(try await reopened.timeline(on: start).map(\.kind) == [.gap])
+}

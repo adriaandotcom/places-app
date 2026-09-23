@@ -65,10 +65,14 @@ public enum InferenceEngine {
 
             if let item = current, item.kind != .stay,
                time.timeIntervalSince(item.lastEvidenceAt) > TrackingPolicy.evidenceGap {
-                let boundary = item.lastEvidenceAt
-                close(at: boundary)
-                start(.gap, at: boundary, observation: observation, reason: "No observations establish this interval.")
-                close(at: time)
+                // Keep one gap open while the next fix is still unconfirmed.
+                // Closing it here and starting another gap from the same fix
+                // would reuse its identifier and make persistence fail.
+                if item.kind == .journey {
+                    let boundary = item.lastEvidenceAt
+                    close(at: boundary)
+                    start(.gap, at: boundary, observation: observation, reason: "No observations establish this interval.")
+                }
                 stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
             }
 
