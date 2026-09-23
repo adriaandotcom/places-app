@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'none'; script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="A private memory of the places your day takes you. Places is a native iPhone app that keeps location history on your device.">
+  <meta name="theme-color" content="#faf7ef">
+  <title>Places — your location history, for you.</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="Places home"><img src="assets/icon.svg" width="38" height="38" alt="">Places</a>
+    <nav aria-label="Main"><a href="#privacy">Privacy, plainly</a><a class="source-link" href="https://github.com/adriaandotcom/places-app">View the source <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span>Made for iPhone. Made for you.</p>
+        <h1 id="hero-title">Your days<br>have <span>places.</span></h1>
+        <p class="lead">The café you stumbled into. The long way home. A little memory of where life takes you, kept on your iPhone.</p>
+        <div class="hero-actions"><a class="button" href="https://github.com/adriaandotcom/places-app">Follow the build <span aria-hidden="true">↗</span></a><span class="release-note">In development<br>iOS 26 and newer</span></div>
+        <p class="quiet-proof"><span aria-hidden="true">✓</span> No account. No analytics. No server to maintain.</p>
+      </div>
+      <div class="preview-wrap" aria-label="Illustrative timeline with sample places. No actual location history.">
+        <span class="note note-top">The little stops count, too.</span>
+        <div class="phone">
+          <div class="phone-top" aria-hidden="true"><span>9:41</span><span class="island"></span><span>▰</span></div>
+          <div class="app-title">Places <span aria-hidden="true">☷</span></div>
+          <p class="preview-date">A Wednesday, well remembered</p>
+          <h2>Today you went<br>to 3 places</h2>
+          <div class="days" aria-hidden="true"><span>Mon<b>21</b></span><span>Tue<b>22</b></span><span class="selected">Wed<b>23</b></span><span>Thu<b>24</b></span><span>Fri<b>25</b></span></div>
+          <div class="place-card green"><span class="place-icon" aria-hidden="true">⌂</span><div><strong>Home</strong><small>00:00 – 08:42</small></div><span class="duration">8h 42</span></div>
+          <div class="journey"><span aria-hidden="true">↝</span> A bike ride <small>19 min</small></div>
+          <div class="place-card blue"><span class="place-icon" aria-hidden="true">▣</span><div><strong>The studio</strong><small>09:01 – 12:22</small></div><span class="duration">3h 21</span></div>
+          <div class="journey"><span aria-hidden="true">↝</span> A little walk <small>8 min</small></div>
+          <div class="place-card peach"><span class="place-icon" aria-hidden="true">☕</span><div><strong>A coffee stop</strong><small>12:30 – 13:18</small></div><span class="duration">48m</span></div>
+          <div class="preview-footer">Your history. On your iPhone.</div>
+          <div class="preview-tabs" aria-hidden="true"><span>☷ Timeline</span><span>Map</span><span>Places</span><span>⌕</span></div>
+        </div>
+        <span class="note note-bottom">A memory, not a broadcast.</span>
+      </div>
+    </section>
+    <section class="principles" id="privacy" aria-labelledby="privacy-title">
+      <div class="section-intro"><p class="eyebrow">Privacy, without homework</p><h2 id="privacy-title">Your history belongs<br>in your hands.</h2><p>No privacy dashboard maze. Here’s how the foundation works.</p></div>
+      <div class="principle-grid">
+        <article><span class="number">01</span><h3>It stays with you.</h3><p>Observations, places, and search live on your iPhone. No account, tracking server, or automatic cloud backup. You can export or delete your history yourself.</p></article>
+        <article><span class="number">02</span><h3>You choose the connections.</h3><p>Apple Maps is off until you enable it. Turning it on makes map requests to Apple. Your timeline and saved places work without it. No third-party services or hosted AI.</p></article>
+        <article><span class="number">03</span><h3>No guessing dressed as fact.</h3><p>Missing evidence stays visibly unknown. You can correct a place or journey, and your edits are remembered. The tracker aims to do less when you stay put.</p></article>
+      </div>
+    </section>
+    <section class="maker"><div class="avatar" aria-hidden="true">A</div><div><h2>A small, independent project.</h2><p>Built by Adriaan, founder of Simple Analytics. Places is a separate personal project, built in public. The foundation is still in development; real-device tracking and battery testing are part of the work ahead.</p><a href="https://github.com/adriaandotcom/places-app">See what’s being built <span aria-hidden="true">↗</span></a></div></section>
+  </main>
+  <footer><span class="brand">Places</span><p>Public source · PolyForm Noncommercial 1.0.0<br>Noncommercial use and forks are welcome under the license. Commercial use requires separate permission.</p><p class="site-privacy">This page uses no cookies, analytics, third-party assets, or JavaScript.</p></footer>
+</body>
+</html>

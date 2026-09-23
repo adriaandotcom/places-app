@@ -1,0 +1,47 @@
+[
+  {
+    "path": "apps/ios/Places/Resources/Fonts/BricolageGrotesque-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/fonts/ttf/BricolageGrotesque-Regular.ttf",
+    "sha256": "dcfe24ee4e7aa40aa13a91837acca9b170befd4dbbbcf9e084a0db1c1676e06f"
+  },
+  {
+    "path": "apps/ios/Places/Resources/Fonts/BricolageGrotesque-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/fonts/ttf/BricolageGrotesque-Bold.ttf",
+    "sha256": "f83cb3f1ddb91bdb02868eeddb4f817b326aef993f96fe6f8a3b40b0f31c689b"
+  },
+  {
+    "path": "apps/ios/Places/Resources/Fonts/BricolageGrotesque-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/fonts/ttf/BricolageGrotesque-ExtraBold.ttf",
+    "sha256": "20ca28c496aef07993031176c1a02da6959682abbc4cbf73776f83e63ef80c00"
+  },
+  {
+    "path": "apps/ios/Places/Resources/Fonts/OFL.txt",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/OFL.txt",
+    "sha256": "4b5a7d8f37f5602621c8a8d7358a6a2e71317e6c231c661e15aef0275d3e07ba"
+  },
+  {
+    "path": "apps/website/assets/BricolageGrotesque-Regular.woff2",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/fonts/webfonts/BricolageGrotesque-Regular.woff2",
+    "sha256": "fdbd0f157ab1a2fabad32a0b5aa9c687370bc7d889efde2339d33882a133af37"
+  },
+  {
+    "path": "apps/website/assets/BricolageGrotesque-ExtraBold.woff2",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/fonts/webfonts/BricolageGrotesque-ExtraBold.woff2",
+    "sha256": "b19988f07c22c42412d350745a3e26d6c7b8cd409830f607ddcad7d618eaeb12"
+  },
+  {
+    "path": "apps/website/assets/OFL.txt",
+    "source": "https://raw.githubusercontent.com/ateliertriay/bricolage/84745e5b96261ae5f8c6c856e262fe78d1d6efdd/OFL.txt",
+    "sha256": "4b5a7d8f37f5602621c8a8d7358a6a2e71317e6c231c661e15aef0275d3e07ba"
+  },
+  {
+    "path": "LICENSE",
+    "source": "https://polyformproject.org/licenses/noncommercial/1.0.0.txt",
+    "sha256": "ffcca38841adb694b6f380647e15f17c446a4d1656fed51a1e2041d064c94cc8"
+  },
+  {
+    "path": "apps/ios/Places/Resources/GRDB-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/groue/GRDB.swift/v7.11.1/LICENSE",
+    "sha256": "9853f9dce81365fcc1d9b46004633354450164b8d17904e92e80c444545f7e87"
+  }
+]

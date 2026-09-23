@@ -1,0 +1,17 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+Signing.local.xcconfig
+*.sqlite*
+*.db*
+*.xcresult
+*.ipa
+*.mobileprovision
+.env*
+!*.example
+__pycache__/
+*.pyc

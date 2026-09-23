@@ -1,0 +1,72 @@
+name: Places
+options:
+  bundleIdPrefix: com.adriaan
+  deploymentTarget:
+    iOS: '26.0'
+  xcodeVersion: '27.0'
+  groupSortPosition: top
+packages:
+  PlacesCore:
+    path: ../../packages/PlacesCore
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: '26.0'
+    MARKETING_VERSION: '0.1.0'
+    CURRENT_PROJECT_VERSION: 1
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ''
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  Places:
+    type: application
+    platform: iOS
+    sources:
+      - path: Places
+    dependencies:
+      - package: PlacesCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places
+        TARGETED_DEVICE_FAMILY: '1'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Places/Info.plist
+      properties:
+        CFBundleDisplayName: Places
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSLocationWhenInUseUsageDescription: Places uses your location to build a private history on this iPhone.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Allow background location to record your journeys and recognize stops when you are not using Places. History stays on this iPhone.
+        NSMotionUsageDescription: Movement helps Places recognize journeys and reduce unnecessary location work.
+        UIBackgroundModes: [location]
+        UIAppFonts:
+          - BricolageGrotesque-Regular.ttf
+          - BricolageGrotesque-Bold.ttf
+          - BricolageGrotesque-ExtraBold.ttf
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Places/Places.entitlements
+      properties:
+        com.apple.developer.networking.wifi-info: true
+        com.apple.developer.default-data-protection: NSFileProtectionCompleteUntilFirstUserAuthentication
+  PlacesUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [PlacesUITests]
+    dependencies:
+      - target: Places
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.uitests
+schemes:
+  Places:
+    build:
+      targets:
+        Places: all
+    test:
+      targets: [PlacesUITests]

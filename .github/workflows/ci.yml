@@ -1,0 +1,38 @@
+name: Validate Places
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: places-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Privacy and offline resource guardrails
+        run: python3 scripts/check_privacy.py
+      - name: Smoke-test the validation scripts
+        run: python3 -m unittest discover -s scripts/tests
+  apple:
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Critical shared-core tests
+        run: swift test --package-path packages/PlacesCore
+      - name: Compile iPhone simulator app
+        run: xcodebuild -project apps/ios/Places.xcodeproj -scheme Places -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/PlacesBuild" CODE_SIGNING_ALLOWED=NO build
+      - name: Permission-free UI smoke tests
+        run: |
+          places_simulator=$(python3 scripts/select_simulator.py)
+          xcodebuild -project apps/ios/Places.xcodeproj -scheme Places -destination "platform=iOS Simulator,id=$places_simulator" -derivedDataPath "$RUNNER_TEMP/PlacesBuild" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO test
