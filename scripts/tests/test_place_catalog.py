@@ -40,8 +40,25 @@ class CatalogBuilderTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(file.read_bytes()).hexdigest(), pack['sha256'])
             with sqlite3.connect(f'file:{file}?mode=ro', uri=True) as db:
                 self.assertEqual(db.execute('PRAGMA quick_check').fetchone()[0], 'ok')
+                self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 2)
                 self.assertEqual(db.execute('SELECT count(*) FROM places').fetchone()[0], pack['count'])
                 self.assertGreater(pack['count'], 100)
                 self.assertTrue(db.execute("SELECT rowid FROM search WHERE search MATCH 'hotel*' LIMIT 1").fetchone())
                 west, south, east, north = pack['bounds']
                 self.assertEqual(db.execute('SELECT count(*) FROM places WHERE latitude NOT BETWEEN ? AND ? OR longitude NOT BETWEEN ? AND ?', (south,north,west,east)).fetchone()[0], 0)
+
+    def test_major_venues_preserve_source_ids_and_aliases(self):
+        feature = self.feature()
+        feature['id'] = 'b2ee52ea-3b09-439e-928b-bdbf168ded5e'
+        feature['properties']['names'] = {'primary': 'Κρατικός Αερολιμένας Κω Ιπποκράτης'}
+        feature['properties']['taxonomy'] = {'primary': 'airport'}
+        item = builder.record(feature, builder.PACKS[1][2])
+        self.assertEqual(item[0], feature['id'])
+        self.assertEqual(item[1], 'Kos Airport “Ippokratis”')
+        self.assertIn('κρατικοσ', item[7])
+        self.assertIn('hippocrates', item[7])
+        self.assertEqual(item[9], 2)
+        feature['id'] = 'synthetic-gate'
+        feature['properties']['names'] = {'primary': 'Gate 2'}
+        self.assertEqual(builder.record(feature, builder.PACKS[1][2])[9], 0)
+        self.assertEqual(builder.importance('history_museum'), 1)

@@ -69,6 +69,10 @@ final class AppModel {
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-grouped-history") {
                         try await DemoFixtures.seedGroupedHistory(opened)
                         onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-airport-stay") {
+                        try await DemoFixtures.seedUnnamedStay(opened, withSavedPlace: false,
+                            coordinate: Coordinate(latitude: 36.8014, longitude: 27.0906))
+                        onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-unnamed-stay") {
                         try await DemoFixtures.seedUnnamedStay(opened, withSavedPlace: ProcessInfo.processInfo.arguments.contains("--ui-saved-place"))
                         onboardingComplete = true

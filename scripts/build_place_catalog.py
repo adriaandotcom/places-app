@@ -21,6 +21,23 @@ PACKS = [('amsterdam', 'Amsterdam & surroundings', [4.65, 52.25, 5.10, 52.50]),
          ('kos', 'Kos island', [26.90, 36.65, 27.45, 36.96])]
 OUTPUT = Path(__file__).resolve().parents[1] / 'packages/PlacesCore/Sources/PlacesCore/Resources/PlaceCatalog'
 
+# The source labels gates, taxi ranks and even foreign airports as "airport".
+# Promote reviewed main venues, rather than trusting that category alone. Keep
+# original IDs and aliases so saved references and local-language search survive.
+# Names verified against https://www.kgs-airport.gr/ and https://www.schiphol.nl/en/.
+MAIN_VENUES = {
+    'b2ee52ea-3b09-439e-928b-bdbf168ded5e': ('Kos Airport “Ippokratis”', ['Kos International Airport', 'Hippocrates', 'KGS', 'Flughafen Kos', 'Luchthaven Kos']),
+    '8499bdcc-37ee-4331-80be-57497c99e288': ('Amsterdam Airport Schiphol', ['Schiphol Airport', 'Luchthaven Schiphol', 'AMS']),
+}
+
+
+def importance(category):
+    # A modest preference for recognizable destinations, not a popularity claim.
+    return int(category.endswith('_museum') or category.endswith('_stadium') or category in {
+        'museum', 'historic_site', 'monument', 'stadium_arena', 'hospital', 'college_university',
+        'shopping_mall', 'zoo', 'aquarium', 'theme_park', 'castle',
+    })
+
 
 def normalize(text):
     return ''.join(c for c in unicodedata.normalize('NFKD', text.lower())
@@ -72,10 +89,15 @@ def record(feature, bbox, country=None):
     source_id = feature.get('id') or p.get('id')
     if not source_id:
         return None
+    rank = importance(category)
+    if source_id in MAIN_VENUES:
+        name, extra_aliases = MAIN_VENUES[source_id]
+        aliases = sorted(set([*aliases, *extra_aliases, name]))
+        rank = 2
     return (source_id, name, address, lat, lon, category,
             json.dumps(aliases, ensure_ascii=False), normalize(' '.join([name, *aliases, address, category.replace('_', ' ')])),
             json.dumps([{key: value for key, value in source.items() if key in ('dataset', 'license', 'record_id')}
-                        for source in (p.get('sources') or [])], ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+                        for source in (p.get('sources') or [])], ensure_ascii=False, sort_keys=True, separators=(',', ':')), rank)
 
 
 def build(source, destination=OUTPUT):
@@ -94,18 +116,18 @@ def build(source, destination=OUTPUT):
         target = destination / f'{key}.sqlite'
         target.unlink(missing_ok=True)
         with sqlite3.connect(target) as db:
-            db.executescript('''PRAGMA user_version=1;
+            db.executescript('''PRAGMA user_version=2;
                 CREATE TABLE places (id TEXT PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL,
                 latitude REAL NOT NULL, longitude REAL NOT NULL, category TEXT NOT NULL,
-                aliases TEXT NOT NULL, searchText TEXT NOT NULL, sources TEXT NOT NULL);
+                aliases TEXT NOT NULL, searchText TEXT NOT NULL, sources TEXT NOT NULL, importance INTEGER NOT NULL);
                 CREATE INDEX places_location ON places(latitude, longitude);
                 CREATE VIRTUAL TABLE search USING fts5(searchText, content=places, content_rowid=rowid,
                   tokenize='unicode61 remove_diacritics 2');''')
-            db.executemany('INSERT INTO places VALUES (?,?,?,?,?,?,?,?,?)', [rows[k] for k in sorted(rows)])
+            db.executemany('INSERT INTO places VALUES (?,?,?,?,?,?,?,?,?,?)', [rows[k] for k in sorted(rows)])
             db.execute("INSERT INTO search(search) VALUES ('rebuild')")
             db.commit()
             db.execute('VACUUM')
-        packs.append(dict(id=key, name=title, bounds=bbox, schemaVersion=1, release=RELEASE,
+        packs.append(dict(id=key, name=title, bounds=bbox, schemaVersion=2, release=RELEASE,
                           count=len(rows), filename=target.name, attribution="Overture Maps Foundation and contributors; see LICENSES.txt",
                           sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
         print(f'{title}: {len(rows):,} places, {target.stat().st_size:,} bytes')

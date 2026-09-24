@@ -1,6 +1,40 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testAirportSuggestionsAndSearchStayNearTheVisit() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-airport-stay"]
+        app.launch()
+        let stay = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch
+        XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
+        app.buttons["assign-place"].tap()
+        let nearby = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "nearby-catalog-"))
+        XCTAssertTrue(nearby.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(nearby.firstMatch.label.contains("Kos Airport"))
+        let suggestions = XCTAttachment(screenshot: app.screenshot())
+        suggestions.name = "Main airport first in nearby suggestions"; suggestions.lifetime = .keepAlways; add(suggestions)
+        app.buttons["find-catalog-place"].tap()
+        let query = app.textFields["catalog-query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("airport\n")
+        let results = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "catalog-result-"))
+        XCTAssertTrue(results.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(results.firstMatch.label.contains("Kos Airport"))
+        XCTAssertFalse(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Schiphol")).firstMatch.exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Airport search scoped to 15 km"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["All regions"].tap()
+        XCTAssertTrue(app.buttons["catalog-result-8499bdcc-37ee-4331-80be-57497c99e288"].waitForExistence(timeout: 5))
+        app.buttons["Within 15 km"].tap()
+        let airport = app.buttons["catalog-result-b2ee52ea-3b09-439e-928b-bdbf168ded5e"]
+        XCTAssertTrue(airport.waitForExistence(timeout: 5)); airport.tap()
+        XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["place-name"].value as? String, "Kos Airport “Ippokratis”")
+        app.buttons["save-place"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Kos Airport")).firstMatch.exists)
+        XCTAssertFalse(app.maps.firstMatch.exists)
+    }
+
     func testOfflineCatalogSearchReviewSaveAndReuseWithoutMaps() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-unnamed-stay"]
@@ -9,6 +43,7 @@ import XCTest
         XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
         app.buttons["assign-place"].tap()
         app.buttons["find-catalog-place"].tap()
+        app.buttons["All regions"].tap()
         let query = app.textFields["catalog-query"]
         XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("Rijksmuseum")
         let results = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "catalog-result-"))
@@ -25,6 +60,7 @@ import XCTest
         app.buttons["Cancel"].tap()
         XCTAssertTrue(app.staticTexts["Somewhere new"].waitForExistence(timeout: 5))
         app.buttons["assign-place"].tap(); app.buttons["find-catalog-place"].tap()
+        app.buttons["All regions"].tap()
         XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("Rijksmuseum")
         XCTAssertTrue(results.firstMatch.waitForExistence(timeout: 10)); results.firstMatch.tap()
         XCTAssertTrue(name.waitForExistence(timeout: 5)); app.buttons["save-place"].tap()
@@ -323,12 +359,21 @@ import XCTest
         XCTAssertTrue(map.waitForExistence(timeout: 10))
         reveal(map, in: app)
         map.tap()
-        XCTAssertTrue(app.staticTexts["Tap the map to move your pin"].waitForExistence(timeout: 5))
+        // New nearby rows can push location controls out of the lazy form.
+        // Scroll the form's outer margin without panning the map itself.
+        func revealBelowMap(_ element: XCUIElement) {
+            for _ in 0..<6 {
+                if element.exists && element.isHittable { return }
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.025, dy: 0.8))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.025, dy: 0.25)))
+            }
+        }
+        let pinHint = app.staticTexts["Tap the map to move your pin"]
+        revealBelowMap(pinHint)
+        XCTAssertTrue(pinHint.exists)
         XCTAssertFalse(app.textFields["place-latitude"].exists)
-        // Start outside the map so this scrolls the form instead of panning tiles.
-        app.buttons["use-current-location"].swipeUp()
         let radius = app.sliders["Recognition radius in metres"]
-        reveal(radius, in: app)
+        revealBelowMap(radius)
         radius.adjust(toNormalizedSliderPosition: 0.5)
         XCTAssertFalse(app.staticTexts["100 m"].exists)
         app.buttons["save-place"].tap()

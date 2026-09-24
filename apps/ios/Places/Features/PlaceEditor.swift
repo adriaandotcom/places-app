@@ -23,6 +23,8 @@ struct PlaceEditor: View {
     @State private var choosingCatalog = false
     @State private var catalogReference: PlaceCatalogReference?
     @State private var nearbyPlaces: [CatalogPlace] = []
+    @State private var recentSearchAnchor: Coordinate?
+    private var searchAnchor: Coordinate? { coordinate ?? recentSearchAnchor }
     @State private var catalogMessage: String?
     @State private var existingSuggestion: Place?
     @State private var pendingSavedSuggestion: Place?
@@ -63,9 +65,9 @@ struct PlaceEditor: View {
                 if original == nil && catalogReference == nil {
                     ForEach(nearbyPlaces) { candidate in
                         Button { selectCatalog(candidate) } label: {
-                            CatalogPlaceRow(place: candidate, anchor: coordinate,
+                            CatalogPlaceRow(place: candidate, anchor: searchAnchor,
                                 saved: candidate.reference.savedPlace(in: model.places) != nil)
-                        }
+                        }.accessibilityIdentifier("nearby-catalog-\(candidate.id)")
                     }
                     if let catalogMessage { Text(catalogMessage).font(.footnote).foregroundStyle(Palette.muted) }
                 }
@@ -73,7 +75,7 @@ struct PlaceEditor: View {
                     Label("Suggestion selected — check it before saving", systemImage: "checkmark.circle")
                         .font(.footnote).foregroundStyle(Palette.muted)
                 }
-            } header: { Text(original == nil && coordinate != nil ? "Nearby suggestions" : "Offline suggestions") }
+            } header: { Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions") }
             Section("Place") {
                 TextField("Name", text: $name).accessibilityIdentifier("place-name").focused($focusedField, equals: .name)
                 TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
@@ -189,8 +191,18 @@ struct PlaceEditor: View {
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil }.accessibilityIdentifier("dismiss-keyboard") }
             }
             .interactiveDismissDisabled(saving)
-            .task(id: coordinate) {
-                guard original == nil, catalogReference == nil, let coordinate else { return }
+            .task {
+                // Reuse a fresh authorized fix; searching must never start sensors
+                // or silently set the new place's coordinates.
+                if let fix = model.tracking.currentLocation,
+                   (0...900).contains(Date().timeIntervalSince(fix.timestamp)),
+                   (0...200).contains(fix.horizontalAccuracy) {
+                    recentSearchAnchor = Coordinate(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
+                }
+            }
+            .task(id: searchAnchor) {
+                nearbyPlaces = []; catalogMessage = nil
+                guard original == nil, catalogReference == nil, let coordinate = searchAnchor else { return }
                 do {
                     let nearby = try await PlaceCatalog.shared.nearby(coordinate)
                     let covered = try await PlaceCatalog.shared.covers(coordinate)
@@ -204,7 +216,7 @@ struct PlaceEditor: View {
             .sheet(isPresented: $choosingCatalog, onDismiss: {
                 existingSuggestion = pendingSavedSuggestion; pendingSavedSuggestion = nil
             }) {
-                NavigationStack { PlaceCatalogSearch(anchor: coordinate, select: selectCatalog) }
+                NavigationStack { PlaceCatalogSearch(anchor: searchAnchor, select: selectCatalog) }
             }
             .confirmationDialog("This place is already saved", isPresented: Binding(get: { existingSuggestion != nil }, set: { if !$0 { existingSuggestion = nil } }), titleVisibility: .visible) {
                 if let existingSuggestion {

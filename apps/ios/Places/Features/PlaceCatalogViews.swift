@@ -34,33 +34,43 @@ struct PlaceCatalogSearch: View {
     @State private var results: [CatalogPlace] = []
     @State private var loading = false
     @State private var failed = false
+    @State private var allRegions = false
+    private var searchAnchor: Coordinate? { allRegions ? nil : anchor }
+    private var searchKey: String { "\(allRegions):\(query)" }
     var body: some View {
         List {
             Section {
                 TextField("Name, category or address", text: $query)
                     .autocorrectionDisabled().submitLabel(.search).accessibilityIdentifier("catalog-query")
                     .focused($queryFocused).onSubmit { queryFocused = false }
-            } footer: { Text("Amsterdam & Kos · Offline") }
+                if anchor != nil {
+                    Picker("Search area", selection: $allRegions) {
+                        Text("Within 15 km").tag(false)
+                        Text("All regions").tag(true)
+                    }.pickerStyle(.segmented).accessibilityIdentifier("catalog-scope")
+                }
+            } footer: { Text(searchAnchor == nil ? "Amsterdam & Kos · Offline" : "Near this location · Offline") }
             if loading { ProgressView("Searching…") }
             else if failed { Text("Place suggestions are unavailable. You can still enter a place yourself.") }
             else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && results.isEmpty {
-                Text("No matching places. Try another name, or enter it yourself.").foregroundStyle(Palette.muted)
+                Text(searchAnchor == nil ? "No matching places. Try another name, or enter it yourself."
+                    : "No matches within 15 km. Try another name or search all regions.").foregroundStyle(Palette.muted)
             }
             ForEach(results) { place in
                 Button { select(place); dismiss() } label: {
-                    CatalogPlaceRow(place: place, anchor: anchor, saved: place.reference.savedPlace(in: model.places) != nil)
+                    CatalogPlaceRow(place: place, anchor: searchAnchor, saved: place.reference.savedPlace(in: model.places) != nil)
                 }.accessibilityIdentifier("catalog-result-\(place.id)")
             }
         }.scrollDismissesKeyboard(.interactively).scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle("Find a place").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .task(id: query) {
+            .task(id: searchKey) {
                 results = []; failed = false
                 guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { loading = false; return }
                 loading = true
                 do {
                     try await Task.sleep(for: .milliseconds(180))
-                    let matches = try await PlaceCatalog.shared.search(query, near: anchor)
+                    let matches = try await PlaceCatalog.shared.search(query, near: searchAnchor)
                     try Task.checkCancellation()
                     results = matches; loading = false
                 } catch is CancellationError { }

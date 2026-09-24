@@ -32,12 +32,12 @@ enum DemoFixtures {
                                             kind: .stay, placeID: home.id))
     }
 
-    static func seedUnnamedStay(_ store: PlacesStore, withSavedPlace: Bool) async throws {
+    static func seedUnnamedStay(_ store: PlacesStore, withSavedPlace: Bool,
+                                coordinate: Coordinate = Coordinate(latitude: 0, longitude: 0)) async throws {
         if withSavedPlace {
             try await store.savePlace(Place(name: "Fixture Existing", coordinate: Coordinate(latitude: 0, longitude: 0.02)))
         }
         let start = Date().addingTimeInterval(-600)
-        let coordinate = Coordinate(latitude: 0, longitude: 0)
         try await store.append([
             SensorObservation(timestamp: start, source: .visitArrival, coordinate: coordinate, horizontalAccuracy: 10),
             SensorObservation(timestamp: start.addingTimeInterval(300), source: .location, coordinate: coordinate, horizontalAccuracy: 10)

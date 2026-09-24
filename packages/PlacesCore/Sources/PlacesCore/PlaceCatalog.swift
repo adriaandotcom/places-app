@@ -38,6 +38,7 @@ public struct CatalogPlace: Identifiable, Sendable {
     public let coordinate: Coordinate
     public let category: String
     public let region: String
+    let importance: Int
     public var categoryTitle: String { category.replacingOccurrences(of: "_", with: " ").capitalized }
     public var symbol: String {
         let mappings = [("airport", "airplane"), ("hotel", "bed.double.fill"), ("resort", "bed.double.fill"),
@@ -54,6 +55,7 @@ public struct CatalogPlace: Identifiable, Sendable {
 /// Read-only public data, isolated from the private history database. All I/O stays on this actor.
 public actor PlaceCatalog {
     public static let shared = PlaceCatalog()
+    public static let localSearchRadius = 15_000.0
     private let directory: URL?
     private var loaded: [(PlaceCatalogPack, DatabaseQueue)]?
     public init(directory: URL? = nil) {
@@ -79,7 +81,7 @@ public actor PlaceCatalog {
         guard !packs.isEmpty else { throw CatalogError.invalidPack }
         var result: [(PlaceCatalogPack, DatabaseQueue)] = []
         for pack in packs {
-            guard pack.schemaVersion == 1, pack.count > 0, pack.bounds.count == 4,
+            guard pack.schemaVersion == 2, pack.count > 0, pack.bounds.count == 4,
                   pack.bounds.allSatisfy(\.isFinite), pack.bounds[0] < pack.bounds[2], pack.bounds[1] < pack.bounds[3],
                   pack.filename == "\(pack.id).sqlite", !pack.id.contains("/"), !pack.id.contains("..") else { throw CatalogError.invalidPack }
             let file = directory.appendingPathComponent(pack.filename)
@@ -88,7 +90,7 @@ public actor PlaceCatalog {
             var config = Configuration(); config.readonly = true
             let db = try DatabaseQueue(path: file.path, configuration: config)
             try db.read { db in
-                guard try Int.fetchOne(db, sql: "PRAGMA user_version") == 1,
+                guard try Int.fetchOne(db, sql: "PRAGMA user_version") == 2,
                       try Int.fetchOne(db, sql: "SELECT count(*) FROM places") == pack.count else { throw CatalogError.invalidPack }
             }
             result.append((pack, db))
@@ -99,52 +101,81 @@ public actor PlaceCatalog {
 
     public func nearby(_ point: Coordinate, limit: Int = 5) throws -> [CatalogPlace] {
         guard point.isValid else { return [] }
-        let latitudeDelta = 1_000.0 / 111_000
-        let longitudeDelta = latitudeDelta / max(0.01, cos(point.latitude * .pi / 180))
-        var results: [CatalogPlace] = []
-        for (pack, queue) in try databases() where pack.contains(point) {
+        let bounds = Self.bounds(around: point, radius: 3_000)
+        var results: [(CatalogPlace, Double)] = []
+        for (pack, queue) in try databases() {
             results += try queue.read { db in
                 try Row.fetchAll(db, sql: "SELECT * FROM places WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?",
-                    arguments: [point.latitude - latitudeDelta, point.latitude + latitudeDelta,
-                                point.longitude - longitudeDelta, point.longitude + longitudeDelta]).map { row in decode(row, pack: pack) }
+                    arguments: StatementArguments(bounds)).map { row in (decode(row, pack: pack), 0) }
             }
         }
-        return Array(results.filter { $0.coordinate.distance(to: point) <= 1_000 }.sorted {
-            let a = $0.coordinate.distance(to: point), b = $1.coordinate.distance(to: point)
-            return a == b ? $0.id < $1.id : a < b
-        }.prefix(max(0, limit)))
+        // Airport centroids can be well beyond the terminal. Other suggestions
+        // remain within walking distance; no inferred visit is changed here.
+        results = results.filter { $0.0.coordinate.distance(to: point) <= ($0.0.importance == 2 ? 3_000 : 1_000) }
+        return Self.ranked(results, query: "", near: point, limit: limit)
     }
 
+    /// A supplied anchor always means local search. Pass nil only when the user
+    /// deliberately searches all downloaded regions or has no location context.
     public func search(_ query: String, near point: Coordinate? = nil, limit: Int = 30) throws -> [CatalogPlace] {
+        if let point, !point.isValid { return [] }
         let tokens = Self.normalized(String(query.prefix(200))).split { !$0.isLetter && !$0.isNumber }.prefix(10)
         guard !tokens.isEmpty else { return [] }
         let expression = tokens.map { "\"\($0)\"*" }.joined(separator: " AND ")
         var results: [(CatalogPlace, Double)] = []
         for (pack, queue) in try databases() {
             results += try queue.read { db in
-                try Row.fetchAll(db, sql: """
+                var sql = """
                     SELECT places.*, bm25(search) AS score FROM search JOIN places ON places.rowid = search.rowid
-                    WHERE search MATCH ? ORDER BY score, places.id LIMIT 100
-                    """, arguments: [expression]).map { row in (decode(row, pack: pack), row["score"]) }
+                    WHERE search MATCH ?
+                    """
+                var arguments: StatementArguments = [expression]
+                if let point {
+                    sql += " AND latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?"
+                    arguments += StatementArguments(Self.bounds(around: point, radius: Self.localSearchRadius))
+                }
+                // Apply the exact radius and rank before limiting. A text-score
+                // prefetch limit can otherwise discard the closest match.
+                return try Row.fetchAll(db, sql: sql, arguments: arguments).map { row in (decode(row, pack: pack), row["score"]) }
             }
         }
-        let normalized = Self.normalized(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        if let point { results = results.filter { $0.0.coordinate.distance(to: point) <= Self.localSearchRadius } }
+        return Self.ranked(results, query: query, near: point, limit: limit)
+    }
+
+    static func ranked(_ results: [(CatalogPlace, Double)], query: String, near point: Coordinate?, limit: Int) -> [CatalogPlace] {
+        let query = normalized(query.trimmingCharacters(in: .whitespacesAndNewlines))
         return Array(results.sorted {
-            let a = Self.normalized($0.0.name), b = Self.normalized($1.0.name)
-            let aRank = a == normalized ? 0 : a.hasPrefix(normalized) ? 1 : 2
-            let bRank = b == normalized ? 0 : b.hasPrefix(normalized) ? 1 : 2
-            if aRank != bRank { return aRank < bRank }
-            if let point, point.isValid {
-                let da = $0.0.coordinate.distance(to: point), db = $1.0.coordinate.distance(to: point)
+            let a = normalized($0.0.name), b = normalized($1.0.name)
+            // An explicitly entered venue name still wins, including a gate or shop.
+            if !query.isEmpty, (a == query) != (b == query) { return a == query }
+            if let point {
+                func score(_ place: CatalogPlace, name: String) -> Double {
+                    let distance = place.coordinate.distance(to: point)
+                    let venueBoost = place.importance == 2 ? 15_000.0 : place.importance == 1 ? 250.0 : 0
+                    let nameBoost = !query.isEmpty && name.hasPrefix(query) ? 100.0 : 0
+                    return distance - venueBoost - nameBoost
+                }
+                let da = score($0.0, name: a), db = score($1.0, name: b)
                 if da != db { return da < db }
+            } else {
+                if $0.0.importance != $1.0.importance { return $0.0.importance > $1.0.importance }
+                if a.hasPrefix(query) != b.hasPrefix(query) { return a.hasPrefix(query) }
             }
             if $0.1 != $1.1 { return $0.1 < $1.1 }
             return $0.0.id < $1.0.id
         }.prefix(max(0, limit)).map(\.0))
     }
+
+    private static func bounds(around point: Coordinate, radius: Double) -> [Double] {
+        let latitudeDelta = radius / 111_000
+        let longitudeDelta = latitudeDelta / max(0.01, cos(point.latitude * .pi / 180))
+        return [point.latitude - latitudeDelta, point.latitude + latitudeDelta,
+                point.longitude - longitudeDelta, point.longitude + longitudeDelta]
+    }
     private nonisolated func decode(_ row: Row, pack: PlaceCatalogPack) -> CatalogPlace {
         CatalogPlace(reference: .init(sourceID: row["id"], packID: pack.id, release: pack.release), name: row["name"],
             address: row["address"], coordinate: Coordinate(latitude: row["latitude"], longitude: row["longitude"]),
-            category: row["category"], region: pack.name)
+            category: row["category"], region: pack.name, importance: row["importance"])
     }
 }
