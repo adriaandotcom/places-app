@@ -44,7 +44,7 @@ import XCTest
 
     func testOfflineCatalogKosWithoutPermissions() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launchArguments = ["--ui-testing", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
         XCTAssertTrue(app.buttons["skip-setup"].waitForExistence(timeout: 10)); app.buttons["skip-setup"].tap()
         app.buttons["tab-places"].tap(); app.buttons["add-place"].tap(); app.buttons["find-catalog-place"].tap()

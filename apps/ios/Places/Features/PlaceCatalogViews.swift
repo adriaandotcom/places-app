@@ -40,7 +40,7 @@ struct PlaceCatalogSearch: View {
                 TextField("Name, category or address", text: $query)
                     .autocorrectionDisabled().submitLabel(.search).accessibilityIdentifier("catalog-query")
                     .focused($queryFocused).onSubmit { queryFocused = false }
-            } footer: { Text("Amsterdam & surroundings · Kos island. Searched on this iPhone.") }
+            } footer: { Text("Amsterdam & Kos · Offline") }
             if loading { ProgressView("Searching…") }
             else if failed { Text("Place suggestions are unavailable. You can still enter a place yourself.") }
             else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && results.isEmpty {
