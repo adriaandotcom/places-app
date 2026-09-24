@@ -26,7 +26,7 @@ import CryptoKit
     let point = try #require(kos.first?.coordinate)
     let nearby = try await catalog.nearby(point)
     #expect(!nearby.isEmpty && nearby.count <= 5)
-    #expect(nearby.allSatisfy { $0.coordinate.distance(to: point) <= 1_000 })
+    #expect(nearby.allSatisfy { $0.coordinate.distance(to: point) <= max(1_000, $0.contextRadius + 150) })
     #expect(try await catalog.nearby(point).map(\.id) == nearby.map(\.id))
 }
 
@@ -36,7 +36,7 @@ import CryptoKit
         (Coordinate(latitude: 36.8014, longitude: 27.0906), "Kos Airport “Ippokratis”", "kos"),
         (Coordinate(latitude: 52.309, longitude: 4.762), "Amsterdam Airport Schiphol", "amsterdam")
     ] {
-        #expect(try await catalog.nearby(point).first?.name == airport)
+        #expect(try await catalog.nearby(point, limit: 3).contains { $0.name == airport })
         let results = try await catalog.search("airport", near: point)
         #expect(results.first?.name == airport)
         #expect(results.allSatisfy { $0.reference.packID == pack && $0.coordinate.distance(to: point) <= 15_000 })
@@ -48,18 +48,31 @@ import CryptoKit
     #expect(try await catalog.search("Gate 2", near: kos).first?.name == "Gate 2")
     #expect(try await catalog.search("Κρατικός Αερολιμένας Κω", near: kos).first?.name == "Kos Airport “Ippokratis”")
     // Large airports have off-terminal centroids; include the main venue beyond 1 km.
-    #expect(try await catalog.nearby(Coordinate(latitude: 52.30, longitude: 4.762)).first?.name == "Amsterdam Airport Schiphol")
+    #expect(try await catalog.nearby(Coordinate(latitude: 52.30, longitude: 4.762)).contains { $0.name == "Amsterdam Airport Schiphol" })
+}
+
+@Test func stationAndMuseumSuggestionsUseVenueAddressesRatherThanChainNames() async throws {
+    let catalog = PlaceCatalog()
+    for (point, venue) in [
+        (Coordinate(latitude: 52.378, longitude: 4.9), "Amsterdam Centraal"),
+        (Coordinate(latitude: 52.389, longitude: 4.837), "Station Amsterdam Sloterdijk"),
+        (Coordinate(latitude: 52.36, longitude: 4.8852), "Rijksmuseum")
+    ] {
+        let suggestions = try await catalog.nearby(point, limit: 3)
+        #expect(suggestions.first?.name == venue)
+        #expect(suggestions.allSatisfy { $0.name != "Parkbee" && $0.name != "Pizzeria" })
+    }
 }
 
 @Test func venueRankingBalancesLandmarksDistanceAndExplicitNames() {
     let origin = Coordinate(latitude: 0, longitude: 0)
-    func place(_ name: String, latitude: Double, importance: Int = 0) -> (CatalogPlace, Double) {
+    func place(_ name: String, latitude: Double, references: Int = 0, contextRadius: Double = 0) -> (CatalogPlace, Double) {
         (CatalogPlace(reference: .init(sourceID: name, packID: "test", release: "test"), name: name,
                       address: "", coordinate: .init(latitude: latitude, longitude: 0), category: "test", region: "Test",
-                      importance: importance), 0)
+                      aliases: [name], confidence: 0.9, venueReferences: references, contextRadius: contextRadius), 0)
     }
-    let places = [place("Gate 2", latitude: 0), place("Museum", latitude: 0.0018, importance: 1),
-                  place("Airport", latitude: 0.012, importance: 2), place("Far museum", latitude: 0.008, importance: 1)]
+    let places = [place("Gate 2", latitude: 0), place("Museum", latitude: 0.0018, references: 3, contextRadius: 250),
+                  place("Airport", latitude: 0.012, references: 16, contextRadius: 1500), place("Far museum", latitude: 0.008, references: 3, contextRadius: 250)]
     let ranked = PlaceCatalog.ranked(places, query: "", near: origin, limit: 5).map(\.name)
     #expect(ranked == ["Airport", "Museum", "Gate 2", "Far museum"])
     #expect(PlaceCatalog.ranked(places, query: "Gate 2", near: origin, limit: 1).first?.name == "Gate 2")
@@ -74,8 +87,8 @@ import CryptoKit
     let queue = try DatabaseQueue(path: file.path)
     try await queue.write { db in
         try db.execute(sql: """
-            PRAGMA user_version=2;
-            CREATE TABLE places(id TEXT, name TEXT, address TEXT, latitude REAL, longitude REAL, category TEXT, importance INTEGER);
+            PRAGMA user_version=3;
+            CREATE TABLE places(id TEXT, name TEXT, address TEXT, latitude REAL, longitude REAL, category TEXT, aliases TEXT, confidence REAL, venueReferences INTEGER, contextRadius REAL);
             CREATE VIRTUAL TABLE search USING fts5(searchText);
             """)
         for index in 0..<151 {
@@ -83,14 +96,14 @@ import CryptoKit
             // inside the SQL bounding box, but some exceed the exact radius.
             let near = index == 150
             let offset = index < 125 ? 0.08 : 0.10
-            try db.execute(sql: "INSERT INTO places VALUES (?, ?, '', ?, ?, 'cafe', 0)",
+            try db.execute(sql: "INSERT INTO places VALUES (?, ?, '', ?, ?, 'cafe', '[]', 0.9, 0, 0)",
                 arguments: ["\(index)", near ? "Nearby Coffee House" : "Coffee Stop", near ? 0.001 : offset, near ? 0 : offset])
             try db.execute(sql: "INSERT INTO search VALUES (?)", arguments: [near ? "Nearby Coffee House" : "Coffee Stop"])
         }
     }
     try queue.close()
     let digest = SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined()
-    let pack = PlaceCatalogPack(id: "test", name: "Test", bounds: [-1, -1, 1, 1], schemaVersion: 2,
+    let pack = PlaceCatalogPack(id: "test", name: "Test", bounds: [-1, -1, 1, 1], schemaVersion: 3,
                                release: "test", count: 151, filename: "test.sqlite", sha256: digest)
     try JSONEncoder().encode([pack]).write(to: directory.appendingPathComponent("manifest.json"))
     let results = try await PlaceCatalog(directory: directory).search("coffee", near: Coordinate(latitude: 0, longitude: 0))
@@ -107,7 +120,7 @@ import CryptoKit
     await #expect(throws: (any Error).self) { try await catalog.search("cafe") }
     try Data("[]".utf8).write(to: directory.appendingPathComponent("manifest.json"))
     await #expect(throws: PlaceCatalog.CatalogError.self) { try await catalog.search("cafe") }
-    let pack = PlaceCatalogPack(id: "broken", name: "Broken", bounds: [0, 0, 1, 1], schemaVersion: 2,
+    let pack = PlaceCatalogPack(id: "broken", name: "Broken", bounds: [0, 0, 1, 1], schemaVersion: 3,
                                 release: "test", count: 1, filename: "broken.sqlite", sha256: "incorrect")
     try JSONEncoder().encode([pack]).write(to: directory.appendingPathComponent("manifest.json"))
     try Data("not a database".utf8).write(to: directory.appendingPathComponent("broken.sqlite"))

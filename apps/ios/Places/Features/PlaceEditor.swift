@@ -40,25 +40,44 @@ struct PlaceEditor: View {
     private var usesCoordinates: Bool { !model.mapsEnabled && (manualCoordinates || model.mapsChoiceMade) }
 
     init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil,
-         assigning: TimelineItem? = nil, onSave: (() -> Void)? = nil) {
+         assigning: TimelineItem? = nil, suggestion: CatalogPlace? = nil, onSave: (() -> Void)? = nil) {
         original = place
         self.assigning = assigning
         self.onSave = onSave
-        let point = place?.coordinate ?? coordinate
-        _name = State(initialValue: place?.name ?? suggestedName)
-        _address = State(initialValue: place?.address ?? "")
+        let point = place?.coordinate ?? suggestion?.coordinate ?? coordinate
+        _name = State(initialValue: place?.name ?? suggestion?.name ?? suggestedName)
+        _address = State(initialValue: place?.address ?? suggestion?.address ?? "")
         _latitude = State(initialValue: point.map { String($0.latitude) } ?? "")
         _longitude = State(initialValue: point.map { String($0.longitude) } ?? "")
         _coordinate = State(initialValue: point)
         _radius = State(initialValue: place?.radius ?? 100)
-        _symbol = State(initialValue: place?.symbol ?? (suggestedName == "Home" ? "house.fill" : suggestedName == "Work" ? "briefcase.fill" : "mappin"))
+        _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? (suggestedName == "Home" ? "house.fill" : suggestedName == "Work" ? "briefcase.fill" : "mappin"))
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
         _wifiNames = State(initialValue: place?.expectedSSIDs ?? [])
-        _catalogReference = State(initialValue: place?.catalogReference)
+        _catalogReference = State(initialValue: place?.catalogReference ?? suggestion?.reference)
     }
 
     var body: some View {
         Form {
+            Section("Name") {
+                TextField("Name", text: $name).accessibilityIdentifier("place-name").focused($focusedField, equals: .name)
+            }
+            if let catalogReference, let saved = catalogReference.savedPlace(in: model.places), saved.id != original?.id {
+                Section {
+                    Button("Use saved place: \(saved.name)") { useSavedPlace(saved) }
+                        .accessibilityIdentifier("reuse-suggested-place")
+                }
+            }
+            if assigning != nil && !model.places.isEmpty {
+                Section {
+                    NavigationLink {
+                        SavedPlacePicker(anchor: assigning?.coordinate, select: useSavedPlace)
+                    } label: {
+                        Label("Use a saved place", systemImage: "mappin.and.ellipse")
+                            .frame(minHeight: Layout.touchTarget)
+                    }.accessibilityIdentifier("choose-saved-place")
+                }
+            }
             Section {
                 Button("Find a place", systemImage: "magnifyingglass") { choosingCatalog = true }
                     .accessibilityIdentifier("find-catalog-place")
@@ -66,18 +85,13 @@ struct PlaceEditor: View {
                     ForEach(nearbyPlaces) { candidate in
                         Button { selectCatalog(candidate) } label: {
                             CatalogPlaceRow(place: candidate, anchor: searchAnchor,
-                                saved: candidate.reference.savedPlace(in: model.places) != nil)
+                                saved: candidate.reference.savedPlace(in: model.places) != nil, compact: true)
                         }.accessibilityIdentifier("nearby-catalog-\(candidate.id)")
                     }
                     if let catalogMessage { Text(catalogMessage).font(.footnote).foregroundStyle(Palette.muted) }
                 }
-                if catalogReference != nil {
-                    Label("Suggestion selected — check it before saving", systemImage: "checkmark.circle")
-                        .font(.footnote).foregroundStyle(Palette.muted)
-                }
             } header: { Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions") }
-            Section("Place") {
-                TextField("Name", text: $name).accessibilityIdentifier("place-name").focused($focusedField, equals: .name)
+            Section("Details") {
                 TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
                 Button { choosingIcon = true } label: {
                     HStack(spacing: Layout.spacing) {
@@ -204,7 +218,7 @@ struct PlaceEditor: View {
                 nearbyPlaces = []; catalogMessage = nil
                 guard original == nil, catalogReference == nil, let coordinate = searchAnchor else { return }
                 do {
-                    let nearby = try await PlaceCatalog.shared.nearby(coordinate)
+                    let nearby = try await PlaceCatalog.shared.nearby(coordinate, limit: 3)
                     let covered = try await PlaceCatalog.shared.covers(coordinate)
                     try Task.checkCancellation()
                     nearbyPlaces = nearby
@@ -281,6 +295,9 @@ struct PlaceEditor: View {
         wifiNames.append(value); wifiDraft = ""; wifiError = nil
     }
     private func save() {
+        if let catalogReference, let saved = catalogReference.savedPlace(in: model.places), saved.id != original?.id {
+            useSavedPlace(saved); return
+        }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             focusedField = .name; validation = "Give this place a name."; return
         }
@@ -308,5 +325,41 @@ struct PlaceEditor: View {
             }
             saving = false
         }
+    }
+}
+
+private struct SavedPlacePicker: View {
+    @Environment(AppModel.self) private var model
+    let anchor: Coordinate?
+    let select: (Place) -> Void
+    @State private var query = ""
+    private var places: [Place] {
+        model.places.filter {
+            query.isEmpty || $0.name.localizedStandardContains(query) || $0.address.localizedStandardContains(query)
+        }.sorted {
+            if let anchor {
+                let a = $0.coordinate.distance(to: anchor), b = $1.coordinate.distance(to: anchor)
+                if a != b { return a < b }
+            }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+    var body: some View {
+        List {
+            ForEach(places) { place in
+                Button { select(place) } label: {
+                    HStack(spacing: Layout.spacing) {
+                        PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex)
+                        VStack(alignment: .leading) {
+                            Text(place.name).foregroundStyle(Palette.ink)
+                            if !place.address.isEmpty { Text(place.address).font(.caption).foregroundStyle(Palette.muted) }
+                        }
+                    }.frame(minHeight: Layout.touchTarget)
+                }.accessibilityIdentifier("saved-place-\(place.id)")
+            }
+            if places.isEmpty { Text("No saved places match this name.").foregroundStyle(Palette.muted) }
+        }.searchable(text: $query, prompt: "Saved places")
+            .scrollContentBackground(.hidden).background(Palette.background)
+            .navigationTitle("Use a saved place").navigationBarTitleDisplayMode(.inline)
     }
 }

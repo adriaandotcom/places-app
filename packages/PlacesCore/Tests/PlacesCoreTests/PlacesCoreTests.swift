@@ -272,3 +272,22 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
     #expect(empty.timeline.isEmpty && empty.corrections.isEmpty && empty.routePoints.isEmpty && empty.trackingEvents.isEmpty)
     #expect(try await store.setting("mapsEnabled") == "false")
 }
+
+@Test func visitEvidenceLoadsOnlyReferencedObservationsBeyondRecentHistory() async throws {
+    let store = try PlacesStore()
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+    let observations = (0..<1100).map { index in
+        SensorObservation(id: "evidence-\(index)", timestamp: start.addingTimeInterval(Double(index)), source: .motion,
+                          motion: .stationary, timezoneIdentifier: "Europe/Amsterdam")
+    }
+    try await store.append(observations)
+    let ids = observations.prefix(601).map(\.id)
+    let item = TimelineItem(id: "evidence-visit", kind: .stay, start: start, end: start.addingTimeInterval(600),
+                            evidenceIDs: ids.reversed() + [ids[0], "missing-id"], lastEvidenceAt: start.addingTimeInterval(600))
+    let evidence = try await store.evidence(for: item)
+    #expect(evidence.map(\.id) == ids)
+    #expect(evidence.first?.timezoneIdentifier == "Europe/Amsterdam")
+    #expect(evidence.last?.motion == .stationary)
+    let empty = TimelineItem(id: "empty", kind: .gap, start: start, lastEvidenceAt: start)
+    #expect(try await store.evidence(for: empty).isEmpty)
+}

@@ -223,6 +223,21 @@ public actor PlacesStore {
         try queue.read { try StoreSQL.decodeAll(SensorObservation.self, db: $0,
             sql: "SELECT payload FROM observations ORDER BY timestamp DESC LIMIT ?", arguments: [max(0, min(limit, 500))]) }
     }
+    public func evidence(for item: TimelineItem) throws -> [SensorObservation] {
+        let ids = Array(Set(item.evidenceIDs)).sorted()
+        return try queue.read { db in
+            var values: [SensorObservation] = []
+            // Bound SQLite parameters, not history depth. Old/grouped visits must
+            // show their actual evidence, even when it is outside the recent log.
+            for start in stride(from: 0, to: ids.count, by: 400) {
+                let batch = Array(ids[start..<min(start + 400, ids.count)])
+                let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
+                values += try StoreSQL.decodeAll(SensorObservation.self, db: db,
+                    sql: "SELECT payload FROM observations WHERE id IN (\(placeholders))", arguments: StatementArguments(batch))
+            }
+            return values.sorted { $0.timestamp == $1.timestamp ? $0.id < $1.id : $0.timestamp < $1.timestamp }
+        }
+    }
     public func transportSuggestions(for item: TimelineItem) throws -> TransportSuggestions {
         try queue.read { db in
             let values = try StoreSQL.decodeAll(SensorObservation.self, db: db,

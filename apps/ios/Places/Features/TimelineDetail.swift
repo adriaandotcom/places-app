@@ -4,14 +4,16 @@ import PlacesCore
 struct TimelineDetail: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let item: TimelineItem
-    @State private var placeFlow: PlaceFlow?
+    @State private var namingDraft: NamingDraft?
+    private struct NamingDraft: Identifiable {
+        let id = UUID()
+        let suggestion: CatalogPlace?
+    }
+    @State private var suggestions: [CatalogPlace] = []
     @State private var createdPlace = false
     @State private var transportSuggestions = TransportSuggestions.none
-    private enum PlaceFlow: String, Identifiable {
-        case create, choose
-        var id: String { rawValue }
-    }
     private var place: Place? { model.place(for: item) }
     private var isUnnamedStay: Bool { item.kind == .stay && place == nil }
     private var title: String {
@@ -23,15 +25,41 @@ struct TimelineDetail: View {
     }
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                PlaceIcon(symbol: item.kind == .gap ? "questionmark" : item.kind == .journey ? item.mode.symbol : place?.symbol ?? "mappin",
-                          colorIndex: place?.colorIndex ?? 4, size: 64)
-                Text(title).font(BrandFont.hero)
-                Text(item.start.formatted(date: .abbreviated, time: .omitted)).font(.subheadline).foregroundStyle(Palette.muted)
-                HStack {
-                    Text(Display.range(item)).font(BrandFont.title)
-                    Spacer()
+            VStack(alignment: .leading, spacing: Layout.spacing) {
+                HStack(spacing: Layout.spacing) {
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        PlaceIcon(symbol: item.kind == .gap ? "questionmark" : item.kind == .journey ? item.mode.symbol : place?.symbol ?? "mappin",
+                                  colorIndex: place?.colorIndex ?? 4)
+                    }
+                    Text(title).font(BrandFont.heading)
+                }
+                timeLayout {
+                    Text("\(Text(Display.range(item)).font(BrandFont.title)) · \(Text(item.start.formatted(date: .abbreviated, time: .omitted)).font(.subheadline))")
+                        .accessibilityIdentifier("visit-time-date")
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Layout.compact) }
                     Text(Display.duration(item.duration())).font(.subheadline).foregroundStyle(Palette.muted)
+                }
+                if item.kind != .journey {
+                    Button(isUnnamedStay ? "Name this place" : item.kind == .gap ? "I was at a place" : "Change place") {
+                        namingDraft = NamingDraft(suggestion: nil)
+                    }.buttonStyle(PrimaryButton()).accessibilityIdentifier("assign-place")
+                }
+                if isUnnamedStay && !suggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(suggestions) { candidate in
+                            Button {
+                                namingDraft = NamingDraft(suggestion: candidate)
+                            } label: {
+                                HStack {
+                                    CatalogPlaceRow(place: candidate, anchor: item.coordinate,
+                                        saved: candidate.reference.savedPlace(in: model.places) != nil, compact: true)
+                                    Spacer(minLength: Layout.compact)
+                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                                }.padding(.horizontal, Layout.spacing).padding(.vertical, Layout.compact)
+                            }.buttonStyle(.plain).accessibilityIdentifier("visit-suggestion-\(candidate.id)")
+                            if candidate.id != suggestions.last?.id { Divider().padding(.horizontal, Layout.spacing) }
+                        }
+                    }.background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
                 }
                 if item.kind == .gap {
                     Text(item.connection == nil
@@ -45,7 +73,7 @@ struct TimelineDetail: View {
                     }.font(BrandFont.body)
                 }
                 if model.mapsEnabled && (item.kind != .gap || item.connection != nil) {
-                    PrivacyMapView(items: [item]).frame(height: 260).clipShape(RoundedRectangle(cornerRadius: 24))
+                    PrivacyMapView(items: [item]).frame(height: Layout.mapHeight).clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
                     if item.connection != nil {
                         Text("Dashed lines link known endpoints; they aren’t a recorded route.")
                             .font(.caption).foregroundStyle(Palette.muted)
@@ -54,10 +82,24 @@ struct TimelineDetail: View {
                 if let place {
                     NavigationLink { PlaceDetail(placeID: place.id) } label: { InfoRow(symbol: place.symbol, title: "About this place", subtitle: place.name, colorIndex: place.colorIndex) }.buttonStyle(.plain)
                 }
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(item.isUserEdited ? "Your correction" : "Why this appears here").font(BrandFont.heading)
-                    ForEach(item.reasons, id: \.self) { Text($0).font(BrandFont.body).foregroundStyle(Palette.muted) }
-                }
+                if item.isUserEdited { Text("Your correction").font(.caption).foregroundStyle(Palette.muted) }
+                NavigationLink { VisitEvidenceView(item: item) } label: {
+                    HStack {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(alignment: .leading, spacing: Layout.compact) {
+                                Text("Evidence")
+                                Text("\(Set(item.evidenceIDs).count) observations").foregroundStyle(Palette.muted)
+                            }
+                        } else {
+                            Label("Evidence", systemImage: "waveform.path")
+                        }
+                        Spacer()
+                        if !dynamicTypeSize.isAccessibilitySize {
+                            Text("\(Set(item.evidenceIDs).count) observations").foregroundStyle(Palette.muted)
+                        }
+                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                    }.font(.subheadline).frame(minHeight: Layout.touchTarget)
+                }.accessibilityIdentifier("visit-evidence")
                 if let originals = item.originalItems, originals.count > 1 {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("\(originals.count) entries combined").font(BrandFont.title)
@@ -76,29 +118,18 @@ struct TimelineDetail: View {
                         Task { if await model.setCombined(item, combined: true) { dismiss() } }
                     }.frame(minHeight: 44).accessibilityIdentifier("merge-entries")
                 }
-                if model.nerdMode {
-                    InfoRow(symbol: "waveform.path", title: "Evidence", subtitle: "\(item.evidenceIDs.count) source observations · policy \(TrackingPolicy.version)", colorIndex: 5)
-                    Text("Last evidence: \(item.lastEvidenceAt.formatted())").font(.caption.monospaced()).foregroundStyle(Palette.muted)
-                }
-                VStack(spacing: 12) {
-                    Button(isUnnamedStay ? "Name this place" : item.kind == .gap ? "I was at a place" : "Change assigned place") {
-                        placeFlow = isUnnamedStay || model.places.isEmpty ? .create : .choose
-                    }.buttonStyle(PrimaryButton()).accessibilityIdentifier("assign-place")
-                    if isUnnamedStay && !model.places.isEmpty {
-                        Button("Choose a saved place") { placeFlow = .choose }.frame(minHeight: 44)
-                            .accessibilityIdentifier("choose-saved-place")
+                VStack(spacing: Layout.compact) {
+                    if !isUnnamedStay {
+                        transportMenu
                     }
-                    Menu(item.kind == .gap ? "I was travelling" : "Change transport mode") {
-                        if let speed = transportSuggestions.estimatedSpeedKilometersPerHour {
-                            Section("Suggested · about \(Int(speed.rounded())) km/h") {
-                                transportButtons(transportSuggestions.suggested)
-                            }
-                            Section("Other ways") { transportButtons(transportSuggestions.otherModes) }
-                        } else {
-                            transportButtons(TransportMode.choiceOrder)
-                        }
-                    }.menuOrder(.fixed).frame(minHeight: 44).accessibilityIdentifier("change-transport")
-                    if item.kind != .gap { Button("Mark as unknown") { correct(kind: .gap) }.frame(minHeight: 44) }
+                    if item.kind == .journey {
+                        Button("I was at a place") { namingDraft = NamingDraft(suggestion: nil) }
+                            .frame(minHeight: Layout.touchTarget).accessibilityIdentifier("assign-place")
+                    }
+                    if item.kind == .journey || place != nil {
+                        Menu("More") { Button("Mark as unknown") { correct(kind: .gap) } }
+                            .frame(minHeight: Layout.touchTarget)
+                    }
                     if item.end == nil {
                         Text("Corrections to an ongoing interval apply through now. Future observations remain separate.").font(.caption).foregroundStyle(Palette.muted)
                     }
@@ -107,33 +138,36 @@ struct TimelineDetail: View {
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .task(id: item) {
                 transportSuggestions = (try? await model.store?.transportSuggestions(for: item)) ?? .none
+                if isUnnamedStay, let point = item.coordinate {
+                    suggestions = (try? await PlaceCatalog.shared.nearby(point, limit: 3)) ?? []
+                }
             }
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .sheet(item: $placeFlow, onDismiss: { if createdPlace { dismiss() } }) { flow in
+            .toolbar {
+                if isUnnamedStay {
+                    ToolbarItem(placement: .secondaryAction) { transportMenu }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .sheet(item: $namingDraft, onDismiss: { if createdPlace { dismiss() } }) { draft in
                 NavigationStack {
-                    if flow == .create {
-                        newPlaceEditor
-                    } else {
-                        List {
-                            NavigationLink { newPlaceEditor } label: {
-                                Label("Create a new place", systemImage: "plus.circle.fill").frame(minHeight: 44)
-                            }.accessibilityIdentifier("create-assigned-place")
-                            ForEach(model.places) { place in
-                                Button { placeFlow = nil; correct(kind: .stay, placeID: place.id) } label: {
-                                    Label(place.name, systemImage: place.symbol).frame(minHeight: 44)
-                                }
-                            }
-                        }.navigationTitle("Choose a place")
-                            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { placeFlow = nil } } }
+                    PlaceEditor(coordinate: item.coordinate, assigning: item, suggestion: draft.suggestion) {
+                        createdPlace = true; namingDraft = nil
                     }
                 }
             }
     }
-    private var newPlaceEditor: some View {
-        PlaceEditor(coordinate: item.coordinate, assigning: item) {
-            createdPlace = true
-            placeFlow = nil
-        }
+    private var timeLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Layout.compact))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
+    }
+    private var transportMenu: some View {
+        Menu(item.kind == .journey ? "Change transport mode" : "I was travelling") {
+            if let speed = transportSuggestions.estimatedSpeedKilometersPerHour {
+                Section("Suggested · about \(Int(speed.rounded())) km/h") { transportButtons(transportSuggestions.suggested) }
+                Section("Other ways") { transportButtons(transportSuggestions.otherModes) }
+            } else { transportButtons(TransportMode.choiceOrder) }
+        }.menuOrder(.fixed).frame(minHeight: Layout.touchTarget).accessibilityIdentifier("change-transport")
     }
     private func transportButtons(_ modes: [TransportMode]) -> some View {
         ForEach(modes, id: \.self) { mode in
@@ -143,5 +177,90 @@ struct TimelineDetail: View {
     }
     private func correct(kind: TimelineKind, placeID: String? = nil, mode: TransportMode = .unknown) {
         Task { if await model.correct(item, kind: kind, placeID: placeID, mode: mode) { dismiss() } }
+    }
+}
+
+private struct VisitEvidenceView: View {
+    @Environment(AppModel.self) private var model
+    let item: TimelineItem
+    @State private var observations: [SensorObservation] = []
+    @State private var loading = true
+    @State private var failed = false
+    @State private var attempt = 0
+    var body: some View {
+        List {
+            Section(item.isUserEdited ? "Your correction" : "Why this appears here") {
+                ForEach(item.reasons, id: \.self) { Text($0) }
+            }
+            Section("Recorded observations") {
+                if loading { ProgressView("Loading evidence…") }
+                else if failed {
+                    Text("Evidence couldn’t be loaded.")
+                    Button("Try again") { attempt += 1 }
+                } else if observations.isEmpty {
+                    Text(item.isUserEdited ? "This entry comes from your correction. No source observations are attached."
+                         : "No source observations are attached to this interval.")
+                } else {
+                    ForEach(observations) { observation in
+                        DisclosureGroup {
+                            if let point = observation.coordinate {
+                                LabeledContent("Latitude", value: String(format: "%.5f", point.latitude))
+                                LabeledContent("Longitude", value: String(format: "%.5f", point.longitude))
+                            }
+                            if let accuracy = observation.horizontalAccuracy, accuracy >= 0 {
+                                LabeledContent("Location accuracy", value: "±\(Int(accuracy.rounded())) m")
+                            }
+                            if let measured = observation.coordinateTimestamp, measured != observation.timestamp {
+                                LabeledContent("Location measured", value: measured.formatted())
+                            }
+                            if let speed = observation.speed, speed >= 0 {
+                                LabeledContent("Speed", value: String(format: "%.1f km/h", speed * 3.6))
+                            }
+                            if let motion = observation.motion { LabeledContent("Motion", value: motion.rawValue.capitalized) }
+                            if let ssid = observation.ssid { LabeledContent("Connected Wi-Fi", value: ssid) }
+                            LabeledContent("Time zone", value: observation.timezoneIdentifier)
+                            if model.nerdMode { LabeledContent("Recording policy", value: observation.policyVersion) }
+                        } label: {
+                            VStack(alignment: .leading, spacing: Layout.compact) {
+                                Text(sourceName(observation.source)).font(BrandFont.title)
+                                Text(timestamp(observation)).font(.subheadline).foregroundStyle(Palette.muted)
+                            }.padding(.vertical, Layout.compact)
+                        }.accessibilityIdentifier("evidence-observation-\(observation.id)")
+                    }
+                    if observations.count < Set(item.evidenceIDs).count {
+                        Text("Some referenced observations are no longer available.").foregroundStyle(Palette.muted)
+                    }
+                }
+            }
+        }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
+            .navigationTitle("Evidence").navigationBarTitleDisplayMode(.inline)
+            .task(id: attempt) {
+                loading = true; failed = false
+                do {
+                    guard let store = model.store else { failed = true; loading = false; return }
+                    observations = try await store.evidence(for: item)
+                } catch { failed = true }
+                loading = false
+            }
+    }
+    private func timestamp(_ observation: SensorObservation) -> String {
+        var style = Date.FormatStyle(date: .abbreviated, time: .standard)
+        style.timeZone = TimeZone(identifier: observation.timezoneIdentifier) ?? .current
+        return observation.timestamp.formatted(style)
+    }
+    private func sourceName(_ source: ObservationSource) -> String {
+        switch source {
+        case .location: "Location reading"
+        case .significantChange: "Significant location change"
+        case .visitArrival: "Visit arrival"
+        case .visitDeparture: "Visit departure"
+        case .regionEnter: "Entered a saved place"
+        case .regionExit: "Left a saved place"
+        case .motion: "Motion reading"
+        case .wifi: "Connected Wi-Fi"
+        case .recovery: "Recording recovery"
+        case .paused: "Recording paused"
+        case .resumed: "Recording resumed"
+        }
     }
 }

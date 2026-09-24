@@ -5,6 +5,7 @@ struct CatalogPlaceRow: View {
     let place: CatalogPlace
     let anchor: Coordinate?
     let saved: Bool
+    var compact = false
     var body: some View {
         HStack(spacing: Layout.spacing) {
             Image(systemName: saved ? "checkmark.circle.fill" : place.symbol)
@@ -13,7 +14,7 @@ struct CatalogPlaceRow: View {
                 Text(place.name).foregroundStyle(Palette.ink)
                 Text(saved ? "Already saved" : [place.categoryTitle, detail].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(Palette.muted)
-                if !place.address.isEmpty { Text(place.address).font(.caption).foregroundStyle(Palette.muted) }
+                if !compact && !place.address.isEmpty { Text(place.address).font(.caption).foregroundStyle(Palette.muted) }
             }
         }.frame(minHeight: Layout.touchTarget).accessibilityElement(children: .combine)
     }

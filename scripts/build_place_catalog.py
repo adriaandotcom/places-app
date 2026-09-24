@@ -12,6 +12,8 @@ import argparse
 import hashlib
 import json
 import math
+import re
+from collections import defaultdict
 from pathlib import Path
 import sqlite3
 import unicodedata
@@ -21,22 +23,12 @@ PACKS = [('amsterdam', 'Amsterdam & surroundings', [4.65, 52.25, 5.10, 52.50]),
          ('kos', 'Kos island', [26.90, 36.65, 27.45, 36.96])]
 OUTPUT = Path(__file__).resolve().parents[1] / 'packages/PlacesCore/Sources/PlacesCore/Resources/PlaceCatalog'
 
-# The source labels gates, taxi ranks and even foreign airports as "airport".
-# Promote reviewed main venues, rather than trusting that category alone. Keep
-# original IDs and aliases so saved references and local-language search survive.
+# Display-name/translation corrections only; these IDs carry no ranking weight.
 # Names verified against https://www.kgs-airport.gr/ and https://www.schiphol.nl/en/.
-MAIN_VENUES = {
-    'b2ee52ea-3b09-439e-928b-bdbf168ded5e': ('Kos Airport “Ippokratis”', ['Kos International Airport', 'Hippocrates', 'KGS', 'Flughafen Kos', 'Luchthaven Kos']),
+NAME_CORRECTIONS = {
+    'b2ee52ea-3b09-439e-928b-bdbf168ded5e': ('Kos Airport “Ippokratis”', ['Kos Airport', 'Kos International Airport', 'Hippocrates', 'KGS', 'Flughafen Kos', 'Luchthaven Kos']),
     '8499bdcc-37ee-4331-80be-57497c99e288': ('Amsterdam Airport Schiphol', ['Schiphol Airport', 'Luchthaven Schiphol', 'AMS']),
 }
-
-
-def importance(category):
-    # A modest preference for recognizable destinations, not a popularity claim.
-    return int(category.endswith('_museum') or category.endswith('_stadium') or category in {
-        'museum', 'historic_site', 'monument', 'stadium_arena', 'hospital', 'college_university',
-        'shopping_mall', 'zoo', 'aquarium', 'theme_park', 'castle',
-    })
 
 
 def normalize(text):
@@ -89,15 +81,70 @@ def record(feature, bbox, country=None):
     source_id = feature.get('id') or p.get('id')
     if not source_id:
         return None
-    rank = importance(category)
-    if source_id in MAIN_VENUES:
-        name, extra_aliases = MAIN_VENUES[source_id]
+    if source_id in NAME_CORRECTIONS:
+        name, extra_aliases = NAME_CORRECTIONS[source_id]
         aliases = sorted(set([*aliases, *extra_aliases, name]))
-        rank = 2
+    confidence = p.get("confidence")
+    confidence = min(1, max(0, confidence)) if isinstance(confidence, (int, float)) and math.isfinite(confidence) else 0.5
     return (source_id, name, address, lat, lon, category,
             json.dumps(aliases, ensure_ascii=False), normalize(' '.join([name, *aliases, address, category.replace('_', ' ')])),
             json.dumps([{key: value for key, value in source.items() if key in ('dataset', 'license', 'record_id')}
-                        for source in (p.get('sources') or [])], ensure_ascii=False, sort_keys=True, separators=(',', ':')), rank)
+                        for source in (p.get('sources') or [])], ensure_ascii=False, sort_keys=True, separators=(',', ':')), confidence, 0, 0,
+            str(addresses[0].get('freeform') or '') if addresses else '',
+            str(addresses[0].get('locality') or '') if addresses else '')
+
+
+def words(text):
+    return re.findall(r"[^\W_]+", normalize(text), re.UNICODE)
+
+
+def distance(a, b):
+    lat1, lat2 = math.radians(a[3]), math.radians(b[3])
+    h = math.sin((lat2 - lat1) / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(math.radians(b[4] - a[4]) / 2)**2
+    return 6371000 * 2 * math.asin(min(1, math.sqrt(h)))
+
+
+def add_venue_context(rows):
+    # Infer venue context from full names mentioned in OTHER nearby POI addresses.
+    # This applies to any category (stations, campuses, malls, museums, etc.).
+    # Never use locality/postcode, which would promote city names indiscriminately.
+    localities = {tuple(words(row[13])) for row in rows.values() if row[13]}
+    names = defaultdict(set)
+    for key, row in rows.items():
+        for alias in json.loads(row[6]):
+            tokens = tuple(words(alias))
+            if 1 <= len(tokens) <= 10 and len(''.join(tokens)) >= 5 and tokens not in localities:
+                names[tokens].add(key)
+    supporters = defaultdict(set)
+    radii = defaultdict(float)
+    street_uses = defaultdict(int)
+    for key, row in rows.items():
+        tokens = words(row[12])
+        address_parts = {tuple(words(part)) for part in re.split(r'[,;\n]', row[12])}
+        matches = set()
+        for start in range(len(tokens)):
+            for count in range(1, min(10, len(tokens) - start) + 1):
+                phrase = tuple(tokens[start:start + count])
+                candidates = names.get(phrase, ())
+                if start + count < len(tokens) and tokens[start + count][0].isdigit():
+                    for candidate in candidates: street_uses[candidate] += 1
+                # A lone word inside a longer street name is not a venue.
+                elif candidates and (count > 1 or phrase in address_parts):
+                    # Resolve repeated names to the closest site. Prefer the
+                    # better source when its point is in the same immediate area.
+                    nearest = min(distance(row, rows[c]) for c in candidates)
+                    matches.add(max((c for c in candidates if distance(row, rows[c]) <= nearest + 150),
+                                    key=lambda c: (rows[c][9], c)))
+        for candidate in matches - {key}:
+            if tuple(words(row[1])) in {tuple(words(alias)) for alias in json.loads(rows[candidate][6])}:
+                continue  # Same-name duplicates do not corroborate their own venue.
+            if row[9] >= 0.6 and distance(row, rows[candidate]) <= 3000:
+                # Duplicate source listings should not multiply the same evidence.
+                supporters[candidate].add((tuple(words(row[1])), round(row[3], 3), round(row[4], 3)))
+                radii[candidate] = max(radii[candidate], distance(row, rows[candidate]))
+    # A business named after its street must not inherit the whole street's importance.
+    return {key: (*row[:10], 0 if street_uses[key] >= 2 else len(supporters[key]),
+                  radii[key], row[12], row[13]) for key, row in rows.items()}
 
 
 def build(source, destination=OUTPUT):
@@ -113,21 +160,22 @@ def build(source, destination=OUTPUT):
                         rows[item[0]] = item
         if not rows:
             raise ValueError(f'No usable public places for {key}; refusing an empty pack')
+        rows = add_venue_context(rows)
         target = destination / f'{key}.sqlite'
         target.unlink(missing_ok=True)
         with sqlite3.connect(target) as db:
-            db.executescript('''PRAGMA user_version=2;
+            db.executescript('''PRAGMA user_version=3;
                 CREATE TABLE places (id TEXT PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL,
                 latitude REAL NOT NULL, longitude REAL NOT NULL, category TEXT NOT NULL,
-                aliases TEXT NOT NULL, searchText TEXT NOT NULL, sources TEXT NOT NULL, importance INTEGER NOT NULL);
+                aliases TEXT NOT NULL, searchText TEXT NOT NULL, sources TEXT NOT NULL, confidence REAL NOT NULL, venueReferences INTEGER NOT NULL, contextRadius REAL NOT NULL);
                 CREATE INDEX places_location ON places(latitude, longitude);
                 CREATE VIRTUAL TABLE search USING fts5(searchText, content=places, content_rowid=rowid,
                   tokenize='unicode61 remove_diacritics 2');''')
-            db.executemany('INSERT INTO places VALUES (?,?,?,?,?,?,?,?,?,?)', [rows[k] for k in sorted(rows)])
+            db.executemany('INSERT INTO places VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [rows[k][:-2] for k in sorted(rows)])
             db.execute("INSERT INTO search(search) VALUES ('rebuild')")
             db.commit()
             db.execute('VACUUM')
-        packs.append(dict(id=key, name=title, bounds=bbox, schemaVersion=2, release=RELEASE,
+        packs.append(dict(id=key, name=title, bounds=bbox, schemaVersion=3, release=RELEASE,
                           count=len(rows), filename=target.name, attribution="Overture Maps Foundation and contributors; see LICENSES.txt",
                           sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
         print(f'{title}: {len(rows):,} places, {target.stat().st_size:,} bytes')

@@ -38,7 +38,10 @@ public struct CatalogPlace: Identifiable, Sendable {
     public let coordinate: Coordinate
     public let category: String
     public let region: String
-    let importance: Int
+    let aliases: [String]
+    let confidence: Double
+    let venueReferences: Int
+    let contextRadius: Double
     public var categoryTitle: String { category.replacingOccurrences(of: "_", with: " ").capitalized }
     public var symbol: String {
         let mappings = [("airport", "airplane"), ("hotel", "bed.double.fill"), ("resort", "bed.double.fill"),
@@ -81,7 +84,7 @@ public actor PlaceCatalog {
         guard !packs.isEmpty else { throw CatalogError.invalidPack }
         var result: [(PlaceCatalogPack, DatabaseQueue)] = []
         for pack in packs {
-            guard pack.schemaVersion == 2, pack.count > 0, pack.bounds.count == 4,
+            guard pack.schemaVersion == 3, pack.count > 0, pack.bounds.count == 4,
                   pack.bounds.allSatisfy(\.isFinite), pack.bounds[0] < pack.bounds[2], pack.bounds[1] < pack.bounds[3],
                   pack.filename == "\(pack.id).sqlite", !pack.id.contains("/"), !pack.id.contains("..") else { throw CatalogError.invalidPack }
             let file = directory.appendingPathComponent(pack.filename)
@@ -90,7 +93,7 @@ public actor PlaceCatalog {
             var config = Configuration(); config.readonly = true
             let db = try DatabaseQueue(path: file.path, configuration: config)
             try db.read { db in
-                guard try Int.fetchOne(db, sql: "PRAGMA user_version") == 2,
+                guard try Int.fetchOne(db, sql: "PRAGMA user_version") == 3,
                       try Int.fetchOne(db, sql: "SELECT count(*) FROM places") == pack.count else { throw CatalogError.invalidPack }
             }
             result.append((pack, db))
@@ -109,10 +112,23 @@ public actor PlaceCatalog {
                     arguments: StatementArguments(bounds)).map { row in (decode(row, pack: pack), 0) }
             }
         }
-        // Airport centroids can be well beyond the terminal. Other suggestions
-        // remain within walking distance; no inferred visit is changed here.
-        results = results.filter { $0.0.coordinate.distance(to: point) <= ($0.0.importance == 2 ? 3_000 : 1_000) }
-        return Self.ranked(results, query: "", near: point, limit: limit)
+        // A large venue can have an off-site centroid. Its nearby address
+        // references establish a context radius, without privileging named IDs
+        // or specific categories. These are suggestions, never inferred visits.
+        results = results.filter {
+            $0.0.confidence >= 0.6 && $0.0.coordinate.distance(to: point) <=
+                max(1_000, $0.0.venueReferences >= 3 ? min(3_000, $0.0.contextRadius + 150) : 0)
+        }
+        let ranked = Self.ranked(results, query: "", near: point, limit: results.count)
+        var unique: [CatalogPlace] = []
+        for candidate in ranked {
+            if unique.count >= max(0, limit) { break }
+            guard !unique.contains(where: {
+                !Set($0.aliases.map(Self.normalized)).isDisjoint(with: candidate.aliases.map(Self.normalized)) && $0.coordinate.distance(to: candidate.coordinate) < 150
+            }) else { continue }
+            unique.append(candidate)
+        }
+        return Array(unique.prefix(max(0, limit)))
     }
 
     /// A supplied anchor always means local search. Pass nil only when the user
@@ -145,26 +161,30 @@ public actor PlaceCatalog {
 
     static func ranked(_ results: [(CatalogPlace, Double)], query: String, near point: Coordinate?, limit: Int) -> [CatalogPlace] {
         let query = normalized(query.trimmingCharacters(in: .whitespacesAndNewlines))
-        return Array(results.sorted {
-            let a = normalized($0.0.name), b = normalized($1.0.name)
-            // An explicitly entered venue name still wins, including a gate or shop.
-            if !query.isEmpty, (a == query) != (b == query) { return a == query }
-            if let point {
-                func score(_ place: CatalogPlace, name: String) -> Double {
-                    let distance = place.coordinate.distance(to: point)
-                    let venueBoost = place.importance == 2 ? 15_000.0 : place.importance == 1 ? 250.0 : 0
-                    let nameBoost = !query.isEmpty && name.hasPrefix(query) ? 100.0 : 0
-                    return distance - venueBoost - nameBoost
-                }
-                let da = score($0.0, name: a), db = score($1.0, name: b)
-                if da != db { return da < db }
+        // Compute expensive name folding and distance once per candidate, rather
+        // than on every sort comparison while someone is typing.
+        let candidates = results.map { place, textScore in
+            let name = normalized(place.name)
+            let distance = point.map { place.coordinate.distance(to: $0) } ?? 0
+            let supportedArea = place.venueReferences >= 3 && distance <= place.contextRadius + 150
+            let venueBoost = supportedArea ? 850 * place.confidence * log2(1 + Double(place.venueReferences)) : 0
+            let namePrefix = !query.isEmpty && name.hasPrefix(query)
+            let score = distance + (1 - place.confidence) * 200 - venueBoost - (namePrefix ? 100 : 0)
+            return (place: place, textScore: textScore, exact: !query.isEmpty && name == query, prefix: namePrefix, score: score)
+        }
+        return Array(candidates.sorted {
+            // An explicit venue name still wins, including a gate or shop.
+            if $0.exact != $1.exact { return $0.exact }
+            if point != nil {
+                if $0.score != $1.score { return $0.score < $1.score }
             } else {
-                if $0.0.importance != $1.0.importance { return $0.0.importance > $1.0.importance }
-                if a.hasPrefix(query) != b.hasPrefix(query) { return a.hasPrefix(query) }
+                if $0.place.venueReferences != $1.place.venueReferences { return $0.place.venueReferences > $1.place.venueReferences }
+                if $0.place.confidence != $1.place.confidence { return $0.place.confidence > $1.place.confidence }
+                if $0.prefix != $1.prefix { return $0.prefix }
             }
-            if $0.1 != $1.1 { return $0.1 < $1.1 }
-            return $0.0.id < $1.0.id
-        }.prefix(max(0, limit)).map(\.0))
+            if $0.textScore != $1.textScore { return $0.textScore < $1.textScore }
+            return $0.place.id < $1.place.id
+        }.prefix(max(0, limit)).map(\.place))
     }
 
     private static func bounds(around point: Coordinate, radius: Double) -> [Double] {
@@ -176,6 +196,8 @@ public actor PlaceCatalog {
     private nonisolated func decode(_ row: Row, pack: PlaceCatalogPack) -> CatalogPlace {
         CatalogPlace(reference: .init(sourceID: row["id"], packID: pack.id, release: pack.release), name: row["name"],
             address: row["address"], coordinate: Coordinate(latitude: row["latitude"], longitude: row["longitude"]),
-            category: row["category"], region: pack.name, importance: row["importance"])
+            category: row["category"], region: pack.name,
+            aliases: (try? JSONDecoder().decode([String].self, from: Data((row["aliases"] as String).utf8))) ?? [], confidence: row["confidence"],
+            venueReferences: row["venueReferences"], contextRadius: row["contextRadius"])
     }
 }

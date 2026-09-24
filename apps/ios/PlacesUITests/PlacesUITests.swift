@@ -1,6 +1,90 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testVisitNamingAndEvidenceAreImmediatelyAccessible() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-unnamed-stay", "--ui-saved-place"]
+        app.launch()
+        let stay = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch
+        XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
+        XCTAssertTrue(app.buttons["assign-place"].isHittable)
+        XCTAssertTrue(app.staticTexts["visit-time-date"].exists)
+        XCTAssertFalse(app.staticTexts["Why this appears here"].exists)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Last evidence:")).firstMatch.exists)
+        XCTAssertFalse(app.buttons["Mark as unknown"].exists)
+        app.buttons["visit-evidence"].tap()
+        XCTAssertTrue(app.staticTexts["Recorded observations"].waitForExistence(timeout: 5))
+        let arrival = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Visit arrival")).firstMatch
+        XCTAssertTrue(arrival.waitForExistence(timeout: 5)); arrival.tap()
+        XCTAssertTrue(app.staticTexts["Location accuracy"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", "±10 m", "±10 m")).firstMatch.exists)
+        let evidenceShot = XCTAttachment(screenshot: app.screenshot())
+        evidenceShot.name = "Actual visit evidence"; evidenceShot.lifetime = .keepAlways; add(evidenceShot)
+        app.navigationBars.buttons["BackButton"].tap()
+        app.buttons["assign-place"].tap()
+        let name = app.textFields["place-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("Unfinished draft")
+        app.buttons["dismiss-keyboard"].tap()
+        app.buttons["choose-saved-place"].tap()
+        app.navigationBars.buttons["BackButton"].tap()
+        XCTAssertEqual(name.value as? String, "Unfinished draft")
+        app.buttons["choose-saved-place"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Existing")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        let assigned = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Existing")).firstMatch
+        XCTAssertTrue(assigned.waitForExistence(timeout: 5)); assigned.tap()
+        XCTAssertTrue(app.staticTexts["Your correction"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.buttons["tab-places"].tap()
+        XCTAssertEqual(app.staticTexts.matching(identifier: "Fixture Existing").count, 1)
+        XCTAssertFalse(app.staticTexts["Unfinished draft"].exists)
+    }
+
+    func testCompactVisitSuggestsVenueAboveConsentedMap() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-airport-stay"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+        app.buttons["tab-map"].tap(); app.buttons["enable-apple-maps"].tap()
+        XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
+        app.buttons["tab-timeline"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch.tap()
+        let name = app.buttons["assign-place"]
+        let suggestion = app.buttons["visit-suggestion-b2ee52ea-3b09-439e-928b-bdbf168ded5e"]
+        XCTAssertTrue(suggestion.waitForExistence(timeout: 10))
+        XCTAssertTrue(name.isHittable)
+        XCTAssertLessThan(app.staticTexts["visit-time-date"].frame.minY, name.frame.minY)
+        XCTAssertLessThan(name.frame.minY, app.maps.firstMatch.frame.minY)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "visit-suggestion-")).count, 3)
+        XCTAssertFalse(app.buttons["Mark as unknown"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Name and suggestions above map"; shot.lifetime = .keepAlways; add(shot)
+        suggestion.tap()
+        XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["place-name"].value as? String, "Kos Airport “Ippokratis”")
+        app.buttons["save-place"].tap()
+        XCTAssertTrue(app.textFields["place-name"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["timeline-heading"].isHittable)
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Kos Airport")).firstMatch.isHittable)
+    }
+
+    func testVisitNamingRemainsUsableAtAccessibilitySize() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-unnamed-stay", "--ui-saved-place",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let stay = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch
+        XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
+        XCTAssertTrue(app.buttons["assign-place"].isHittable)
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Visit detail at accessibility text size"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["assign-place"].tap()
+        XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
+        reveal(app.buttons["choose-saved-place"], in: app)
+        XCTAssertTrue(app.buttons["choose-saved-place"].isHittable)
+    }
+
     func testAirportSuggestionsAndSearchStayNearTheVisit() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-airport-stay"]
@@ -30,8 +114,9 @@ import XCTest
         XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["place-name"].value as? String, "Kos Airport “Ippokratis”")
         app.buttons["save-place"].tap()
-        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Kos Airport")).firstMatch.exists)
+        XCTAssertTrue(app.textFields["place-name"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["timeline-heading"].isHittable)
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Kos Airport")).firstMatch.isHittable)
         XCTAssertFalse(app.maps.firstMatch.exists)
     }
 
@@ -455,18 +540,14 @@ import XCTest
             let stay = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch
             XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
             XCTAssertEqual(app.buttons["assign-place"].label, "Name this place")
+            app.buttons["assign-place"].tap()
             if withSavedPlace {
-                reveal(app.buttons["choose-saved-place"], in: app)
                 app.buttons["choose-saved-place"].tap()
-                XCTAssertTrue(app.buttons["Fixture Existing"].waitForExistence(timeout: 5))
-                app.buttons["create-assigned-place"].tap()
-            } else {
-                app.buttons["assign-place"].tap()
-                XCTAssertFalse(app.staticTexts["Choose a place"].exists)
+                XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Existing")).firstMatch.waitForExistence(timeout: 5))
+                app.navigationBars.buttons["BackButton"].tap()
             }
             let name = app.textFields["place-name"]
             XCTAssertTrue(name.waitForExistence(timeout: 5))
-            XCTAssertTrue(app.staticTexts["Using this visit’s location"].exists)
             XCTAssertFalse(app.maps.firstMatch.exists)
             XCTAssertFalse(app.textFields["place-latitude"].exists)
             name.tap(); name.typeText("Fixture Corner")
