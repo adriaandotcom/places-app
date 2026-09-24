@@ -170,7 +170,8 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
     let store = try PlacesStore(path: path)
     try await store.append([fix(0), fix(180), fix(600)])
     // A changed pin must not undo the user's explicit assignment to this visit.
-    let place = Place(name: "Fixture Corner", coordinate: Coordinate(latitude: 1, longitude: 1))
+    let place = Place(name: "Fixture Corner", coordinate: Coordinate(latitude: 1, longitude: 1),
+                      catalogReference: .init(sourceID: "synthetic-poi", packID: "synthetic", release: "test"))
     let edit = UserOverride(start: epoch.addingTimeInterval(20), end: epoch.addingTimeInterval(500), kind: .stay, placeID: place.id)
     try await store.savePlace(place, assigning: edit)
     try await store.append([fix(900)])
@@ -181,6 +182,7 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
     #expect(assigned.start == edit.start && assigned.end == edit.end)
     #expect(items.filter { !$0.isUserEdited }.allSatisfy { $0.placeID == nil })
     #expect(try await reopened.places().map(\.id) == [place.id])
+    #expect(try await reopened.places().first?.catalogReference == place.catalogReference)
     #expect(try await reopened.observations().count == 4)
 }
 

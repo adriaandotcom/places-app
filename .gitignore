@@ -15,3 +15,7 @@ Signing.local.xcconfig
 !*.example
 __pycache__/
 *.pyc
+
+# Public, build-time place catalogues only. Private history databases remain ignored.
+!packages/PlacesCore/Sources/PlacesCore/Resources/PlaceCatalog/amsterdam.sqlite
+!packages/PlacesCore/Sources/PlacesCore/Resources/PlaceCatalog/kos.sqlite

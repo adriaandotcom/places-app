@@ -1,0 +1,9 @@
+click==8.5.0
+colorama==0.4.6
+numpy==2.5.3
+orjson==3.12.0
+overturemaps==1.0.2
+pyarrow==25.0.1
+pyfiglet==1.0.4
+shapely==2.1.2
+tqdm==4.70.1

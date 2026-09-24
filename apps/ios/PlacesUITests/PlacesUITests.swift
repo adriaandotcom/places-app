@@ -1,6 +1,65 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testOfflineCatalogSearchReviewSaveAndReuseWithoutMaps() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-unnamed-stay"]
+        app.launch()
+        let stay = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch
+        XCTAssertTrue(stay.waitForExistence(timeout: 10)); stay.tap()
+        app.buttons["assign-place"].tap()
+        app.buttons["find-catalog-place"].tap()
+        let query = app.textFields["catalog-query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("Rijksmuseum")
+        let results = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "catalog-result-"))
+        XCTAssertTrue(results.firstMatch.waitForExistence(timeout: 10))
+        let selectedID = results.firstMatch.identifier
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Offline Amsterdam results without Maps"; shot.lifetime = .keepAlways; add(shot)
+        results.firstMatch.tap()
+        let name = app.textFields["place-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        let chosen = name.value as! String
+        XCTAssertTrue(chosen.contains("Rijksmuseum"))
+        XCTAssertFalse(app.maps.firstMatch.exists)
+        // Selecting is only a draft. Cancelling must leave the visit unnamed.
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Somewhere new"].waitForExistence(timeout: 5))
+        app.buttons["assign-place"].tap(); app.buttons["find-catalog-place"].tap()
+        XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("Rijksmuseum")
+        XCTAssertTrue(results.firstMatch.waitForExistence(timeout: 10)); results.firstMatch.tap()
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); app.buttons["save-place"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        let assigned = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", chosen)).firstMatch
+        XCTAssertTrue(assigned.waitForExistence(timeout: 5)); assigned.tap()
+        XCTAssertTrue(app.staticTexts["Your correction"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap(); app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()
+        app.buttons["find-catalog-place"].tap()
+        XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("Rijksmuseum")
+        XCTAssertTrue(app.buttons[selectedID].waitForExistence(timeout: 10)); app.buttons[selectedID].tap()
+        XCTAssertTrue(app.buttons["Use saved place"].waitForExistence(timeout: 5)); app.buttons["Use saved place"].tap()
+        XCTAssertTrue(app.buttons["add-place"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts.matching(identifier: chosen).count, 1)
+        XCTAssertFalse(app.maps.firstMatch.exists)
+    }
+
+    func testOfflineCatalogKosWithoutPermissions() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "-AppleInterfaceStyle", "Dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["skip-setup"].waitForExistence(timeout: 10)); app.buttons["skip-setup"].tap()
+        app.buttons["tab-places"].tap(); app.buttons["add-place"].tap(); app.buttons["find-catalog-place"].tap()
+        let query = app.textFields["catalog-query"]
+        XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("Hippocrates\n")
+        let results = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "catalog-result-"))
+        XCTAssertTrue(results.firstMatch.waitForExistence(timeout: 10))
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription])
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Offline Kos results without permissions"; shot.lifetime = .keepAlways; add(shot)
+        results.firstMatch.tap()
+        XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5)); app.buttons["save-place"].tap()
+        XCTAssertTrue(app.buttons["add-place"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.maps.firstMatch.exists)
+    }
+
     func testLongHomeRecoveryShowsOneStayAndCanSplitAndMerge() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-wifi-recovery"]

@@ -20,6 +20,12 @@ struct PlaceEditor: View {
     @State private var wifiError: String?
     @State private var removingWiFi: String?
     @State private var choosingIcon = false
+    @State private var choosingCatalog = false
+    @State private var catalogReference: PlaceCatalogReference?
+    @State private var nearbyPlaces: [CatalogPlace] = []
+    @State private var catalogMessage: String?
+    @State private var existingSuggestion: Place?
+    @State private var pendingSavedSuggestion: Place?
     @State private var manualCoordinates = false
     @State private var changingLocation = false
     @State private var locationRequest = CurrentLocationRequest()
@@ -46,10 +52,28 @@ struct PlaceEditor: View {
         _symbol = State(initialValue: place?.symbol ?? (suggestedName == "Home" ? "house.fill" : suggestedName == "Work" ? "briefcase.fill" : "mappin"))
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
         _wifiNames = State(initialValue: place?.expectedSSIDs ?? [])
+        _catalogReference = State(initialValue: place?.catalogReference)
     }
 
     var body: some View {
         Form {
+            Section {
+                Button("Find a place", systemImage: "magnifyingglass") { choosingCatalog = true }
+                    .accessibilityIdentifier("find-catalog-place")
+                if original == nil && catalogReference == nil {
+                    ForEach(nearbyPlaces) { candidate in
+                        Button { selectCatalog(candidate) } label: {
+                            CatalogPlaceRow(place: candidate, anchor: coordinate,
+                                saved: candidate.reference.savedPlace(in: model.places) != nil)
+                        }
+                    }
+                    if let catalogMessage { Text(catalogMessage).font(.footnote).foregroundStyle(Palette.muted) }
+                }
+                if catalogReference != nil {
+                    Label("Suggestion selected — check it before saving", systemImage: "checkmark.circle")
+                        .font(.footnote).foregroundStyle(Palette.muted)
+                }
+            } header: { Text(original == nil && coordinate != nil ? "Nearby suggestions" : "Offline suggestions") }
             Section("Place") {
                 TextField("Name", text: $name).accessibilityIdentifier("place-name").focused($focusedField, equals: .name)
                 TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
@@ -76,9 +100,9 @@ struct PlaceEditor: View {
                 }
             }
             Section("Location") {
-                if assigning != nil && coordinate != nil && !changingLocation {
+                if (assigning != nil || catalogReference != nil) && coordinate != nil && !changingLocation {
                     HStack {
-                        Label("Using this visit’s location", systemImage: "mappin.circle.fill")
+                        Label(catalogReference == nil ? "Using this visit’s location" : "Using the suggested location", systemImage: "mappin.circle.fill")
                         Spacer()
                         Button("Change") { changingLocation = true }
                             .accessibilityLabel("Change this place’s location")
@@ -165,6 +189,29 @@ struct PlaceEditor: View {
                 ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil }.accessibilityIdentifier("dismiss-keyboard") }
             }
             .interactiveDismissDisabled(saving)
+            .task(id: coordinate) {
+                guard original == nil, catalogReference == nil, let coordinate else { return }
+                do {
+                    let nearby = try await PlaceCatalog.shared.nearby(coordinate)
+                    let covered = try await PlaceCatalog.shared.covers(coordinate)
+                    try Task.checkCancellation()
+                    nearbyPlaces = nearby
+                    catalogMessage = !covered ? "No offline data for this area yet. You can enter a place yourself."
+                        : nearby.isEmpty ? "No nearby suggestions. Search by name or enter a place yourself." : nil
+                } catch is CancellationError { }
+                catch { if !Task.isCancelled { catalogMessage = "Suggestions are unavailable. You can enter a place yourself." } }
+            }
+            .sheet(isPresented: $choosingCatalog, onDismiss: {
+                existingSuggestion = pendingSavedSuggestion; pendingSavedSuggestion = nil
+            }) {
+                NavigationStack { PlaceCatalogSearch(anchor: coordinate, select: selectCatalog) }
+            }
+            .confirmationDialog("This place is already saved", isPresented: Binding(get: { existingSuggestion != nil }, set: { if !$0 { existingSuggestion = nil } }), titleVisibility: .visible) {
+                if let existingSuggestion {
+                    Button(assigning == nil ? "Use saved place" : "Assign this visit to \(existingSuggestion.name)") { useSavedPlace(existingSuggestion) }
+                }
+                Button("Cancel", role: .cancel) { existingSuggestion = nil }
+            } message: { Text("Use your saved place instead of creating a duplicate.") }
             .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: $symbol, colorIndex: colorIndex) } }
             .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removingWiFi != nil }, set: { if !$0 { removingWiFi = nil } }), titleVisibility: .visible, presenting: removingWiFi) { ssid in
                 Button("Remove Wi-Fi name", role: .destructive) {
@@ -179,6 +226,29 @@ struct PlaceEditor: View {
                 if let value { latitude = String(value.latitude); longitude = String(value.longitude); locationError = nil }
             }
             .onDisappear { locationRequest.cancel() }
+    }
+    private func selectCatalog(_ candidate: CatalogPlace) {
+        if let existing = candidate.reference.savedPlace(in: model.places), existing.id != original?.id {
+            if choosingCatalog { pendingSavedSuggestion = existing }
+            else { existingSuggestion = existing }
+            return
+        }
+        locationRequest.cancel()
+        name = candidate.name; address = candidate.address; coordinate = candidate.coordinate
+        latitude = String(candidate.coordinate.latitude); longitude = String(candidate.coordinate.longitude)
+        symbol = candidate.symbol; catalogReference = candidate.reference
+        locationError = nil; locationSelected = false; focusedField = nil
+    }
+    private func useSavedPlace(_ place: Place) {
+        existingSuggestion = nil
+        guard assigning != nil else { dismiss(); return }
+        saving = true
+        Task {
+            if await model.save(place, assigning: assigning) {
+                if let onSave { onSave() } else { dismiss() }
+            }
+            saving = false
+        }
     }
     private func useCurrentLocation() {
         focusedField = nil; locationError = nil
@@ -218,7 +288,7 @@ struct PlaceEditor: View {
         }
         let place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifiNames, createdAt: original?.createdAt ?? Date())
+            expectedSSIDs: wifiNames, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference)
         saving = true; focusedField = nil
         Task {
             if await model.save(place, assigning: assigning) {

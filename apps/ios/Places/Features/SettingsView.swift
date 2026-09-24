@@ -68,6 +68,7 @@ struct SettingsView: View {
                 Text("Built independently by Adriaan, founder of Simple Analytics. This is a separate personal project.").font(.footnote)
                 Text("Public source code · PolyForm Noncommercial 1.0.0").font(.footnote)
                 Text("Version 0.1 · iOS 26 or newer").font(.footnote).foregroundStyle(.secondary)
+                NavigationLink("Offline place data") { OfflinePlaceDataView() }
                 NavigationLink("Third-party licenses") { LicensesView() }
             }
             Section {

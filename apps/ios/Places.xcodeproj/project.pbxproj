@@ -10,6 +10,7 @@
 		033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135F35535FF26FED0627E38 /* DesignSystem.swift */; };
 		0AD411802A704DA4FFA4C550 /* GRDB-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */; };
 		1BE484548285A1988C171A4C /* PlaceIconPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */; };
+		2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */; };
 		32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074E8339AD3313BBFD04D7BA /* TrackingController.swift */; };
 		34D3AFF05BABD6B247482405 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */; };
 		3CFCC7F6185D1382A9020872 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = D2A07C0F4B1A7B4218C6F725 /* PlacesCore */; };
@@ -67,6 +68,7 @@
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesApp.swift; sourceTree = "<group>"; };
+		48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCatalogViews.swift; sourceTree = "<group>"; };
 		4A0FD5DD320094D0C71ADC76 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
 		4BF477ADFC16882EBD9CC8CF /* PlacesUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Regular.ttf"; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */,
 				DE309F70353EBEDB7069F031 /* MainView.swift */,
 				BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */,
+				48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */,
 				0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */,
 				85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */,
 				19157741242CE715116913F2 /* PlacesView.swift */,
@@ -393,6 +396,7 @@
 				033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */,
 				595DA971976AEDA5373D9931 /* MainView.swift in Sources */,
 				34D3AFF05BABD6B247482405 /* OnboardingView.swift in Sources */,
+				2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */,
 				BD22F1A51DD600D357144295 /* PlaceEditor.swift in Sources */,
 				1BE484548285A1988C171A4C /* PlaceIconPicker.swift in Sources */,
 				BFAE0FBEA803C5B9D62BF290 /* PlacesApp.swift in Sources */,
