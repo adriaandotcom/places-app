@@ -2,14 +2,14 @@ import SwiftUI
 import MapKit
 import PlacesCore
 
-// This is the only file permitted to construct MapKit UI. No snapshots, searches,
-// geocoders, tile preloaders, or hidden maps exist elsewhere in the application.
+// All MapKit construction lives here behind the appropriate live consent gate.
 struct PrivacyMapView: View {
     @Environment(AppModel.self) private var model
     var items: [TimelineItem]?
+    var routePoints: [RoutePoint]?
     var body: some View {
         if model.mapsEnabled {
-            AppleMapSurface(items: items ?? model.timeline)
+            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints)
                 .accessibilityIdentifier("apple-map")
         } else {
             ScrollView {
@@ -30,11 +30,12 @@ struct PrivacyMapView: View {
 private struct AppleMapSurface: View {
     @Environment(AppModel.self) private var model
     let items: [TimelineItem]
+    let routePoints: [RoutePoint]
     @State private var selectedPlace: Place?
     @State private var camera: MapCameraPosition = .automatic
     private var shownPlaces: [Place] {
         let ids = Set(items.compactMap(\.placeID))
-        return items.isEmpty ? model.places : model.places.filter { ids.contains($0.id) }
+        return model.places.filter { ids.contains($0.id) }
     }
     private var unnamedStays: [TimelineItem] {
         items.filter { $0.kind == .stay && model.place(for: $0) == nil && $0.coordinate?.isValid == true }
@@ -44,7 +45,7 @@ private struct AppleMapSurface: View {
         items.filter { $0.connection != nil && ($0.kind == .gap || ($0.kind == .journey && points(for: $0).count < 2)) }
     }
     private func points(for item: TimelineItem) -> [RoutePoint] {
-        model.routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) }
+        routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) }
     }
     private var framingCoordinates: [Coordinate] {
         shownPlaces.map(\.coordinate) + unnamedStays.compactMap(\.coordinate)
@@ -115,13 +116,10 @@ struct MapScreen: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         VStack(spacing: 0) {
-            if model.selectedTab == .map { PrivacyMapView() }
+            if model.selectedTab == .map { PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints) }
             else { Color.clear }
             if model.mapsEnabled {
-                VStack(spacing: 8) {
-                    Text(model.selectedDay.formatted(date: .abbreviated, time: .omitted)).font(BrandFont.title)
-                    Text("Solid lines follow recorded samples. Dashed lines link known endpoints; the path is unknown.").font(.caption).foregroundStyle(Palette.muted)
-                }.padding(.horizontal, 20).padding(.vertical, 12).frame(maxWidth: .infinity).background(Palette.paper)
+                MapDateBar().id(model.selectedDay)
             }
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationTitle("Map").navigationBarTitleDisplayMode(.inline)
             .toolbar { SettingsToolbar() }
@@ -179,4 +177,52 @@ private struct PlacePinSurface: View {
         camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
                                              latitudinalMeters: max(radius * 4, 1000), longitudinalMeters: max(radius * 4, 1000)))
     }
+}
+
+
+@MainActor
+protocol PlaceRegionRequest: AnyObject {
+    func result() async throws -> PlaceLocality?
+    func cancel()
+}
+
+@MainActor
+final class ApplePlaceLookup {
+    typealias Factory = @MainActor (Coordinate) -> (any PlaceRegionRequest)?
+    private let factory: Factory
+    private var enabled = false
+    private var generation = 0
+    private var request: (any PlaceRegionRequest)?
+    init(factory: @escaping Factory = { AppleRegionRequest($0) }) { self.factory = factory }
+    func setEnabled(_ value: Bool) {
+        enabled = value
+        if !value { generation += 1; request?.cancel(); request = nil }
+    }
+    func lookup(_ coordinate: Coordinate) async -> PlaceLocality? {
+        guard enabled, coordinate.isValid, !Task.isCancelled else { return nil }
+        let expected = generation
+        guard let active = factory(coordinate) else { return nil }
+        request = active
+        let result = try? await active.result()
+        guard enabled, generation == expected, !Task.isCancelled else { return nil }
+        request = nil
+        return result
+    }
+}
+
+@MainActor
+private final class AppleRegionRequest: PlaceRegionRequest {
+    let request: MKReverseGeocodingRequest
+    init?(_ coordinate: Coordinate) {
+        guard let request = MKReverseGeocodingRequest(location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) else { return nil }
+        self.request = request
+        request.preferredLocale = Locale(identifier: "en_US")
+    }
+    func result() async throws -> PlaceLocality? {
+        guard let address = try await request.mapItems.first?.addressRepresentations else { return nil }
+        let city = address.cityName ?? "", country = address.regionName ?? ""
+        guard !city.isEmpty || !country.isEmpty else { return nil }
+        return PlaceLocality(city: city, country: country, source: .apple)
+    }
+    func cancel() { request.cancel() }
 }

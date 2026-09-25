@@ -136,6 +136,10 @@ public actor PlacesStore {
 
     public func timeline(on day: Date, calendar: Calendar = .current) throws -> [TimelineItem] {
         guard let interval = calendar.dateInterval(of: .day, for: day) else { return [] }
+        return try timeline(in: interval)
+    }
+
+    public func timeline(in interval: DateInterval) throws -> [TimelineItem] {
         return try queue.read { db in
             var items = try StoreSQL.decodeAll(TimelineItem.self, db: db,
                 sql: "SELECT payload FROM timeline WHERE start < ? AND (end IS NULL OR end > ?) ORDER BY start",
@@ -167,17 +171,41 @@ public actor PlacesStore {
             let separatedAt = try Double.fetchAll(db, sql: "SELECT timestamp FROM timelineSeparations").map(Date.init(timeIntervalSince1970:))
             let presented = TimelinePresentation.make(items: InferenceEngine.applying(edits, to: items),
                 observations: observations, places: places, separatedAt: separatedAt)
-            return InferenceEngine.onDay(day, calendar: calendar, items: presented)
+            return InferenceEngine.within(interval, items: presented)
         }
     }
 
-    public func split(_ item: TimelineItem) throws {
+    public func split(_ item: TimelineItem, selecting ids: Set<String>? = nil) throws {
         guard let originals = item.originalItems, originals.count > 1 else { return }
+        let visible = originals.filter { $0.start < (item.end ?? .distantFuture) && ($0.end ?? .distantFuture) > item.start }
+        let selected = ids ?? Set(visible.map(\.id))
+        // Isolate each chosen original on both sides. Leave other runs combined.
+        let boundaries = visible.indices.dropFirst().compactMap { index -> Date? in
+            selected.contains(visible[index].id) || selected.contains(visible[index - 1].id) ? visible[index].start : nil
+        }
         try queue.write { db in
-            for member in originals.dropFirst() {
+            for boundary in boundaries {
                 try db.execute(sql: "INSERT OR IGNORE INTO timelineSeparations(timestamp) VALUES (?)",
-                               arguments: [member.start.timeIntervalSince1970])
+                               arguments: [boundary.timeIntervalSince1970])
             }
+        }
+    }
+
+    public func suggestedPeriods(now: Date = Date()) throws -> [HistoryPeriod] {
+        guard let first = try queue.read({ try Double.fetchOne($0, sql: "SELECT MIN(start) FROM timeline") }),
+              first < now.timeIntervalSince1970 else { return [] }
+        let items = try timeline(in: DateInterval(start: Date(timeIntervalSince1970: first), end: now))
+        return HistoryPeriod.visits(items: items, places: try places(), now: now)
+    }
+
+    // Merge only metadata into the latest saved place, preserving concurrent edits.
+    public func saveLocality(_ locality: PlaceLocality, for id: String, at coordinate: Coordinate) throws {
+        try queue.write { db in
+            guard var place = try StoreSQL.decodeAll(Place.self, db: db,
+                sql: "SELECT payload FROM places WHERE id = ?", arguments: [id]).first,
+                place.coordinate == coordinate, place.locality == nil else { return }
+            place.locality = locality
+            try db.execute(sql: "UPDATE places SET payload = ? WHERE id = ?", arguments: [try StoreSQL.encode(place), id])
         }
     }
 

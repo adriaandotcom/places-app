@@ -80,7 +80,15 @@ struct TimelineView: View {
                 }
                 Text(model.timeline.isEmpty ? "Your day,\nremembered." : "\(title) you went\nto \(placeCount) \(placeCount == 1 ? "place" : "places")")
                     .font(BrandFont.hero).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("timeline-heading")
-                dayPicker
+                HStack(spacing: 0) {
+                    Button { model.shiftDay(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
+                        .accessibilityLabel("Previous day").accessibilityIdentifier("timeline-previous-day")
+                    dayPicker
+                    Button { model.shiftDay(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
+                        .disabled(Calendar.current.isDateInToday(model.selectedDay))
+                        .opacity(Calendar.current.isDateInToday(model.selectedDay) ? 0.3 : 1)
+                        .accessibilityLabel("Next day").accessibilityIdentifier("timeline-next-day")
+                }
                 if model.timeline.isEmpty {
                     EmptyHistory(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
                         message: "Your visits and journeys will appear as you go. Add a familiar place, or enable location in Settings.")
@@ -98,6 +106,7 @@ struct TimelineView: View {
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle("Places").navigationBarTitleDisplayMode(.inline)
             .toolbar { SettingsToolbar() }
+            .modifier(DaySwipe { model.shiftDay($0) })
             .refreshable { await model.refresh() }
             .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) } }
             .sheet(isPresented: $addPlace) { NavigationStack { PlaceEditor() } }
@@ -114,7 +123,7 @@ struct TimelineView: View {
         ScrollView(.horizontal) {
         HStack(spacing: 7) {
             ForEach(-6...0, id: \.self) { offset in
-                let day = Calendar.current.date(byAdding: .day, value: offset, to: Date())!
+                let day = Calendar.current.date(byAdding: .day, value: offset, to: model.selectedDay)!
                 let selected = Calendar.current.isDate(day, inSameDayAs: model.selectedDay)
                 Button { model.selectDay(day) } label: {
                     VStack(spacing: 8) {

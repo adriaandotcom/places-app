@@ -113,13 +113,14 @@ public struct Place: Codable, Identifiable, Hashable, Sendable {
     public var expectedSSIDs: [String]
     public var createdAt: Date
     public var catalogReference: PlaceCatalogReference?
+    public var locality: PlaceLocality?
     public init(id: String = UUID().uuidString, name: String, address: String = "", coordinate: Coordinate,
                 radius: Double = 100, symbol: String = "mappin", colorIndex: Int = 0,
-                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil) {
+                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil) {
         self.id = id; self.name = name; self.address = address; self.coordinate = coordinate
         self.radius = radius; self.symbol = symbol; self.colorIndex = colorIndex
         self.expectedSSIDs = expectedSSIDs; self.createdAt = createdAt
-        self.catalogReference = catalogReference
+        self.catalogReference = catalogReference; self.locality = locality
     }
 }
 

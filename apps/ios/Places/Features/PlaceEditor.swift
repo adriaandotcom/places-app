@@ -8,6 +8,8 @@ struct PlaceEditor: View {
     private let assigning: TimelineItem?
     private let onSave: (() -> Void)?
     @State private var name: String
+    @State private var city: String
+    @State private var country: String
     @State private var address: String
     @State private var latitude: String
     @State private var longitude: String
@@ -46,6 +48,8 @@ struct PlaceEditor: View {
         self.onSave = onSave
         let point = place?.coordinate ?? suggestion?.coordinate ?? coordinate
         _name = State(initialValue: place?.name ?? suggestion?.name ?? suggestedName)
+        _city = State(initialValue: place?.locality?.city ?? "")
+        _country = State(initialValue: place?.locality?.country ?? "")
         _address = State(initialValue: place?.address ?? suggestion?.address ?? "")
         _latitude = State(initialValue: point.map { String($0.latitude) } ?? "")
         _longitude = State(initialValue: point.map { String($0.longitude) } ?? "")
@@ -113,6 +117,13 @@ struct PlaceEditor: View {
                                 .accessibilityAddTraits(index == colorIndex ? .isSelected : [])
                         }
                     }
+                }
+            }
+            Section {
+                DisclosureGroup("City & country") {
+                    TextField("City (optional)", text: $city).accessibilityIdentifier("place-city")
+                    TextField("Country (optional)", text: $country).accessibilityIdentifier("place-country")
+                    NavigationLink("Find names with Apple Maps…") { CityLookupSettings() }
                 }
             }
             Section("Location") {
@@ -294,6 +305,16 @@ struct PlaceEditor: View {
         guard !wifiNames.contains(value) else { wifiError = "This network is already added."; return }
         wifiNames.append(value); wifiDraft = ""; wifiError = nil
     }
+    private var savedLocality: PlaceLocality? {
+        let city = city.trimmingCharacters(in: .whitespacesAndNewlines)
+        let country = country.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !city.isEmpty || !country.isEmpty else { return nil }
+        if let original, original.locality?.city == city, original.locality?.country == country {
+            if original.coordinate == coordinate { return original.locality }
+            if original.locality?.source == .apple { return nil }
+        }
+        return PlaceLocality(city: city, country: country)
+    }
     private func save() {
         if let catalogReference, let saved = catalogReference.savedPlace(in: model.places), saved.id != original?.id {
             useSavedPlace(saved); return
@@ -317,7 +338,7 @@ struct PlaceEditor: View {
         }
         let place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifiNames, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference)
+            expectedSSIDs: wifiNames, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality)
         saving = true; focusedField = nil
         Task {
             if await model.save(place, assigning: assigning) {

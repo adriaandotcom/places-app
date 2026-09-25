@@ -15,9 +15,9 @@ import PlacesCore
     }
     private var connection: ConnectedWiFi { ConnectedWiFi(ssid: network.ssid, bssid: points[0].bssid) }
 
-    private func makeTracker(timeout: Duration = .seconds(3)) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
+    private func makeTracker(timeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90)) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
         let live = LocationSpy(), passive = LocationSpy(), reader = WiFiReaderSpy()
-        let tracker = TrackingController(live: live, passive: passive, wifiTimeout: timeout, monitorSystemChanges: false,
+        let tracker = TrackingController(live: live, passive: passive, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, monitorSystemChanges: false,
                                          wifiReader: { reader.callbacks.append($0) })
         tracker.updateWiFiKnowledge(places: [home], networks: [network], accessPoints: points)
         tracker.configure(places: [home], enabled: true)
@@ -39,8 +39,31 @@ import PlacesCore
         reader.complete(1, connection)
         XCTAssertEqual(tracker.state, .knownWiFi)
         XCTAssertEqual(live.starts, 0)
-        XCTAssertEqual(observations.filter { $0.source == .wifi }.count, 2)
+        XCTAssertEqual(observations.filter { $0.source == .wifi }.count, 1)
         XCTAssertTrue(observations.filter { $0.source == .wifi }.allSatisfy { $0.coordinate == nil })
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testUnavailableWiFiAndRepeatedCallbacksDoNotProlongGPSRecovery() async throws {
+        let (tracker, live, _, reader) = makeTracker(recoveryTimeout: .milliseconds(120))
+        reader.complete(0, nil)
+        XCTAssertTrue(live.updating)
+        try await Task.sleep(for: .milliseconds(80))
+        tracker.wifiPathChanged(); reader.complete(1, nil)
+        try await Task.sleep(for: .milliseconds(70))
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testDuplicateWiFiCallbackCannotCreateDuplicateEvidence() {
+        let (tracker, _, _, reader) = makeTracker()
+        var values: [SensorObservation] = []
+        tracker.onObservations = { values += $0 }
+        reader.complete(0, connection); reader.complete(0, connection)
+        XCTAssertEqual(values.filter { $0.source == .wifi }.count, 1)
+        tracker.wifiPathChanged(); reader.complete(1, nil)
+        XCTAssertEqual(values.filter { $0.source == .wifi }.count, 2)
         tracker.configure(places: [], enabled: false)
     }
 

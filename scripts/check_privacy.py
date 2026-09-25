@@ -76,7 +76,7 @@ def audit(root):
         text = source.read_text()
         if re.search(r'\b(URLSession|WKWebView|AsyncImage|CKContainer|MKLocalSearch|CLGeocoder|MKMapSnapshotter)\b', text):
             errors.append(f'{source.name}: unapproved runtime network entry point')
-        if 'import MapKit' in text and source.name != 'AppleMapsView.swift':
+        if ('import MapKit' in text or 'MKReverseGeocodingRequest(' in text) and source.name != 'AppleMapsView.swift':
             errors.append(f'{source.name}: Maps must stay inside the consent-gated adapter')
         if re.search(r'https?://', text):
             errors.append(f'{source.name}: native runtime must not use remote URLs')
@@ -85,6 +85,10 @@ def audit(root):
         errors.append('MapKit surface is not behind the consent gate')
     if not re.search(r'if model\.mapsEnabled\s*\{\s*PlacePinSurface\(', maps):
         errors.append('Place editor map is not behind the consent gate')
+    if not re.search(r'guard enabled, coordinate.isValid, !Task.isCancelled else \{ return nil \}', maps):
+        errors.append('City lookup must check live opt-in before constructing a request')
+    if 'request?.cancel()' not in maps or 'generation == expected' not in maps:
+        errors.append('City lookup must cancel and discard responses after consent revocation')
     manifest = plistlib.loads((native / 'Resources/PrivacyInfo.xcprivacy').read_bytes())
     if manifest.get('NSPrivacyTracking') or manifest.get('NSPrivacyTrackingDomains') or manifest.get('NSPrivacyCollectedDataTypes'):
         errors.append('privacy manifest unexpectedly declares tracking or collection')

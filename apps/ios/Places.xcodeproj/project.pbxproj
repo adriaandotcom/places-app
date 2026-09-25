@@ -11,6 +11,7 @@
 		0AD411802A704DA4FFA4C550 /* GRDB-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */; };
 		1BE484548285A1988C171A4C /* PlaceIconPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */; };
 		2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */; };
+		2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */; };
 		32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074E8339AD3313BBFD04D7BA /* TrackingController.swift */; };
 		34D3AFF05BABD6B247482405 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */; };
 		3CFCC7F6185D1382A9020872 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = D2A07C0F4B1A7B4218C6F725 /* PlacesCore */; };
@@ -20,6 +21,7 @@
 		623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */; };
 		66549826CB59C29A042DBFAB /* PlacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19157741242CE715116913F2 /* PlacesView.swift */; };
 		796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 763BB8E666C49E7CFF673E53 /* AppIcon.icon */; };
+		7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */; };
 		7D8274BFBC6054B26A47EEBB /* ProtectedStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B116AB54E14230415ABC727 /* ProtectedStorage.swift */; };
 		7EBB269AAA837E5F5C546BFC /* PlacesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */; };
 		841E94E0B0181A9A68A8E9A7 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E16CB5D0FBE5CF702B4018 /* SearchView.swift */; };
@@ -58,6 +60,7 @@
 
 /* Begin PBXFileReference section */
 		0129CE07ADA04E88C1C23E71 /* DemoFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoFixtures.swift; sourceTree = "<group>"; };
+		06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceRegionLookupTests.swift; sourceTree = "<group>"; };
 		074E8339AD3313BBFD04D7BA /* TrackingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingController.swift; sourceTree = "<group>"; };
 		0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceEditor.swift; sourceTree = "<group>"; };
@@ -68,6 +71,7 @@
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesApp.swift; sourceTree = "<group>"; };
+		4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryDatePicker.swift; sourceTree = "<group>"; };
 		48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCatalogViews.swift; sourceTree = "<group>"; };
 		4A0FD5DD320094D0C71ADC76 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
 		4BF477ADFC16882EBD9CC8CF /* PlacesUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -126,6 +130,7 @@
 			isa = PBXGroup;
 			children = (
 				82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */,
+				4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */,
 				DE309F70353EBEDB7069F031 /* MainView.swift */,
 				BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */,
 				48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */,
@@ -179,6 +184,7 @@
 		80901FE114D132F5DF3880B9 /* PlacesTests */ = {
 			isa = PBXGroup;
 			children = (
+				06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */,
 				2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */,
 			);
 			path = PlacesTests;
@@ -380,6 +386,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */,
 				BA60D0E791CB46DE7E6E47DF /* WiFiTrackingControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -393,6 +400,7 @@
 				623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */,
 				A94B210A5F4EC76421EDF598 /* DemoFixtures.swift in Sources */,
 				033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */,
+				7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */,
 				595DA971976AEDA5373D9931 /* MainView.swift in Sources */,
 				34D3AFF05BABD6B247482405 /* OnboardingView.swift in Sources */,
 				2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */,

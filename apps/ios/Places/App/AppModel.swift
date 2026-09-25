@@ -25,6 +25,16 @@ final class AppModel {
     private(set) var nerdMode = false
     private(set) var trackingEnabled = true
     private(set) var onboardingComplete = false
+    private(set) var mapPeriod: HistoryPeriod?
+    private(set) var mapTimeline: [TimelineItem] = []
+    private(set) var mapRoutePoints: [RoutePoint] = []
+    private(set) var placeLookupEnabled = false
+    private(set) var lookingUpRegions = false
+    private let regionLookup = ApplePlaceLookup()
+    private var lookupPreference = UUID()
+    private var regionRun = UUID()
+    private var regionTask: Task<Void, Never>?
+    private var regionAttempts: Set<String> = []
     var selectedDay = Date()
     var selectedTab = AppTab.timeline
     var searchText = ""
@@ -80,7 +90,11 @@ final class AppModel {
                         try await DemoFixtures.seed(opened); onboardingComplete = true
                     }
                     #endif
+                    let lookupConsent = try await opened.setting("placeLookupEnabled") == "true"
+                    placeLookupEnabled = mapsEnabled && lookupConsent
+                    regionLookup.setEnabled(placeLookupEnabled && !uiTesting)
                     await refresh()
+                    enrichRegions()
                     ready = true; starting = false
                     if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
                     await tracking.refreshNotifications()
@@ -94,6 +108,7 @@ final class AppModel {
     func refresh() async {
         guard let store else { return }
         let day = selectedDay
+        let period = mapPeriod
         let expectedGeneration = generation
         do {
             let newPlaces = try await store.places()
@@ -101,6 +116,12 @@ final class AppModel {
             let calendar = Calendar.current
             let interval = calendar.dateInterval(of: .day, for: day)!
             let newPoints = try await store.routePoints(from: interval.start, to: interval.end)
+            let mapItems: [TimelineItem]
+            let mapPoints: [RoutePoint]
+            if let period {
+                mapItems = try await store.timeline(in: period.interval)
+                mapPoints = try await store.routePoints(from: period.interval.start, to: period.interval.end)
+            } else { mapItems = newTimeline; mapPoints = newPoints }
             let newNetworks = try await store.networks()
             let newAccessPoints = try await store.accessPoints()
             let newDiagnostics = try await store.diagnostics()
@@ -110,13 +131,27 @@ final class AppModel {
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
+            if day == selectedDay && period == mapPeriod { mapTimeline = mapItems; mapRoutePoints = mapPoints }
             recentObservations = nerdMode ? newObservations : []
             events = nerdMode ? newEvents : []
         } catch { fail("Could not read your history. Please try again.") }
     }
     func selectDay(_ day: Date) {
-        selectedDay = day
+        selectedDay = min(day, Date()); mapPeriod = nil
         Task { await refresh() }
+    }
+    func selectPeriod(_ period: HistoryPeriod) {
+        mapPeriod = period
+        Task { await refresh() }
+    }
+    func shiftDay(_ offset: Int, fromMap: Bool = false) {
+        let anchor = fromMap ? (mapPeriod?.interval.start ?? selectedDay) : selectedDay
+        if let day = Calendar.current.date(byAdding: .day, value: offset, to: anchor) { selectDay(day) }
+    }
+    func split(_ item: TimelineItem, selecting ids: Set<String>) async -> Bool {
+        guard let store else { return false }
+        do { try await store.split(item, selecting: ids); await refresh(); return true }
+        catch { fail("Could not split these entries. Please try again."); return false }
     }
     func place(for item: TimelineItem) -> Place? { places.first { $0.id == item.placeID } }
     func endpointName(_ endpoint: TimelineConnection.Endpoint, fallback: String) -> String {
@@ -181,7 +216,7 @@ final class AppModel {
     }
     func setMapsEnabled(_ value: Bool) async {
         // Revoke immediately, even when a disk write fails. Only enable after persistence succeeds.
-        if !value { mapsEnabled = false }
+        if !value { mapsEnabled = false; await setPlaceLookupEnabled(false) }
         do {
             guard let store else { return }
             try await store.setSetting("mapsEnabled", value: String(value))
@@ -190,6 +225,43 @@ final class AppModel {
         }
         catch { fail("Could not save your map preference. Apple Maps remains off for this session."); mapsEnabled = false }
     }
+    func setPlaceLookupEnabled(_ value: Bool) async {
+        let preference = UUID(); lookupPreference = preference
+        if !value {
+            placeLookupEnabled = false; regionLookup.setEnabled(false)
+            regionRun = UUID(); regionTask?.cancel(); regionTask = nil; lookingUpRegions = false
+            regionAttempts = []
+        }
+        do {
+            guard let store, !value || mapsEnabled else { return }
+            try await store.setSetting("placeLookupEnabled", value: String(value))
+            guard lookupPreference == preference, !deleting, !value || mapsEnabled else { return }
+            placeLookupEnabled = value
+            regionLookup.setEnabled(value && !uiTesting)
+            if value { enrichRegions() }
+        } catch { fail("Could not save your city lookup preference.") }
+    }
+    func enrichRegions() {
+        guard placeLookupEnabled, mapsEnabled, !uiTesting, regionTask == nil, let store else { return }
+        let expectedGeneration = generation
+        lookingUpRegions = true
+        let run = UUID(); regionRun = run
+        regionTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if self.regionRun == run { self.lookingUpRegions = false; self.regionTask = nil } }
+            // Read the latest list each time so a newly saved place joins this queue.
+            while let place = self.places.first(where: { $0.locality == nil && !self.regionAttempts.contains("\($0.id)-\($0.coordinate)") }) {
+                guard !Task.isCancelled, self.placeLookupEnabled, self.mapsEnabled, self.generation == expectedGeneration else { return }
+                self.regionAttempts.insert("\(place.id)-\(place.coordinate)")
+                if let locality = await self.regionLookup.lookup(place.coordinate) {
+                    guard !Task.isCancelled, self.placeLookupEnabled, self.mapsEnabled, self.generation == expectedGeneration else { return }
+                    do { try await store.saveLocality(locality, for: place.id, at: place.coordinate); await self.refresh() }
+                    catch { self.fail("Could not save the city and country. Please try again."); return }
+                }
+            }
+        }
+    }
+    func retryRegionLookup() { regionAttempts = []; enrichRegions() }
     func setNerdMode(_ value: Bool) async {
         do { try await store?.setSetting("nerdMode", value: String(value)); nerdMode = value; await refresh() }
         catch { fail("Could not save this setting.") }
@@ -208,7 +280,7 @@ final class AppModel {
                 UserOverride(start: $0.start, end: max($0.end ?? Date(), $0.start.addingTimeInterval(1)),
                              kind: .stay, placeID: place.id)
             }
-            try await store.savePlace(place, assigning: edit); await refresh()
+            try await store.savePlace(place, assigning: edit); await refresh(); enrichRegions()
             if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
             return true
         } catch let error as PlacesError { fail(error.localizedDescription); return false }
@@ -262,6 +334,9 @@ final class AppModel {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
         mapsEnabled = false; trackingEnabled = false
+        lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
+        regionRun = UUID(); regionTask?.cancel(); regionTask = nil; regionAttempts = []; lookingUpRegions = false
+        mapPeriod = nil; mapTimeline = []; mapRoutePoints = []
         tracking.configure(places: [], enabled: false)
         await pendingWrite?.value
         do {

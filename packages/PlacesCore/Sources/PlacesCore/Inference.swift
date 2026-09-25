@@ -196,6 +196,10 @@ public enum InferenceEngine {
 
     public static func onDay(_ day: Date, calendar: Calendar = .current, items: [TimelineItem]) -> [TimelineItem] {
         guard let interval = calendar.dateInterval(of: .day, for: day) else { return [] }
+        return within(interval, items: items)
+    }
+
+    public static func within(_ interval: DateInterval, items: [TimelineItem]) -> [TimelineItem] {
         return items.compactMap { item in
             guard item.start < interval.end, (item.end ?? .distantFuture) > interval.start else { return nil }
             var clipped = item

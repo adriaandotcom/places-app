@@ -12,6 +12,8 @@ struct TimelineDetail: View {
         let suggestion: CatalogPlace?
     }
     @State private var suggestions: [CatalogPlace] = []
+    @State private var splitting = false
+    @State private var didSplit = false
     @State private var createdPlace = false
     @State private var transportSuggestions = TransportSuggestions.none
     private var place: Place? { model.place(for: item) }
@@ -39,7 +41,7 @@ struct TimelineDetail: View {
                     if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Layout.compact) }
                     Text(Display.duration(item.duration())).font(.subheadline).foregroundStyle(Palette.muted)
                 }
-                if item.kind != .journey {
+                if isUnnamedStay || item.kind == .gap {
                     Button(isUnnamedStay ? "Name this place" : item.kind == .gap ? "I was at a place" : "Change place") {
                         namingDraft = NamingDraft(suggestion: nil)
                     }.buttonStyle(PrimaryButton()).accessibilityIdentifier("assign-place")
@@ -108,30 +110,6 @@ struct TimelineDetail: View {
                             Text("Includes \(item.unrecordedDuration < 60 ? "less than a minute" : Display.duration(item.unrecordedDuration)) without locations. The same place was recorded on both sides.")
                                 .font(.subheadline).foregroundStyle(Palette.muted)
                         }
-                        Button("Split into original entries", systemImage: "arrow.triangle.branch") {
-                            Task { if await model.setCombined(item, combined: false) { dismiss() } }
-                        }.frame(minHeight: 44).accessibilityIdentifier("split-entries")
-                    }
-                }
-                if item.isSeparated == true {
-                    Button("Merge with adjacent entries", systemImage: "arrow.triangle.merge") {
-                        Task { if await model.setCombined(item, combined: true) { dismiss() } }
-                    }.frame(minHeight: 44).accessibilityIdentifier("merge-entries")
-                }
-                VStack(spacing: Layout.compact) {
-                    if !isUnnamedStay {
-                        transportMenu
-                    }
-                    if item.kind == .journey {
-                        Button("I was at a place") { namingDraft = NamingDraft(suggestion: nil) }
-                            .frame(minHeight: Layout.touchTarget).accessibilityIdentifier("assign-place")
-                    }
-                    if item.kind == .journey || place != nil {
-                        Menu("More") { Button("Mark as unknown") { correct(kind: .gap) } }
-                            .frame(minHeight: Layout.touchTarget)
-                    }
-                    if item.end == nil {
-                        Text("Corrections to an ongoing interval apply through now. Future observations remain separate.").font(.caption).foregroundStyle(Palette.muted)
                     }
                 }
             }.padding(Layout.gutter)
@@ -143,10 +121,29 @@ struct TimelineDetail: View {
                 }
             }
             .toolbar {
-                if isUnnamedStay {
-                    ToolbarItem(placement: .secondaryAction) { transportMenu }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(item.kind == .stay ? "Change place" : "I was at a place", systemImage: "mappin") { namingDraft = NamingDraft(suggestion: nil) }
+                        transportMenu
+                        if (item.originalItems?.count ?? 0) > 1 {
+                            Button("Split into original entries…", systemImage: "arrow.triangle.branch") { splitting = true }
+                                .accessibilityIdentifier("split-entries")
+                        }
+                        if item.isSeparated == true {
+                            Button("Merge with adjacent entries", systemImage: "arrow.triangle.merge") {
+                                Task { if await model.setCombined(item, combined: true) { dismiss() } }
+                            }.accessibilityIdentifier("merge-entries")
+                        }
+                        if item.kind == .journey || place != nil {
+                            Button("Mark as unknown", systemImage: "questionmark.circle") { correct(kind: .gap) }
+                        }
+                    } label: { Image(systemName: "pencil").frame(minWidth: 28, minHeight: 28) }
+                        .accessibilityLabel("Edit entry").accessibilityIdentifier("edit-entry")
                 }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .sheet(isPresented: $splitting, onDismiss: { if didSplit { dismiss() } }) {
+                NavigationStack { SplitEntriesView(item: item) { didSplit = true; splitting = false } }
             }
             .sheet(item: $namingDraft, onDismiss: { if createdPlace { dismiss() } }) { draft in
                 NavigationStack {
@@ -201,8 +198,11 @@ private struct VisitEvidenceView: View {
                     Text(item.isUserEdited ? "This entry comes from your correction. No source observations are attached."
                          : "No source observations are attached to this interval.")
                 } else {
-                    ForEach(observations) { observation in
+                    ForEach(EvidenceGroup.make(observations)) { group in
+                        let observation = group.first
                         DisclosureGroup {
+                            ForEach(group.observations) { observation in
+                                if group.observations.count > 1 { Text(timestamp(observation)).font(.caption.bold()) }
                             if let point = observation.coordinate {
                                 LabeledContent("Latitude", value: String(format: "%.5f", point.latitude))
                                 LabeledContent("Longitude", value: String(format: "%.5f", point.longitude))
@@ -220,10 +220,15 @@ private struct VisitEvidenceView: View {
                             if let ssid = observation.ssid { LabeledContent("Connected Wi-Fi", value: ssid) }
                             LabeledContent("Time zone", value: observation.timezoneIdentifier)
                             if model.nerdMode { LabeledContent("Recording policy", value: observation.policyVersion) }
+                            }
                         } label: {
                             VStack(alignment: .leading, spacing: Layout.compact) {
-                                Text(sourceName(observation.source)).font(BrandFont.title)
+                                Text(observation.source == .wifi && observation.ssid == nil ? "Wi-Fi unavailable" : sourceName(observation.source)).font(BrandFont.title)
                                 Text(timestamp(observation)).font(.subheadline).foregroundStyle(Palette.muted)
+                                if group.observations.count > 1 {
+                                    Text("\(group.observations.count) checks · through \(group.observations.last!.timestamp.formatted(date: .omitted, time: .standard))")
+                                        .font(.caption).foregroundStyle(Palette.muted)
+                                }
                             }.padding(.vertical, Layout.compact)
                         }.accessibilityIdentifier("evidence-observation-\(observation.id)")
                     }
@@ -257,10 +262,57 @@ private struct VisitEvidenceView: View {
         case .regionEnter: "Entered a saved place"
         case .regionExit: "Left a saved place"
         case .motion: "Motion reading"
-        case .wifi: "Connected Wi-Fi"
+        case .wifi: "Wi-Fi connection check"
         case .recovery: "Recording recovery"
         case .paused: "Recording paused"
         case .resumed: "Recording resumed"
         }
+    }
+}
+
+
+private struct SplitEntriesView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let item: TimelineItem
+    let onSave: () -> Void
+    @State private var selected: Set<String> = []
+    @State private var saving = false
+    private var originals: [TimelineItem] {
+        (item.originalItems ?? []).filter { $0.start < (item.end ?? .distantFuture) && ($0.end ?? .distantFuture) > item.start }
+    }
+    var body: some View {
+        List {
+            Section {
+                Button(selected.count == originals.count ? "Deselect all" : "Select all") {
+                    selected = selected.count == originals.count ? [] : Set(originals.map(\.id))
+                }.accessibilityIdentifier("select-all-originals")
+                ForEach(originals) { original in
+                    Button {
+                        if !selected.insert(original.id).inserted { selected.remove(original.id) }
+                    } label: {
+                        HStack(spacing: Layout.spacing) {
+                            Image(systemName: selected.contains(original.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(Palette.green)
+                            VStack(alignment: .leading, spacing: Layout.compact) {
+                                Text(original.kind == .stay ? model.place(for: original)?.name ?? "Somewhere new" : original.kind == .journey ? original.mode.title : "Unrecorded interval")
+                                    .foregroundStyle(Palette.ink)
+                                Text(Display.range(original) + " · " + (original.duration() < 60 ? "Less than a minute" : Display.duration(original.duration()))).font(.subheadline).foregroundStyle(Palette.muted)
+                            }
+                        }.frame(minHeight: Layout.touchTarget)
+                    }.buttonStyle(.plain).accessibilityAddTraits(selected.contains(original.id) ? .isSelected : [])
+                        .accessibilityIdentifier("original-entry-\(original.id)")
+                }
+            } footer: { Text("Selected entries will stand alone. The others stay combined where possible.") }
+        }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Separate entries").navigationBarTitleDisplayMode(.inline)
+            .disabled(saving)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Separate") {
+                        saving = true
+                        Task { if await model.split(item, selecting: selected) { onSave() }; saving = false }
+                    }.disabled(selected.isEmpty).accessibilityIdentifier("confirm-split-entries")
+                }
+            }
     }
 }

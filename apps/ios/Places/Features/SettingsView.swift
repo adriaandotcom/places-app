@@ -38,6 +38,7 @@ struct SettingsView: View {
                 Toggle("Apple Maps", isOn: Binding(get: { model.mapsEnabled }, set: { value in
                     if value { confirmMaps = true } else { Task { await model.setMapsEnabled(false) } }
                 })).tint(Palette.controlGreen).accessibilityIdentifier("maps-toggle")
+                NavigationLink("City & country lookup") { CityLookupSettings() }
             } header: { Text("Optional Apple service") } footer: {
                 Text("Enabling maps sends requests to Apple for the areas you view. Turn this off to remove maps immediately. Places, history, and local search keep working.")
             }
@@ -166,5 +167,35 @@ private struct LicensesView: View {
         guard let url = Bundle.main.url(forResource: name, withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return "License included in the source distribution." }
         return text
+    }
+}
+
+struct CityLookupSettings: View {
+    @Environment(AppModel.self) private var model
+    @State private var confirm = false
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Look up city & country", isOn: Binding(get: { model.placeLookupEnabled }, set: { value in
+                    if value { confirm = true } else { Task { await model.setPlaceLookupEnabled(false) } }
+                })).tint(Palette.controlGreen).accessibilityIdentifier("city-lookup-toggle")
+                if model.lookingUpRegions { ProgressView("Finding city & country…") }
+                else if model.placeLookupEnabled {
+                    Button("Retry missing names") { model.retryRegionLookup() }
+                }
+            } footer: {
+                Text("Optional. Sends each saved place’s coordinates to Apple once to find its city and country. Names are stored on this iPhone for visit groups. You can also enter them yourself when editing a place.")
+            }
+        }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("City & country").navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog("Look up your saved places with Apple?", isPresented: $confirm, titleVisibility: .visible) {
+                Button("Enable city & country lookup") {
+                    Task {
+                        if !model.mapsEnabled { await model.setMapsEnabled(true) }
+                        await model.setPlaceLookupEnabled(true)
+                    }
+                }
+            } message: {
+                Text("This enables Apple Maps and sends the coordinates of existing and future saved places to Apple to find city and country names. Switching Apple Maps off also stops lookups. Previously saved names stay on your iPhone.")
+            }
     }
 }
