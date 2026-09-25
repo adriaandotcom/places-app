@@ -53,6 +53,11 @@ import XCTest
         let suggestion = app.buttons["visit-suggestion-b2ee52ea-3b09-439e-928b-bdbf168ded5e"]
         XCTAssertTrue(suggestion.waitForExistence(timeout: 10))
         XCTAssertTrue(name.isHittable)
+        let edit = app.buttons["edit-entry"]
+        XCTAssertLessThan(edit.frame.maxX, app.buttons["Done"].frame.minX, "Edit and Done have separate targets")
+        app.buttons["offline-suggestions-info"].tap()
+        XCTAssertTrue(app.staticTexts["Suggestions stay on your iPhone"].waitForExistence(timeout: 5))
+        app.buttons["close-suggestions-info"].tap()
         XCTAssertLessThan(app.staticTexts["visit-time-date"].frame.minY, name.frame.minY)
         XCTAssertLessThan(name.frame.minY, app.maps.firstMatch.frame.minY)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "visit-suggestion-")).count, 3)
@@ -62,6 +67,8 @@ import XCTest
         suggestion.tap()
         XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["place-name"].value as? String, "Kos Airport “Ippokratis”")
+        XCTAssertTrue(app.buttons["offline-suggestions-info"].exists)
+        XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Airport"))
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.textFields["place-name"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["timeline-heading"].isHittable)
@@ -184,10 +191,33 @@ import XCTest
     func testDaySwipesMapPeriodsAndCityVisits() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
-        app.staticTexts["timeline-heading"].swipeRight()
-        XCTAssertTrue(app.buttons["timeline-next-day"].isEnabled)
-        app.buttons["timeline-next-day"].tap()
-        XCTAssertFalse(app.buttons["timeline-next-day"].isEnabled)
+        let today = app.buttons["timeline-day-0"]
+        let yesterday = app.buttons["timeline-day--1"]
+        let todayFrame = today.frame
+        let headingFrame = app.staticTexts["timeline-heading"].frame
+        let pager = app.scrollViews["timeline-pager"]
+        XCTAssertTrue(pager.waitForExistence(timeout: 5))
+        XCTAssertTrue(today.isSelected)
+        let pagerShot = XCTAttachment(screenshot: app.screenshot()); pagerShot.name = "Pager initial"; pagerShot.lifetime = .keepAlways; add(pagerShot)
+        // A drag from the middle is ordinary browsing, not a day change.
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.45)))
+        XCTAssertTrue(today.isSelected)
+        XCTAssertFalse(app.buttons["edit-entry"].exists, "A horizontal middle drag must not open an entry")
+        // A short edge drag settles back to the same day.
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.45))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.45)),
+                   withVelocity: .slow, thenHoldForDuration: 0.5)
+        XCTAssertTrue(today.isSelected)
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.45))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.45)))
+        let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: yesterday)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)
+        XCTAssertEqual(today.frame, todayFrame, "Dates stay in their positions while the active date moves")
+        XCTAssertEqual(app.staticTexts["timeline-heading"].frame.origin, headingFrame.origin)
+        XCTAssertFalse(app.buttons["timeline-next-day"].exists)
+        today.tap()
+        XCTAssertTrue(today.isSelected)
         app.buttons["tab-map"].tap()
         app.buttons["enable-apple-maps"].tap()
         let picker = app.buttons["map-period-picker"]
@@ -223,10 +253,20 @@ import XCTest
         let toggle = app.switches["city-lookup-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 5)); XCTAssertEqual(toggle.value as? String, "0")
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertTrue(app.buttons["Enable city & country lookup"].waitForExistence(timeout: 5))
-        app.buttons["Enable city & country lookup"].tap()
+        let consent = app.alerts["Find city & country with Apple?"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 5))
+        consent.buttons["Not now"].tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        consent.buttons["Enable lookup"].tap()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
+        XCTAssertTrue(app.staticTexts["Amsterdam, Netherlands"].exists)
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertFalse(app.alerts.firstMatch.exists, "Consent is explained only on the first enable")
+        XCTAssertEqual(toggle.value as? String, "1")
         app.navigationBars.buttons["BackButton"].tap()
         let maps = app.switches["maps-toggle"]
         reveal(maps, in: app); XCTAssertEqual(maps.value as? String, "1"); maps.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
@@ -483,13 +523,21 @@ import XCTest
         app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()
         XCTAssertFalse(app.textFields["place-latitude"].exists)
         XCTAssertFalse(app.maps.firstMatch.exists)
+        let name = app.textFields["place-name"]
+        name.tap(); name.typeText("Koffie aan de kade")
+        app.buttons["dismiss-keyboard"].tap()
+        XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Café"))
         app.buttons["choose-place-icon"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
+        let iconShot = XCTAttachment(screenshot: app.screenshot()); iconShot.name = "Native icon catalog"; iconShot.lifetime = .keepAlways; add(iconShot)
         search.tap(); search.typeText("work")
         XCTAssertTrue(app.buttons["icon-briefcase.fill"].waitForExistence(timeout: 5))
         app.buttons["icon-briefcase.fill"].tap()
         XCTAssertTrue(app.staticTexts["Work"].waitForExistence(timeout: 5))
+        name.tap(); name.typeText(" market")
+        app.buttons["dismiss-keyboard"].tap()
+        XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Work"), "Typing never replaces an explicitly selected icon")
         reveal(app.buttons["enter-coordinates"], in: app)
         app.buttons["enter-coordinates"].tap()
         XCTAssertTrue(app.textFields["place-latitude"].exists)

@@ -198,14 +198,14 @@ final class ApplePlaceLookup {
         enabled = value
         if !value { generation += 1; request?.cancel(); request = nil }
     }
-    func lookup(_ coordinate: Coordinate) async -> PlaceLocality? {
+    func lookup(_ coordinate: Coordinate) async throws -> PlaceLocality? {
         guard enabled, coordinate.isValid, !Task.isCancelled else { return nil }
         let expected = generation
         guard let active = factory(coordinate) else { return nil }
         request = active
-        let result = try? await active.result()
+        defer { if generation == expected { request = nil } }
+        let result = try await active.result()
         guard enabled, generation == expected, !Task.isCancelled else { return nil }
-        request = nil
         return result
     }
 }

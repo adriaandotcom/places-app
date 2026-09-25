@@ -32,6 +32,7 @@
 
 - Swift 6 concurrency, SwiftUI, shared PlacesCore package, SQLite/GRDB. Keep Apple sensor/UI adapters outside the shared core. Prefer small explicit interfaces over speculative abstractions.
 - Preserve the supplied design's cream surfaces, typography, colored cards, and timeline hierarchy while respecting safe areas, Dynamic Type, VoiceOver, dark appearance, and reduced motion.
+- Maintain `PlaceIconMatcher.swift` with reproducible name/category matches (including common local-language words) when new ones are found. Keep Unicode word boundaries, prefer specific phrases and category evidence, preserve manual icon choices, and add regression examples. Reuse one canonical pictogram per concept; keep synonyms searchable instead of adding outlined/circled duplicates.
 - Use PolyForm Noncommercial 1.0.0 for original code. Call the public project source-available, not OSI open source. Preserve dependency/asset license notices.
 - Pin dependencies. For larger features, check published vulnerable version ranges and read release/changelog notes before necessary upgrades.
 - Test critical inference, migration, recovery, data deletion, consent gating, and durable corrections. Add inexpensive smoke tests for workflow scripts. Never replace device validation with simulator claims.

@@ -16,6 +16,7 @@ struct PlaceEditor: View {
     @State private var coordinate: Coordinate?
     @State private var radius: Double
     @State private var symbol: String
+    @State private var userChoseIcon: Bool
     @State private var colorIndex: Int
     @State private var wifiNames: [String]
     @State private var wifiDraft = ""
@@ -24,6 +25,8 @@ struct PlaceEditor: View {
     @State private var choosingIcon = false
     @State private var choosingCatalog = false
     @State private var catalogReference: PlaceCatalogReference?
+    @State private var catalogCategory: String?
+    @State private var catalogName: String?
     @State private var nearbyPlaces: [CatalogPlace] = []
     @State private var recentSearchAnchor: Coordinate?
     private var searchAnchor: Coordinate? { coordinate ?? recentSearchAnchor }
@@ -55,10 +58,13 @@ struct PlaceEditor: View {
         _longitude = State(initialValue: point.map { String($0.longitude) } ?? "")
         _coordinate = State(initialValue: point)
         _radius = State(initialValue: place?.radius ?? 100)
-        _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? (suggestedName == "Home" ? "house.fill" : suggestedName == "Work" ? "briefcase.fill" : "mappin"))
+        _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? PlaceIconMatcher.suggestedSymbol(name: suggestedName) ?? "mappin")
+        _userChoseIcon = State(initialValue: place != nil)
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
         _wifiNames = State(initialValue: place?.expectedSSIDs ?? [])
         _catalogReference = State(initialValue: place?.catalogReference ?? suggestion?.reference)
+        _catalogCategory = State(initialValue: suggestion?.category)
+        _catalogName = State(initialValue: suggestion?.name)
     }
 
     var body: some View {
@@ -94,7 +100,13 @@ struct PlaceEditor: View {
                     }
                     if let catalogMessage { Text(catalogMessage).font(.footnote).foregroundStyle(Palette.muted) }
                 }
-            } header: { Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions") }
+            } header: {
+                HStack {
+                    Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions")
+                    Spacer()
+                    OfflineSuggestionsInfoButton()
+                }
+            }
             Section("Details") {
                 TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
                 Button { choosingIcon = true } label: {
@@ -249,7 +261,7 @@ struct PlaceEditor: View {
                 }
                 Button("Cancel", role: .cancel) { existingSuggestion = nil }
             } message: { Text("Use your saved place instead of creating a duplicate.") }
-            .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: $symbol, colorIndex: colorIndex) } }
+            .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: Binding(get: { symbol }, set: { symbol = $0; userChoseIcon = true }), colorIndex: colorIndex) } }
             .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removingWiFi != nil }, set: { if !$0 { removingWiFi = nil } }), titleVisibility: .visible, presenting: removingWiFi) { ssid in
                 Button("Remove Wi-Fi name", role: .destructive) {
                     wifiNames.removeAll { $0 == ssid }
@@ -259,6 +271,9 @@ struct PlaceEditor: View {
             .alert("Couldn’t save this place", isPresented: Binding(get: { validation != nil }, set: { if !$0 { validation = nil } })) {
                 Button("OK") { validation = nil }
             } message: { Text(validation ?? "") }
+            .onChange(of: name) { _, value in
+                if !userChoseIcon { symbol = PlaceIconMatcher.suggestedSymbol(name: value, category: value == catalogName ? catalogCategory : nil) ?? "mappin" }
+            }
             .onChange(of: coordinate) { _, value in
                 if let value { latitude = String(value.latitude); longitude = String(value.longitude); locationError = nil }
             }
@@ -271,9 +286,11 @@ struct PlaceEditor: View {
             return
         }
         locationRequest.cancel()
+        catalogCategory = candidate.category; catalogName = candidate.name
         name = candidate.name; address = candidate.address; coordinate = candidate.coordinate
         latitude = String(candidate.coordinate.latitude); longitude = String(candidate.coordinate.longitude)
-        symbol = candidate.symbol; catalogReference = candidate.reference
+        if !userChoseIcon { symbol = candidate.symbol }
+        catalogReference = candidate.reference
         locationError = nil; locationSelected = false; focusedField = nil
     }
     private func useSavedPlace(_ place: Place) {

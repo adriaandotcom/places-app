@@ -173,29 +173,59 @@ private struct LicensesView: View {
 struct CityLookupSettings: View {
     @Environment(AppModel.self) private var model
     @State private var confirm = false
+    private var missing: [Place] { model.places.filter { $0.locality == nil } }
     var body: some View {
         Form {
             Section {
                 Toggle("Look up city & country", isOn: Binding(get: { model.placeLookupEnabled }, set: { value in
-                    if value { confirm = true } else { Task { await model.setPlaceLookupEnabled(false) } }
+                    if !value { Task { await model.setPlaceLookupEnabled(false) } }
+                    else if model.placeLookupExplained { enableLookup() }
+                    else { confirm = true }
                 })).tint(Palette.controlGreen).accessibilityIdentifier("city-lookup-toggle")
-                if model.lookingUpRegions { ProgressView("Finding city & country…") }
-                else if model.placeLookupEnabled {
-                    Button("Retry missing names") { model.retryRegionLookup() }
-                }
             } footer: {
-                Text("Optional. Sends each saved place’s coordinates to Apple once to find its city and country. Names are stored on this iPhone for visit groups. You can also enter them yourself when editing a place.")
+                Text("Find your trips by city and country in date pickers.")
             }
-        }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("City & country").navigationBarTitleDisplayMode(.inline)
-            .confirmationDialog("Look up your saved places with Apple?", isPresented: $confirm, titleVisibility: .visible) {
-                Button("Enable city & country lookup") {
-                    Task {
-                        if !model.mapsEnabled { await model.setMapsEnabled(true) }
-                        await model.setPlaceLookupEnabled(true)
+            if model.placeLookupEnabled {
+                Section("Your places") {
+                    if model.places.isEmpty {
+                        Text("Save a place to find its city and country.").foregroundStyle(Palette.muted)
+                    }
+                    ForEach(model.places) { place in
+                        VStack(alignment: .leading, spacing: Layout.compact) {
+                            Label(place.name, systemImage: place.symbol)
+                            if let locality = place.locality {
+                                Text([locality.city, locality.country].filter { !$0.isEmpty }.joined(separator: ", "))
+                                    .font(.subheadline).foregroundStyle(Palette.muted)
+                            } else if let issue = model.regionLookupIssues[place.id] {
+                                Text(issue).font(.subheadline).foregroundStyle(Palette.muted)
+                            } else {
+                                Text(model.lookingUpRegions ? "Finding names…" : "Names not found yet")
+                                    .font(.subheadline).foregroundStyle(Palette.muted)
+                            }
+                        }.accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("place-locality-\(place.id)")
+                    }
+                    if model.lookingUpRegions {
+                        ProgressView("Finding city & country…")
+                    } else if !missing.isEmpty {
+                        Button("Retry missing names") { model.retryRegionLookup() }
+                            .accessibilityIdentifier("retry-city-lookup")
                     }
                 }
-            } message: {
-                Text("This enables Apple Maps and sends the coordinates of existing and future saved places to Apple to find city and country names. Switching Apple Maps off also stops lookups. Previously saved names stay on your iPhone.")
             }
+        }.scrollContentBackground(.hidden).background(Palette.background)
+            .navigationTitle("City & country").navigationBarTitleDisplayMode(.inline)
+            .alert("Find city & country with Apple?", isPresented: $confirm) {
+                Button("Not now", role: .cancel) { }
+                Button("Enable lookup", action: enableLookup)
+            } message: {
+                Text("Places sends saved place coordinates to Apple to find city and country names. This also enables Apple Maps. Results stay on this iPhone. You can turn this off anytime.")
+            }
+    }
+    private func enableLookup() {
+        Task {
+            if !model.mapsEnabled { await model.setMapsEnabled(true) }
+            await model.setPlaceLookupEnabled(true)
+        }
     }
 }

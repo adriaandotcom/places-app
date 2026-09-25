@@ -48,6 +48,11 @@ struct TimelineDetail: View {
                 }
                 if isUnnamedStay && !suggestions.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Text("Nearby suggestions").font(.subheadline.weight(.semibold))
+                            Spacer()
+                            OfflineSuggestionsInfoButton()
+                        }.padding(.horizontal, Layout.spacing)
                         ForEach(suggestions) { candidate in
                             Button {
                                 namingDraft = NamingDraft(suggestion: candidate)
@@ -140,7 +145,8 @@ struct TimelineDetail: View {
                     } label: { Image(systemName: "pencil").frame(minWidth: 28, minHeight: 28) }
                         .accessibilityLabel("Edit entry").accessibilityIdentifier("edit-entry")
                 }
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
             }
             .sheet(isPresented: $splitting, onDismiss: { if didSplit { dismiss() } }) {
                 NavigationStack { SplitEntriesView(item: item) { didSplit = true; splitting = false } }
@@ -159,11 +165,13 @@ struct TimelineDetail: View {
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline))
     }
     private var transportMenu: some View {
-        Menu(item.kind == .journey ? "Change transport mode" : "I was travelling") {
+        Menu {
             if let speed = transportSuggestions.estimatedSpeedKilometersPerHour {
                 Section("Suggested · about \(Int(speed.rounded())) km/h") { transportButtons(transportSuggestions.suggested) }
                 Section("Other ways") { transportButtons(transportSuggestions.otherModes) }
             } else { transportButtons(TransportMode.choiceOrder) }
+        } label: {
+            Label(item.kind == .journey ? "Change transport mode" : "I was travelling", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
         }.menuOrder(.fixed).frame(minHeight: Layout.touchTarget).accessibilityIdentifier("change-transport")
     }
     private func transportButtons(_ modes: [TransportMode]) -> some View {

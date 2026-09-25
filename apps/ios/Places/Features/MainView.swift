@@ -68,9 +68,12 @@ struct TimelineView: View {
     }
     private var placeCount: Int { Set(model.timeline.filter { $0.kind == .stay }.map { $0.placeID ?? "unknown-\($0.id)" }).count }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var visibleWeekEnd = Calendar.current.startOfDay(for: Date())
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        VStack(spacing: Layout.spacing) {
+            VStack(alignment: .leading, spacing: Layout.spacing) {
                 HStack {
                     Label(model.tracking.state.title, systemImage: model.tracking.state == .paused ? "pause.circle" : "location.circle")
                         .font(.caption.weight(.medium)).foregroundStyle(Palette.muted)
@@ -79,35 +82,14 @@ struct TimelineView: View {
                         .accessibilityLabel("Choose date")
                 }
                 Text(model.timeline.isEmpty ? "Your day,\nremembered." : "\(title) you went\nto \(placeCount) \(placeCount == 1 ? "place" : "places")")
-                    .font(BrandFont.hero).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("timeline-heading")
-                HStack(spacing: 0) {
-                    Button { model.shiftDay(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                        .accessibilityLabel("Previous day").accessibilityIdentifier("timeline-previous-day")
-                    dayPicker
-                    Button { model.shiftDay(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
-                        .disabled(Calendar.current.isDateInToday(model.selectedDay))
-                        .opacity(Calendar.current.isDateInToday(model.selectedDay) ? 0.3 : 1)
-                        .accessibilityLabel("Next day").accessibilityIdentifier("timeline-next-day")
-                }
-                if model.timeline.isEmpty {
-                    EmptyHistory(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
-                        message: "Your visits and journeys will appear as you go. Add a familiar place, or enable location in Settings.")
-                    Button("Add a familiar place") { addPlace = true }.buttonStyle(PrimaryButton())
-                } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(model.timeline) { item in
-                            Button { selected = item } label: { TimelineRow(item: item, place: model.place(for: item)) }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("timeline-\(item.kind.rawValue)-\(item.id)")
-                        }
-                    }
-                }
-            }.padding(.horizontal, Layout.gutter).padding(.bottom, 24)
+                    .font(typeSize.isAccessibilitySize ? BrandFont.title : BrandFont.hero)
+                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("timeline-heading")
+                dayPicker
+            }.padding(.horizontal, Layout.gutter)
+            TimelinePager(select: { selected = $0 }, addPlace: { addPlace = true })
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle("Places").navigationBarTitleDisplayMode(.inline)
             .toolbar { SettingsToolbar() }
-            .modifier(DaySwipe { model.shiftDay($0) })
-            .refreshable { await model.refresh() }
             .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) } }
             .sheet(isPresented: $addPlace) { NavigationStack { PlaceEditor() } }
             .sheet(isPresented: $showDate) {
@@ -117,26 +99,35 @@ struct TimelineView: View {
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showDate = false } } }
                 }.presentationDetents([.medium, .large])
             }
+            .onChange(of: model.selectedDay, initial: true) { _, selected in
+                let start = Calendar.current.date(byAdding: .day, value: -6, to: visibleWeekEnd)!
+                let day = Calendar.current.startOfDay(for: selected)
+                if day < start { visibleWeekEnd = Calendar.current.date(byAdding: .day, value: 6, to: day)! }
+                else if day > visibleWeekEnd { visibleWeekEnd = day }
+            }
     }
 
     private var dayPicker: some View {
-        ScrollView(.horizontal) {
         HStack(spacing: 7) {
             ForEach(-6...0, id: \.self) { offset in
-                let day = Calendar.current.date(byAdding: .day, value: offset, to: model.selectedDay)!
+                let day = Calendar.current.date(byAdding: .day, value: offset, to: visibleWeekEnd)!
                 let selected = Calendar.current.isDate(day, inSameDayAs: model.selectedDay)
                 Button { model.selectDay(day) } label: {
                     VStack(spacing: 8) {
                         Text(day.formatted(.dateTime.weekday(.abbreviated))).font(.caption2)
                         Text(day.formatted(.dateTime.day())).font(BrandFont.title)
-                    }.frame(minWidth: 44).padding(.horizontal, 2).padding(.vertical, 12)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 12)
                         .foregroundStyle(selected ? Palette.background : Palette.ink)
                         .background(selected ? Palette.ink : Palette.paper, in: RoundedRectangle(cornerRadius: 18))
                 }.buttonStyle(.plain).accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+                    .accessibilityIdentifier("timeline-day-\(offset)")
                     .accessibilityAddTraits(selected ? .isSelected : [])
+                    .disabled(day > Calendar.current.startOfDay(for: Date()))
             }
-        }
-        }.scrollIndicators(.hidden).defaultScrollAnchor(.trailing)
+        }.accessibilityElement(children: .contain)
+            .accessibilityLabel("Timeline date")
+            .accessibilityValue(model.selectedDay.formatted(date: .complete, time: .omitted))
+            .accessibilityAdjustableAction { direction in model.shiftDay(direction == .increment ? 1 : -1) }
     }
 }
 

@@ -44,14 +44,7 @@ public struct CatalogPlace: Identifiable, Sendable {
     let contextRadius: Double
     public var categoryTitle: String { category.replacingOccurrences(of: "_", with: " ").capitalized }
     public var symbol: String {
-        let mappings = [("airport", "airplane"), ("hotel", "bed.double.fill"), ("resort", "bed.double.fill"),
-                        ("cafe", "cup.and.saucer.fill"), ("coffee", "cup.and.saucer.fill"),
-                        ("restaurant", "fork.knife"), ("bar", "wineglass.fill"), ("bakery", "birthday.cake.fill"),
-                        ("museum", "building.columns.fill"), ("beach", "beach.umbrella.fill"),
-                        ("park", "tree.fill"), ("supermarket", "cart.fill"), ("pharmacy", "pills.fill"),
-                        ("hospital", "cross.case.fill"), ("shop", "bag.fill"), ("store", "bag.fill"),
-                        ("gym", "dumbbell.fill"), ("school", "graduationcap.fill"), ("ferry", "ferry.fill")]
-        return mappings.first { category.contains($0.0) }?.1 ?? "mappin"
+        PlaceIconMatcher.suggestedSymbol(name: name, category: category) ?? "mappin"
     }
 }
 

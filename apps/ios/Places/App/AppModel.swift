@@ -14,6 +14,7 @@ final class AppModel {
     private(set) var waitingForUnlock = false
     private(set) var places: [Place] = []
     private(set) var timeline: [TimelineItem] = []
+    private(set) var historyRevision = 0
     private(set) var networks: [WiFiNetwork] = []
     private(set) var accessPoints: [WiFiAccessPoint] = []
     private(set) var recentObservations: [SensorObservation] = []
@@ -29,7 +30,9 @@ final class AppModel {
     private(set) var mapTimeline: [TimelineItem] = []
     private(set) var mapRoutePoints: [RoutePoint] = []
     private(set) var placeLookupEnabled = false
+    private(set) var placeLookupExplained = false
     private(set) var lookingUpRegions = false
+    private(set) var regionLookupIssues: [String: String] = [:]
     private let regionLookup = ApplePlaceLookup()
     private var lookupPreference = UUID()
     private var regionRun = UUID()
@@ -91,6 +94,8 @@ final class AppModel {
                     }
                     #endif
                     let lookupConsent = try await opened.setting("placeLookupEnabled") == "true"
+                    placeLookupExplained = try await opened.setting("placeLookupExplained") == "true" || lookupConsent
+                    if lookupConsent { try await opened.setSetting("placeLookupExplained", value: "true") }
                     placeLookupEnabled = mapsEnabled && lookupConsent
                     regionLookup.setEnabled(placeLookupEnabled && !uiTesting)
                     await refresh()
@@ -134,6 +139,7 @@ final class AppModel {
             if day == selectedDay && period == mapPeriod { mapTimeline = mapItems; mapRoutePoints = mapPoints }
             recentObservations = nerdMode ? newObservations : []
             events = nerdMode ? newEvents : []
+            historyRevision += 1
         } catch { fail("Could not read your history. Please try again.") }
     }
     func selectDay(_ day: Date) {
@@ -235,8 +241,10 @@ final class AppModel {
         do {
             guard let store, !value || mapsEnabled else { return }
             try await store.setSetting("placeLookupEnabled", value: String(value))
+            if value { try await store.setSetting("placeLookupExplained", value: "true") }
             guard lookupPreference == preference, !deleting, !value || mapsEnabled else { return }
             placeLookupEnabled = value
+            if value { placeLookupExplained = true }
             regionLookup.setEnabled(value && !uiTesting)
             if value { enrichRegions() }
         } catch { fail("Could not save your city lookup preference.") }
@@ -253,15 +261,31 @@ final class AppModel {
             while let place = self.places.first(where: { $0.locality == nil && !self.regionAttempts.contains("\($0.id)-\($0.coordinate)") }) {
                 guard !Task.isCancelled, self.placeLookupEnabled, self.mapsEnabled, self.generation == expectedGeneration else { return }
                 self.regionAttempts.insert("\(place.id)-\(place.coordinate)")
-                if let locality = await self.regionLookup.lookup(place.coordinate) {
+                do {
+                    let locality = try await self.regionLookup.lookup(place.coordinate)
                     guard !Task.isCancelled, self.placeLookupEnabled, self.mapsEnabled, self.generation == expectedGeneration else { return }
-                    do { try await store.saveLocality(locality, for: place.id, at: place.coordinate); await self.refresh() }
-                    catch { self.fail("Could not save the city and country. Please try again."); return }
+                    if let locality {
+                        do {
+                            try await store.saveLocality(locality, for: place.id, at: place.coordinate)
+                            self.regionLookupIssues[place.id] = nil
+                            await self.refresh()
+                        } catch {
+                            self.regionLookupIssues[place.id] = "The names were found, but couldn’t be saved. Please try again."
+                        }
+                    } else {
+                        self.regionLookupIssues[place.id] = "Apple couldn’t find a city or country here. You can enter them when editing this place."
+                    }
+                } catch {
+                    guard !Task.isCancelled, self.placeLookupEnabled, self.generation == expectedGeneration else { return }
+                    self.regionLookupIssues[place.id] = "The lookup couldn’t finish. Check your connection and try again."
                 }
             }
         }
     }
-    func retryRegionLookup() { regionAttempts = []; enrichRegions() }
+    func retryRegionLookup() {
+        guard !lookingUpRegions else { return }
+        regionAttempts = []; regionLookupIssues = [:]; enrichRegions()
+    }
     func setNerdMode(_ value: Bool) async {
         do { try await store?.setSetting("nerdMode", value: String(value)); nerdMode = value; await refresh() }
         catch { fail("Could not save this setting.") }
@@ -335,6 +359,7 @@ final class AppModel {
         deleting = true; generation += 1
         mapsEnabled = false; trackingEnabled = false
         lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
+        placeLookupExplained = false; regionLookupIssues = [:]
         regionRun = UUID(); regionTask?.cancel(); regionTask = nil; regionAttempts = []; lookingUpRegions = false
         mapPeriod = nil; mapTimeline = []; mapRoutePoints = []
         tracking.configure(places: [], enabled: false)

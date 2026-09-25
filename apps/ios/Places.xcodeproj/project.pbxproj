@@ -18,6 +18,7 @@
 		4BB09FFB84861510F74BD203 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA197721E63F4B0F2F74FC75 /* AppModel.swift */; };
 		4C8059CBABE8F045A1CF08E9 /* WiFiClassificationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */; };
 		595DA971976AEDA5373D9931 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE309F70353EBEDB7069F031 /* MainView.swift */; };
+		60E1ED003E6B7C1B9FA108AA /* TimelinePager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB102BB0DB953EC91699D45 /* TimelinePager.swift */; };
 		623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */; };
 		66549826CB59C29A042DBFAB /* PlacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19157741242CE715116913F2 /* PlacesView.swift */; };
 		796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 763BB8E666C49E7CFF673E53 /* AppIcon.icon */; };
@@ -94,6 +95,7 @@
 		D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentLocationRequest.swift; sourceTree = "<group>"; };
 		DE309F70353EBEDB7069F031 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		E2484224F90AFD4F0609C882 /* PlacesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EEB102BB0DB953EC91699D45 /* TimelinePager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelinePager.swift; sourceTree = "<group>"; };
 		F135F35535FF26FED0627E38 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -140,6 +142,7 @@
 				19E16CB5D0FBE5CF702B4018 /* SearchView.swift */,
 				CA29D2F244CDCEC41CCBFC07 /* SettingsView.swift */,
 				7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */,
+				EEB102BB0DB953EC91699D45 /* TimelinePager.swift */,
 				64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */,
 			);
 			path = Features;
@@ -412,6 +415,7 @@
 				841E94E0B0181A9A68A8E9A7 /* SearchView.swift in Sources */,
 				D2CC4FB79F9D9EEBFA596703 /* SettingsView.swift in Sources */,
 				D2F3D55DC34DFAF82D780991 /* TimelineDetail.swift in Sources */,
+				60E1ED003E6B7C1B9FA108AA /* TimelinePager.swift in Sources */,
 				32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */,
 				4C8059CBABE8F045A1CF08E9 /* WiFiClassificationPicker.swift in Sources */,
 			);
