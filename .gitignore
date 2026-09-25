@@ -11,6 +11,9 @@ Signing.local.xcconfig
 *.xcresult
 *.ipa
 *.mobileprovision
+*.p8
+*.p12
+*.xcarchive/
 .env*
 !*.example
 __pycache__/

@@ -1,0 +1,107 @@
+name: Fast internal TestFlight
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - 'packages/PlacesCore/**'
+      - 'scripts/**'
+      - '.github/workflows/testflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+# Never cancel a release halfway through an upload. New pending commits coalesce.
+concurrency:
+  group: places-testflight
+  cancel-in-progress: false
+jobs:
+  upload:
+    # Enable after the first internal group and signing credentials are ready.
+    if: github.ref == 'refs/heads/main' && vars.PLACES_TESTFLIGHT_ENABLED == 'true'
+    runs-on: macos-26
+    timeout-minutes: 20
+    environment: testflight
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      PLACES_TEAM_ID: ${{ vars.PLACES_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare temporary signing credentials
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          PLACES_SIGNING_P12: ${{ secrets.PLACES_SIGNING_P12 }}
+          PLACES_SIGNING_PASSWORD: ${{ secrets.PLACES_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, os, secrets
+          from pathlib import Path
+          required = ('PLACES_TEAM_ID', 'ASC_PRIVATE_KEY', 'ASC_KEY_ID', 'ASC_ISSUER_ID',
+                      'PLACES_SIGNING_P12', 'PLACES_SIGNING_PASSWORD')
+          missing = [key for key in required if not os.environ.get(key)]
+          if missing:
+              raise SystemExit('Missing TestFlight configuration: ' + ', '.join(missing))
+          os.umask(0o077)
+          temp = Path(os.environ['RUNNER_TEMP'])
+          key = temp / 'places-app-store-connect.p8'
+          key.write_text(os.environ['ASC_PRIVATE_KEY'])
+          (temp / 'places-signing.p12').write_bytes(base64.b64decode(os.environ['PLACES_SIGNING_P12'], validate=True))
+          password = secrets.token_urlsafe(32)
+          print('::add-mask::' + password)
+          with Path(os.environ['GITHUB_ENV']).open('a') as output:
+              for name, value in [('ASC_KEY_PATH', str(key)), ('ASC_KEY_ID', os.environ['ASC_KEY_ID']),
+                                  ('ASC_ISSUER_ID', os.environ['ASC_ISSUER_ID']), ('PLACES_KEYCHAIN_PASSWORD', password)]:
+                  if '\n' in value or '\r' in value:
+                      raise SystemExit('Invalid credential metadata')
+                  output.write(f'{name}={value}\n')
+          (temp / 'places-keychain-password').write_text(password)
+          PY
+          places_keychain="$RUNNER_TEMP/places-testflight.keychain-db"
+          places_password=$(cat "$RUNNER_TEMP/places-keychain-password")
+          security create-keychain -p "$places_password" "$places_keychain"
+          security set-keychain-settings -lut 1800 "$places_keychain"
+          security unlock-keychain -p "$places_password" "$places_keychain"
+          security import "$RUNNER_TEMP/places-signing.p12" -P "$PLACES_SIGNING_PASSWORD" -A -t cert -f pkcs12 -k "$places_keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$places_password" "$places_keychain" > /dev/null
+          security list-keychains -d user -s "$places_keychain" "$HOME/Library/Keychains/login.keychain-db"
+      - name: Restore dependency and core-test caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # No keychains, profiles, app archives, signing logs or private keys.
+          path: |
+            build/testflight/SourcePackages
+            packages/PlacesCore/.build
+          key: places-beta-${{ runner.os }}-xcode26.6-${{ hashFiles('**/Package.resolved', 'packages/PlacesCore/Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            places-beta-${{ runner.os }}-xcode26.6-${{ hashFiles('**/Package.resolved', 'packages/PlacesCore/Package.swift') }}-
+      - name: Check, archive and upload internal beta
+        run: python3 scripts/testflight.py
+      - name: Report measured release time
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          file = Path('build/testflight/timings.json')
+          if file.exists():
+              data = json.loads(file.read_text())
+              with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as output:
+                  output.write('## Internal beta timings\n\n')
+                  for phase, seconds in data['phases'].items():
+                      output.write(f'- {phase}: {seconds}s\n')
+                  output.write(f"\nTotal: {data['totalSeconds']}s. Apple processing and installation are additional.\n")
+          PY
+      - name: Remove temporary signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/places-testflight.keychain-db" || true
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          for name in ('places-app-store-connect.p8', 'places-signing.p12', 'places-keychain-password'):
+              (Path(os.environ['RUNNER_TEMP']) / name).unlink(missing_ok=True)
+          PY
