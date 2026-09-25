@@ -72,8 +72,11 @@ def execute(args, env=os.environ):
     profile = env.get('PLACES_PROFILE_UUID')
     if profile and not re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}', profile):
         raise ValueError('PLACES_PROFILE_UUID must identify the installed Places distribution profile.')
-    signing = ([f'PROVISIONING_PROFILE_SPECIFIER={profile}', 'CODE_SIGN_STYLE=Manual',
-                'CODE_SIGN_IDENTITY=Apple Distribution'] if profile else [])
+    # Only the Places Release target consumes these custom settings. Global
+    # signing overrides also reach Swift package resource bundles, which cannot
+    # accept an app provisioning profile.
+    signing = ([f'PLACES_PROFILE_UUID={profile}', 'PLACES_CODE_SIGN_STYLE=Manual',
+                'PLACES_CODE_SIGN_IDENTITY=Apple Distribution'] if profile else [])
     work = args.work_dir.expanduser().resolve()
     work.mkdir(parents=True, exist_ok=True)
     # Prevent two local releases from changing the same archive or build cache.

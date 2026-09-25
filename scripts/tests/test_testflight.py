@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import plistlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -62,11 +63,34 @@ class TestFlightSmokeTests(unittest.TestCase):
              patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
             release.execute(self.options(directory), {'PLACES_PROFILE_UUID': profile})
             archive = next(call.args[0] for call in run.call_args_list if 'archive' in call.args[0])
-            self.assertIn('CODE_SIGN_IDENTITY=Apple Distribution', archive)
-            self.assertIn('PROVISIONING_PROFILE_SPECIFIER=' + profile, archive)
+            self.assertIn('PLACES_CODE_SIGN_IDENTITY=Apple Distribution', archive)
+            self.assertIn('PLACES_CODE_SIGN_STYLE=Manual', archive)
+            self.assertIn('PLACES_PROFILE_UUID=' + profile, archive)
+            for setting in ('CODE_SIGN_IDENTITY=', 'CODE_SIGN_STYLE=', 'PROVISIONING_PROFILE_SPECIFIER='):
+                self.assertFalse(any(argument.startswith(setting) for argument in archive))
             options = plistlib.loads((Path(directory) / 'ExportOptions.plist').read_bytes())
             self.assertEqual(options['signingStyle'], 'manual')
             self.assertEqual(options['provisioningProfiles'], {'com.adriaan.places': profile})
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'Xcode project validation uses macOS plutil')
+    def test_profile_settings_are_scoped_to_the_app_release_target(self):
+        project = SCRIPT.parents[1] / 'apps/ios/Places.xcodeproj/project.pbxproj'
+        # Read the generated project to catch misplaced project-wide settings.
+        settings = plistlib.loads(subprocess.check_output(['plutil', '-convert', 'xml1', '-o', '-', str(project)]))
+        objects = settings['objects']
+        configured = []
+        for target in objects.values():
+            if target.get('isa') not in ('PBXNativeTarget', 'PBXProject'):
+                continue
+            for config_id in objects[target['buildConfigurationList']]['buildConfigurations']:
+                config = objects[config_id]
+                values = config['buildSettings']
+                if 'PROVISIONING_PROFILE_SPECIFIER' in values:
+                    configured.append((target.get('name'), config['name']))
+                    self.assertEqual(values['PROVISIONING_PROFILE_SPECIFIER'], '$(PLACES_PROFILE_UUID)')
+                    self.assertEqual(values['CODE_SIGN_STYLE'], '$(PLACES_CODE_SIGN_STYLE)')
+                    self.assertEqual(values['PLACES_CODE_SIGN_STYLE'], 'Automatic')
+        self.assertEqual(configured, [('Places', 'Release')])
 
     def test_generated_build_numbers_are_ordered_and_valid(self):
         before = release.build_number(datetime(2026, 9, 25, 10, 59, tzinfo=timezone.utc))

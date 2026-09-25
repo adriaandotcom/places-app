@@ -321,7 +321,6 @@
 				TargetAttributes = {
 					9F58EB188E334B8F0DEE52DF = {
 						DevelopmentTeam = "";
-						ProvisioningStyle = Automatic;
 					};
 					D178CF318F2AADF8E1F831F6 = {
 						DevelopmentTeam = "";
@@ -439,13 +438,18 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Places/Places.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "$(PLACES_CODE_SIGN_IDENTITY)";
+				CODE_SIGN_STYLE = "$(PLACES_CODE_SIGN_STYLE)";
 				INFOPLIST_FILE = Places/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				PLACES_CODE_SIGN_IDENTITY = "iPhone Developer";
+				PLACES_CODE_SIGN_STYLE = Automatic;
+				PLACES_PROFILE_UUID = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
+				PROVISIONING_PROFILE_SPECIFIER = "$(PLACES_PROFILE_UUID)";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
