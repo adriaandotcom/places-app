@@ -45,11 +45,15 @@ def authentication(env):
             '-authenticationKeyIssuerID', values[2]]
 
 
-def export_options(team):
-    return {'method': 'app-store-connect', 'destination': 'upload',
+def export_options(team, profile=None):
+    options = {'method': 'app-store-connect', 'destination': 'upload',
             'signingStyle': 'automatic', 'teamID': team,
             'testFlightInternalTestingOnly': True,
             'manageAppVersionAndBuildNumber': True, 'uploadSymbols': True}
+    if profile:
+        options.update(signingStyle='manual', signingCertificate='Apple Distribution',
+                       provisioningProfiles={'com.adriaan.places': profile})
+    return options
 
 
 def clean_revision():
@@ -65,6 +69,11 @@ def execute(args, env=os.environ):
     if not re.fullmatch(r'[1-9][0-9]{0,3}\.[0-9]{1,2}\.[0-9]{1,2}', args.build_number):
         raise ValueError('Use a build number such as 2460.10.25 (up to 4.2.2 digits).')
     auth = authentication(env)
+    profile = env.get('PLACES_PROFILE_UUID')
+    if profile and not re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}', profile):
+        raise ValueError('PLACES_PROFILE_UUID must identify the installed Places distribution profile.')
+    signing = ([f'PROVISIONING_PROFILE_SPECIFIER={profile}', 'CODE_SIGN_STYLE=Manual',
+                'CODE_SIGN_IDENTITY=Apple Distribution'] if profile else [])
     work = args.work_dir.expanduser().resolve()
     work.mkdir(parents=True, exist_ok=True)
     # Prevent two local releases from changing the same archive or build cache.
@@ -76,7 +85,7 @@ def execute(args, env=os.environ):
         revision = None if args.archive_only or args.dry_run else clean_revision()
         archive = work / 'Places.xcarchive'
         options = work / 'ExportOptions.plist'
-        options.write_bytes(plistlib.dumps(export_options(args.team)))
+        options.write_bytes(plistlib.dumps(export_options(args.team, profile)))
         phases = [
             ('Privacy checks', [sys.executable, 'scripts/check_privacy.py']),
             ('Workflow smoke tests', [sys.executable, '-m', 'unittest', 'discover', '-s', 'scripts/tests']),
@@ -87,7 +96,7 @@ def execute(args, env=os.environ):
                          '-clonedSourcePackagesDirPath', str(work / 'SourcePackages'),
                          '-disableAutomaticPackageResolution', '-archivePath', str(archive),
                          f'DEVELOPMENT_TEAM={args.team}', f'CURRENT_PROJECT_VERSION={args.build_number}',
-                         '-allowProvisioningUpdates', *auth, 'archive']),
+                         *signing, '-allowProvisioningUpdates', *auth, 'archive']),
         ]
         if not args.archive_only:
             phases.append(('Upload', ['xcodebuild', '-exportArchive', '-archivePath', str(archive),
@@ -109,6 +118,11 @@ def execute(args, env=os.environ):
                     result = subprocess.run(command, cwd=ROOT, env=dict(env), stdout=output, stderr=subprocess.STDOUT)
                 timings['phases'][label] = round(time.monotonic() - phase_start, 1)
                 if result.returncode:
+                    # Surface Xcode's actionable errors without publishing signing logs.
+                    errors = [line.strip() for line in log.read_text(errors='replace').splitlines()
+                              if line.startswith('error: ') or ' error: ' in line]
+                    for error in errors[-8:]:
+                        print(error[:800], file=sys.stderr, flush=True)
                     raise RuntimeError(f'{label} failed. See {log}. No later release steps were run.')
                 print(f'{label}: {timings["phases"][label]}s', flush=True)
             if not args.dry_run:

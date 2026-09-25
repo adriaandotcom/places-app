@@ -24,6 +24,7 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       PLACES_TEAM_ID: ${{ vars.PLACES_TEAM_ID }}
+      PLACES_PROFILE_ID: ${{ vars.PLACES_PROFILE_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,10 +39,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import base64, os, secrets
+          import base64, os, plistlib, secrets, subprocess
+          from datetime import datetime, timezone
           from pathlib import Path
           required = ('PLACES_TEAM_ID', 'ASC_PRIVATE_KEY', 'ASC_KEY_ID', 'ASC_ISSUER_ID',
-                      'PLACES_SIGNING_P12', 'PLACES_SIGNING_PASSWORD')
+                      'PLACES_SIGNING_P12', 'PLACES_SIGNING_PASSWORD', 'PLACES_PROFILE_ID')
           missing = [key for key in required if not os.environ.get(key)]
           if missing:
               raise SystemExit('Missing TestFlight configuration: ' + ', '.join(missing))
@@ -50,11 +52,32 @@ jobs:
           key = temp / 'places-app-store-connect.p8'
           key.write_text(os.environ['ASC_PRIVATE_KEY'])
           (temp / 'places-signing.p12').write_bytes(base64.b64decode(os.environ['PLACES_SIGNING_P12'], validate=True))
+          profile = temp / 'places.mobileprovision'
+          subprocess.run(['ruby', 'scripts/download_testflight_profile.rb', str(profile)],
+                         env={**os.environ, 'ASC_KEY_PATH': str(key)}, check=True)
+          decoded = plistlib.loads(subprocess.check_output(['security', 'cms', '-D', '-i', str(profile)]))
+          if decoded.get('TeamIdentifier') != [os.environ['PLACES_TEAM_ID']]:
+              raise SystemExit('Signing profile belongs to a different Apple team')
+          entitlements = decoded.get('Entitlements', {})
+          if entitlements.get('application-identifier') != os.environ['PLACES_TEAM_ID'] + '.com.adriaan.places':
+              raise SystemExit('Signing profile is not for Places')
+          if entitlements.get('get-task-allow') or decoded.get('ProvisionedDevices') or not entitlements.get('beta-reports-active'):
+              raise SystemExit('An App Store distribution profile is required')
+          if decoded['ExpirationDate'].replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc):
+              raise SystemExit('Signing profile has expired')
+          profile_id = decoded['UUID']
+          import uuid
+          uuid.UUID(profile_id)
+          profile_dir = Path.home() / 'Library/Developer/Xcode/UserData/Provisioning Profiles'
+          profile_dir.mkdir(parents=True, exist_ok=True)
+          installed_profile = profile_dir / (profile_id + '.mobileprovision')
+          installed_profile.write_bytes(profile.read_bytes())
           password = secrets.token_urlsafe(32)
           print('::add-mask::' + password)
           with Path(os.environ['GITHUB_ENV']).open('a') as output:
               for name, value in [('ASC_KEY_PATH', str(key)), ('ASC_KEY_ID', os.environ['ASC_KEY_ID']),
-                                  ('ASC_ISSUER_ID', os.environ['ASC_ISSUER_ID']), ('PLACES_KEYCHAIN_PASSWORD', password)]:
+                                  ('ASC_ISSUER_ID', os.environ['ASC_ISSUER_ID']), ('PLACES_KEYCHAIN_PASSWORD', password),
+                                  ('PLACES_PROFILE_UUID', profile_id), ('PLACES_PROFILE_PATH', str(installed_profile))]:
                   if '\n' in value or '\r' in value:
                       raise SystemExit('Invalid credential metadata')
                   output.write(f'{name}={value}\n')
@@ -102,6 +125,8 @@ jobs:
           python3 - <<'PY'
           import os
           from pathlib import Path
-          for name in ('places-app-store-connect.p8', 'places-signing.p12', 'places-keychain-password'):
+          for name in ('places-app-store-connect.p8', 'places-signing.p12', 'places-keychain-password', 'places.mobileprovision'):
               (Path(os.environ['RUNNER_TEMP']) / name).unlink(missing_ok=True)
+          if os.environ.get('PLACES_PROFILE_PATH'):
+              Path(os.environ['PLACES_PROFILE_PATH']).unlink(missing_ok=True)
           PY

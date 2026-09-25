@@ -55,11 +55,49 @@ class TestFlightSmokeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'together'):
             release.authentication({'ASC_KEY_ID': 'fixture'})
 
+    def test_distribution_profile_uses_manual_signing_for_archive_and_export(self):
+        profile = '12345678-ABCD-1234-ABCD-123456789ABC'
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(release, 'clean_revision', return_value='fixture'), \
+             patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
+            release.execute(self.options(directory), {'PLACES_PROFILE_UUID': profile})
+            archive = next(call.args[0] for call in run.call_args_list if 'archive' in call.args[0])
+            self.assertIn('CODE_SIGN_IDENTITY=Apple Distribution', archive)
+            self.assertIn('PROVISIONING_PROFILE_SPECIFIER=' + profile, archive)
+            options = plistlib.loads((Path(directory) / 'ExportOptions.plist').read_bytes())
+            self.assertEqual(options['signingStyle'], 'manual')
+            self.assertEqual(options['provisioningProfiles'], {'com.adriaan.places': profile})
+
     def test_generated_build_numbers_are_ordered_and_valid(self):
         before = release.build_number(datetime(2026, 9, 25, 10, 59, tzinfo=timezone.utc))
         after = release.build_number(datetime(2026, 9, 25, 11, 0, tzinfo=timezone.utc))
         self.assertLess(tuple(map(int, before.split('.'))), tuple(map(int, after.split('.'))))
         self.assertRegex(after, r'^\d{1,4}\.\d{1,2}\.\d{1,2}$')
+
+    def test_profile_authentication_signature_and_expiry(self):
+        # A synthetic key checks the real OpenSSL ES256 encoding, offline.
+        ruby = '''
+          require ARGV.shift
+          key = OpenSSL::PKey::EC.generate('prime256v1')
+          File.write(ARGV[0], key.to_pem)
+          token = PlacesTestFlightProfile.token(ARGV[0], 'fixture', 'fixture-issuer', now: 1000)
+          header, payload, encoded_signature = token.split('.')
+          claims = JSON.parse(Base64.urlsafe_decode64(payload))
+          raise 'Invalid expiry' unless claims['iat'] == 1000 && claims['exp'] == 1300
+          raise 'Invalid audience' unless claims['aud'] == 'appstoreconnect-v1'
+          signature = Base64.urlsafe_decode64(encoded_signature)
+          raise 'Invalid signature size' unless signature.bytesize == 64
+          integers = [signature[0,32], signature[32,32]].map do |part|
+            OpenSSL::ASN1::Integer.new(OpenSSL::BN.new(part, 2))
+          end
+          der = OpenSSL::ASN1::Sequence.new(integers).to_der
+          raise 'Invalid signature' unless key.verify('SHA256', der, header + '.' + payload)
+        '''
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(['ruby', '-e', ruby,
+                                     str(SCRIPT.with_name('download_testflight_profile.rb')),
+                                     str(Path(directory) / 'fixture.pem')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_workflow_only_releases_main_and_keeps_full_ci_separate(self):
         root = SCRIPT.parents[1]
