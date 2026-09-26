@@ -16,6 +16,31 @@ enum DemoFixtures {
         })
     }
 
+    static func seedGapSuggestions(_ store: PlacesStore) async throws -> Date {
+        let calendar = Calendar.current
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: Date())!
+        let start = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: yesterday)!
+        let home = Place(id: "gap-home", name: "Home", coordinate: Coordinate(latitude: 1, longitude: 1), symbol: "house.fill")
+        try await store.savePlace(home)
+        try await store.append([SensorObservation(timestamp: start, source: .visitArrival, coordinate: home.coordinate, horizontalAccuracy: 10),
+            SensorObservation(timestamp: start.addingTimeInterval(1100), source: .location, coordinate: home.coordinate, horizontalAccuracy: 10)])
+        try await store.correct(UserOverride(start: start.addingTimeInterval(300), end: start.addingTimeInterval(600), kind: .gap))
+        return calendar.startOfDay(for: start)
+    }
+
+    static func seedHistoryNavigation(_ store: PlacesStore) async throws {
+        let today = Calendar.current.startOfDay(for: Date())
+        let home = Place(id: "calendar-home", name: "Home", coordinate: Coordinate(latitude: 1, longitude: 1), symbol: "house.fill")
+        try await store.savePlace(home)
+        for daysAgo in [90, 60, 30, 3, 0] {
+            let start = Calendar.current.date(byAdding: .day, value: -daysAgo, to: today)!
+            try await store.append([
+                SensorObservation(timestamp: start, source: .visitArrival, coordinate: home.coordinate, horizontalAccuracy: 10),
+                SensorObservation(timestamp: start.addingTimeInterval(120), source: .visitDeparture, coordinate: home.coordinate, horizontalAccuracy: 10)
+            ])
+        }
+    }
+
     static func seedWiFiRecovery(_ store: PlacesStore) async throws {
         let start = Calendar.current.startOfDay(for: Date())
         let home = Place(id: "recovery-home", name: "Home", coordinate: .init(latitude: 1, longitude: 1), symbol: "house.fill")
@@ -57,8 +82,8 @@ enum DemoFixtures {
         ])
     }
 
-    static func seed(_ store: PlacesStore) async throws {
-        let start = Calendar.current.startOfDay(for: Date())
+    static func seed(_ store: PlacesStore, now: Date = Date()) async throws {
+        let start = Calendar.current.startOfDay(for: now)
         let home = Place(id: "demo-home", name: "Home", coordinate: Coordinate(latitude: 52.37, longitude: 4.85), symbol: "house.fill", colorIndex: 0)
         let studio = Place(id: "demo-studio", name: "The studio", coordinate: Coordinate(latitude: 52.375, longitude: 4.875), symbol: "briefcase.fill", colorIndex: 1)
         let cafe = Place(id: "demo-cafe", name: "A little coffee stop", coordinate: Coordinate(latitude: 52.373, longitude: 4.866), symbol: "cup.and.saucer.fill", colorIndex: 2)
@@ -66,7 +91,6 @@ enum DemoFixtures {
             place.locality = PlaceLocality(city: "Amsterdam", country: "Netherlands")
             try await store.savePlace(place)
         }
-        let now = Date()
         let available = now.timeIntervalSince(start)
         let scale = min(1, available / (19 * 3600))
         func sample(_ hours: Double, _ coordinate: Coordinate, speed: Double = 0, motion: MotionKind = .stationary) -> SensorObservation {

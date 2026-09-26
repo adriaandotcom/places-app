@@ -106,3 +106,79 @@ private func stay(_ id: String, _ start: Double, _ end: Double, _ place: String?
     #expect(groups.map { $0.observations.count } == [2, 1, 1])
     #expect(groups.flatMap(\.observations).count == 4)
 }
+
+@Test func historyCalendarCountsUniquePlacesAndHonorsMidnightAndMissingDays() {
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "Europe/Amsterdam")!
+    // The DST transition has a 23-hour day.
+    let start = calendar.date(from: DateComponents(year: 2026, month: 3, day: 28))!
+    let next = calendar.date(byAdding: .day, value: 1, to: start)!
+    let third = calendar.date(byAdding: .day, value: 2, to: start)!
+    let fifth = calendar.date(byAdding: .day, value: 4, to: start)!
+    func stay(_ id: String, _ begin: Date, _ end: Date?, _ place: String?) -> TimelineItem {
+        TimelineItem(id: id, kind: .stay, start: begin, end: end, placeID: place, lastEvidenceAt: begin)
+    }
+    let days = HistoryDay.summarize([stay("a", start, next, "home"), stay("b", next, third, "home"),
+        stay("c", next.addingTimeInterval(100), third, "home"), stay("d", next.addingTimeInterval(200), third, nil),
+        stay("e", fifth, nil, "office"),
+        TimelineItem(id: "missing", kind: .gap, start: third, end: fifth, lastEvidenceAt: third)], now: fifth.addingTimeInterval(60), calendar: calendar)
+    #expect(days.map(\.date) == [start, next, fifth])
+    #expect(days.map(\.placeCount) == [1, 2, 1])
+}
+
+@Test func adjacentPlacesSuggestBothSidesWithoutAssigningOrDuplicatingThem() {
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    func item(_ id: String, _ s: Double, _ e: Double, _ place: String?) -> TimelineItem {
+        TimelineItem(id: id, kind: place == nil ? .gap : .stay, start: start.addingTimeInterval(s),
+            end: start.addingTimeInterval(e), placeID: place, lastEvidenceAt: start.addingTimeInterval(s))
+    }
+    let gap = item("gap", 100, 500, nil)
+    let home = item("before", 0, 100, "home")
+    let after = item("after", 500, 900, "home")
+    let both = AdjacentPlaceSuggestion.make(for: gap, in: [after, gap, home])
+    #expect(both.count == 1 && both[0].before && both[0].after && both[0].placeID == "home")
+    #expect(gap.kind == .gap && gap.placeID == nil)
+    let different = AdjacentPlaceSuggestion.make(for: gap, in: [home, gap, item("office", 500, 900, "office")])
+    #expect(different.map(\.placeID) == ["home", "office"])
+    #expect(AdjacentPlaceSuggestion.make(for: gap, in: [gap]).isEmpty)
+}
+
+@Test func energyCountersMeasureRequestsWithoutInventingRelaunchTimeOrDoubleCounting() throws {
+    var first = EnergyCounters()
+    first.setStandardLocation(active: true, uptime: 100)
+    first.setStandardLocation(active: true, uptime: 110)
+    first.wifiReads = 3
+    let earlier = first.snapshot(now: Date(timeIntervalSince1970: 10), uptime: 120)
+    #expect(earlier.standardLocationSeconds == 20 && earlier.locationStarts == 1)
+    first.setStandardLocation(active: false, uptime: 130)
+    let final = first.snapshot(now: Date(timeIntervalSince1970: 20), uptime: 3000)
+    #expect(final.standardLocationSeconds == 30)
+    let laterLaunch = EnergyCounters().snapshot(now: Date(timeIntervalSince1970: 5000), uptime: 10000)
+    let total = EnergySummary(snapshots: [earlier, final, laterLaunch])
+    #expect(total.standardLocationSeconds == 30 && total.wifiReads == 3 && total.sessions == 2)
+    let data = try JSONEncoder().encode(final)
+    #expect(try JSONDecoder().decode(EnergySnapshot.self, from: data) == final)
+    #expect(!String(decoding: data, as: UTF8.self).contains("ssid"))
+}
+
+@Test func activityDiagnosticsPersistExportWithoutLocationsAndEraseWithHistory() async throws {
+    let store = try PlacesStore()
+    var counters = EnergyCounters()
+    counters.wifiReads = 4
+    counters.setStandardLocation(active: true, uptime: 100)
+    counters.setStandardLocation(active: false, uptime: 140)
+    var event = TrackingEvent(timestamp: Date(), state: .knownWiFi, reason: "A known network", previousStateDuration: 40,
+                              standardLocationActive: false, build: "test")
+    event.energy = counters.snapshot(uptime: 150)
+    try await store.record(event)
+    let decoded = try JSONDecoder().decode(TrackingEvent.self, from: JSONEncoder().encode(event))
+    #expect(decoded.energy == event.energy)
+    var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(event)) as! [String: Any]
+    legacy.removeValue(forKey: "energy")
+    #expect(try JSONDecoder().decode(TrackingEvent.self, from: JSONSerialization.data(withJSONObject: legacy)).energy == nil)
+    let report = try await store.diagnostics()
+    #expect(report.energy?.wifiReads == 4 && report.energy?.standardLocationSeconds == 40)
+    let export = String(decoding: try await store.exportDiagnostics(), as: UTF8.self)
+    #expect(!export.contains("A known network") && !export.contains(event.id))
+    try await store.eraseHistory(resetSettings: true)
+    #expect(try await store.diagnostics().energy?.sessions == 0)
+}

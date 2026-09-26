@@ -29,7 +29,7 @@ final class MapPackTests: XCTestCase {
     func testPromptSuppressionWhileDownloadingAfterDismissalAndWithinSession() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         func suggests(zoom: Double = 9, installed: Set<MapPack.ID> = [], pending: Set<MapPack.ID> = [], dismissed: Date? = nil, offered: Bool = false) -> Bool {
-            MapDownloadPolicy.canSuggest(id: .greece, zoom: zoom, installed: installed, pending: pending, dismissedAt: dismissed, now: now, offeredThisSession: offered)
+            MapDownloadPolicy.canSuggest(id: .greece, zoom: zoom, installed: installed, pending: pending, dismissedAt: dismissed, now: now, offeredThisSession: offered ? [.greece] : [])
         }
         XCTAssertTrue(suggests())
         XCTAssertFalse(suggests(zoom: 7))

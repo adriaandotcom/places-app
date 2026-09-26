@@ -47,6 +47,7 @@ struct MapDateBar: View {
 }
 
 struct HistoryDatePicker: View {
+    var timelineOnly = false
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var range = false
@@ -58,52 +59,58 @@ struct HistoryDatePicker: View {
     var body: some View {
         Form {
             Section {
-                Picker("Selection", selection: $range) {
-                    Text("Day").tag(false); Text("Period").tag(true)
-                }.pickerStyle(.segmented).accessibilityIdentifier("history-selection-mode")
+                if !timelineOnly {
+                    Picker("Selection", selection: $range) {
+                        Text("Day").tag(false); Text("Period").tag(true)
+                    }.pickerStyle(.segmented).accessibilityIdentifier("history-selection-mode")
+                }
                 if range {
                     DatePicker("From", selection: $start, in: ...Date(), displayedComponents: .date)
                     DatePicker("Through", selection: $end, in: start...max(start, Date()), displayedComponents: .date)
                 } else {
-                    DatePicker("Day", selection: $start, in: ...Date(), displayedComponents: .date).datePickerStyle(.graphical)
+                    HistoryCalendar(days: model.historyDays, selection: $start).frame(minHeight: 360)
                 }
                 Button(range ? "Show period" : "Show day") { apply() }.accessibilityIdentifier("show-history-period")
+                    .disabled(!range && !model.historyDays.contains { calendar.isDate($0.date, inSameDayAs: start) })
             }
-            Section("Quick dates") {
-                Button("Today") { model.selectDay(Date()); dismiss() }
-                Button("Last 7 days") {
-                    selectDays(from: calendar.date(byAdding: .day, value: -6, to: Date())!, through: Date(), title: "Last 7 days")
+            if !timelineOnly {
+                Section("Quick dates") {
+                    Button("Today") { model.selectDay(Date()); dismiss() }
+                    Button("Last 7 days") {
+                        selectDays(from: calendar.date(byAdding: .day, value: -6, to: Date())!, through: Date(), title: "Last 7 days")
+                    }
+                    Button("This month") { selectDays(from: calendar.dateInterval(of: .month, for: Date())!.start, through: Date(), title: "This month") }
                 }
-                Button("This month") { selectDays(from: calendar.dateInterval(of: .month, for: Date())!.start, through: Date(), title: "This month") }
-            }
-            Section("Your visits") {
-                if loadError { Text("Visits couldn’t be loaded. You can still choose dates above.") }
-                else if periods.isEmpty {
-                    Text("Add a city or country to a saved place to see visits here.").foregroundStyle(Palette.muted)
-                    NavigationLink("City & country lookup") { CityLookupSettings() }
-                } else {
-                    ForEach(periods) { period in
-                        Button { model.selectPeriod(period); dismiss() } label: {
-                            HStack(spacing: Layout.spacing) {
-                                Image(systemName: period.isCountry ? "globe.europe.africa" : "building.2").frame(width: 28)
-                                VStack(alignment: .leading, spacing: Layout.compact) {
-                                    Text(period.title).foregroundStyle(Palette.ink)
-                                    Text(period.dateLabel)
-                                        .font(.caption).foregroundStyle(Palette.muted)
-                                }
-                            }.frame(minHeight: Layout.touchTarget)
-                        }.accessibilityIdentifier("suggested-period-\(period.title)")
+                Section("Your visits") {
+                    if loadError { Text("Visits couldn’t be loaded. You can still choose dates above.") }
+                    else if periods.isEmpty {
+                        Text("Add a city or country to a saved place to see visits here.").foregroundStyle(Palette.muted)
+                        NavigationLink("City & country lookup") { CityLookupSettings() }
+                    } else {
+                        ForEach(periods) { period in
+                            Button { model.selectPeriod(period); dismiss() } label: {
+                                HStack(spacing: Layout.spacing) {
+                                    Image(systemName: period.isCountry ? "globe.europe.africa" : "building.2").frame(width: 28)
+                                    VStack(alignment: .leading, spacing: Layout.compact) {
+                                        Text(period.title).foregroundStyle(Palette.ink)
+                                        Text(period.dateLabel)
+                                            .font(.caption).foregroundStyle(Palette.muted)
+                                    }
+                                }.frame(minHeight: Layout.touchTarget)
+                            }.accessibilityIdentifier("suggested-period-\(period.title)")
+                        }
                     }
                 }
             }
         }.scrollContentBackground(.hidden).background(Palette.background)
-            .navigationTitle("Dates & visits").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(timelineOnly ? "Your history" : "Dates & visits").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
             .onChange(of: start) { _, value in if end < value { end = value } }
             .task {
-                range = model.mapPeriod != nil
-                start = model.mapPeriod?.interval.start ?? model.selectedDay
+                range = !timelineOnly && model.mapPeriod != nil
+                start = timelineOnly ? model.selectedDay : model.mapPeriod?.interval.start ?? model.selectedDay
                 end = model.mapPeriod?.interval.end.addingTimeInterval(-1) ?? start
+                guard !timelineOnly else { return }
                 do { periods = try await model.store?.suggestedPeriods() ?? [] }
                 catch { loadError = true }
             }

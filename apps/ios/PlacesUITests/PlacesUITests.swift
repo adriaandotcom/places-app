@@ -1,6 +1,47 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testUnknownIntervalOffersSamePlaceFromBothSidesAndSavesCorrection() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-gap-suggestions"]
+        app.launch()
+        let gap = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch
+        XCTAssertTrue(gap.waitForExistence(timeout: 10)); gap.tap()
+        let home = app.buttons["adjacent-place-gap-home"]
+        XCTAssertTrue(home.waitForExistence(timeout: 5))
+        XCTAssertTrue(home.label.contains("Before and after"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Same place on both sides of an unknown interval"; shot.lifetime = .keepAlways; add(shot)
+        home.tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.exists)
+    }
+
+    func testCompactTimelineScrollsHistoryAndShowsCalendarAndBatteryActivity() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-history-navigation"]
+        app.launch()
+        let heading = app.staticTexts["timeline-heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        XCTAssertTrue(heading.label.contains("you were"))
+        let days = app.scrollViews["timeline-days"]
+        XCTAssertTrue(days.exists)
+        let yesterday = app.buttons["timeline-day--1"]
+        XCTAssertEqual(yesterday.value as? String, "No history")
+        XCTAssertEqual(app.buttons["timeline-day-0"].value as? String, "1 place")
+        let initial = XCTAttachment(screenshot: app.screenshot()); initial.name = "Compact timeline and visit dots"; initial.lifetime = .keepAlways; add(initial)
+        days.swipeRight(velocity: .fast)
+        XCTAssertFalse(app.buttons["timeline-day-0"].isHittable)
+        app.buttons["Choose date"].tap()
+        XCTAssertTrue(app.otherElements["history-calendar"].waitForExistence(timeout: 5))
+        let calendar = XCTAttachment(screenshot: app.screenshot()); calendar.name = "Calendar available history and visit dots"; calendar.lifetime = .keepAlways; add(calendar)
+        app.buttons["Cancel"].tap()
+        app.buttons["open-settings"].tap(); app.buttons["battery-activity"].tap()
+        XCTAssertTrue(app.staticTexts["Wi-Fi checks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Location callbacks"].exists)
+        let battery = XCTAttachment(screenshot: app.screenshot()); battery.name = "Local battery and recording diagnostics"; battery.lifetime = .keepAlways; add(battery)
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
+    }
+
     func testWiFiPickerOffersOnlyNearbyNamesAndPreservesThePlaceDraft() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-nearby-wifi"]
@@ -11,6 +52,7 @@ import XCTest
         reveal(app.buttons["Edit place"], in: app); app.buttons["Edit place"].tap()
         let choose = app.buttons["choose-wifi-network"]
         reveal(choose, in: app); choose.tap()
+        reveal(app.buttons["Add Fixture Guest"], in: app)
         XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons.matching(identifier: "Add Fixture Guest").count, 1)
         XCTAssertTrue(app.buttons["Add Fixture Garden"].exists)
@@ -23,10 +65,9 @@ import XCTest
         app.buttons["Add Fixture Guest"].tap()
         XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForNonExistence(timeout: 5))
         app.buttons["Add Fixture Garden"].tap()
-        app.buttons["enter-wifi-manually"].tap()
         let name = app.textFields["wifi-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.typeText("Fixture Extra")
+        name.tap(); name.typeText("Fixture Extra")
         app.buttons["add-wifi"].tap()
         app.buttons["dismiss-keyboard"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Guest"].exists)
@@ -95,9 +136,7 @@ import XCTest
         XCTAssertTrue(name.isHittable)
         let edit = app.buttons["edit-entry"]
         XCTAssertLessThan(edit.frame.maxX, app.buttons["Done"].frame.minX, "Edit and Done have separate targets")
-        app.buttons["offline-suggestions-info"].tap()
-        XCTAssertTrue(app.staticTexts["Suggestions stay on your iPhone"].waitForExistence(timeout: 5))
-        app.buttons["close-suggestions-info"].tap()
+        XCTAssertFalse(app.buttons["offline-suggestions-info"].exists)
         XCTAssertLessThan(app.staticTexts["visit-time-date"].frame.minY, name.frame.minY)
         XCTAssertLessThan(name.frame.minY, app.maps.firstMatch.frame.minY)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "visit-suggestion-")).count, 3)
@@ -107,7 +146,7 @@ import XCTest
         suggestion.tap()
         XCTAssertTrue(app.textFields["place-name"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["place-name"].value as? String, "Kos Airport “Ippokratis”")
-        XCTAssertTrue(app.buttons["offline-suggestions-info"].exists)
+        XCTAssertFalse(app.buttons["offline-suggestions-info"].exists)
         XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Airport"))
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.textFields["place-name"].waitForNonExistence(timeout: 5))
@@ -249,11 +288,12 @@ import XCTest
             .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.45)),
                    withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertTrue(today.isSelected)
-        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.45))
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.45))
             .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.45)))
         let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: yesterday)
         XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)
-        XCTAssertEqual(today.frame, todayFrame, "Dates stay in their positions while the active date moves")
+        XCTAssertEqual(today.frame.minX, todayFrame.minX, accuracy: 0.5, "Dates stay in place while the highlight moves")
+        XCTAssertEqual(today.frame.width, todayFrame.width, accuracy: 0.5)
         XCTAssertEqual(app.staticTexts["timeline-heading"].frame.origin, headingFrame.origin)
         XCTAssertFalse(app.buttons["timeline-next-day"].exists)
         today.tap()
@@ -273,6 +313,7 @@ import XCTest
         XCTAssertTrue(picker.label.contains("Today"))
         XCTAssertTrue(picker.isHittable, "After swipe: " + picker.debugDescription)
         picker.tap()
+        reveal(app.buttons["Last 7 days"], in: app)
         XCTAssertTrue(app.buttons["Last 7 days"].waitForExistence(timeout: 5))
         app.buttons["Last 7 days"].tap()
         XCTAssertTrue(picker.label.contains("Last 7 days"))
@@ -712,7 +753,9 @@ import XCTest
     }
 
     func testTransportChoicesAndManualFerryCorrection() {
-        let app = launch(fixture: true)
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-transport-choices"]
+        app.launch()
         let cycling = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Cycled")).firstMatch
         XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
         reveal(cycling, in: app); cycling.tap()

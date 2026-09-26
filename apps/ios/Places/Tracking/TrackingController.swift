@@ -41,6 +41,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     private var hasStarted = false
     private var enabled = false
     private var foreground = true
+    private var energy = EnergyCounters()
     private var standardActive = false
     private var motionActive = false
     private var motionTime = Date.distantPast
@@ -156,6 +157,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     func sceneChanged(isForeground: Bool) {
         foreground = isForeground
+        recordEnergyCheckpoint(reason: isForeground ? "App entered foreground." : "App entered background.")
         refreshAuthorization()
         reconcile()
         if isForeground {
@@ -165,6 +167,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     func clearSensitiveState() {
         sensorGeneration += 1
+        energy = EnergyCounters()
         invalidateWiFi()
         currentLocation = nil; currentSSID = nil; currentBSSID = nil; currentWiFiObservation = nil; candidate = nil; places = []
         networks = []; accessPoints = []; departureNeedsFixAfter = nil
@@ -207,6 +210,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         wifiPathMonitor?.cancel(); wifiPathMonitor = nil
         settlingTask?.cancel(); endRecovery()
         live.stopUpdatingLocation(); standardActive = false
+        energy.setStandardLocation(active: false, uptime: ProcessInfo.processInfo.systemUptime)
         passive.stopMonitoringSignificantLocationChanges(); passive.stopMonitoringVisits()
         for region in passive.monitoredRegions { passive.stopMonitoring(for: region) }
         monitoredRegionCount = 0
@@ -233,6 +237,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     func receivedMotion(_ kind: MotionKind, at time: Date) {
         guard hasStarted else { return }
+        energy.motionCallbacks += 1
         onObservations?([SensorObservation(timestamp: time, source: .motion, motion: kind)])
         guard abs(Date().timeIntervalSince(time)) <= 300, time >= motionTime else { return }
         motion = kind; motionTime = time
@@ -253,15 +258,45 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         if policy.standardUpdates && !standardActive { live.startUpdatingLocation() }
         if !policy.standardUpdates && standardActive { live.stopUpdatingLocation() }
         standardActive = policy.standardUpdates
+        energy.setStandardLocation(active: standardActive, uptime: ProcessInfo.processInfo.systemUptime)
         if changed {
-            onEvent?(TrackingEvent(timestamp: Date(), state: resolved, reason: reason,
-                previousStateDuration: hasStarted ? Date().timeIntervalSince(enteredState) : 0,
-                standardLocationActive: standardActive,
-                build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "development"))
-            enteredState = Date(); state = resolved
+            state = resolved
+            recordEnergyCheckpoint(reason: reason)
         }
     }
+    func energySnapshot() -> EnergySnapshot {
+        var snapshot = energy.snapshot(uptime: ProcessInfo.processInfo.systemUptime)
+        let level = UIDevice.current.batteryLevel
+        snapshot.batteryLevel = level >= 0 ? Double(level) : nil
+        switch UIDevice.current.batteryState {
+        case .charging: snapshot.batteryState = "Charging"
+        case .full: snapshot.batteryState = "Full"
+        case .unplugged: snapshot.batteryState = "On battery"
+        default: snapshot.batteryState = "Unavailable"
+        }
+        snapshot.lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: snapshot.thermalState = "Normal"
+        case .fair: snapshot.thermalState = "Warm"
+        case .serious: snapshot.thermalState = "Hot"
+        case .critical: snapshot.thermalState = "Critical"
+        @unknown default: snapshot.thermalState = "Unknown"
+        }
+        snapshot.foreground = foreground
+        return snapshot
+    }
+    func recordEnergyCheckpoint(reason: String = "Activity snapshot requested.") {
+        var event = TrackingEvent(timestamp: Date(), state: state, reason: reason,
+            previousStateDuration: hasStarted ? Date().timeIntervalSince(enteredState) : 0,
+            standardLocationActive: standardActive,
+            build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "development")
+        event.energy = energySnapshot()
+        enteredState = event.timestamp
+        onEvent?(event)
+    }
+
     private func powerChanged() {
+        recordEnergyCheckpoint(reason: "Battery or power state changed.")
         guard hasStarted else { return }
         if state == .lowPowerFallback { readWiFi(force: true, fallback: .recovery) }
         else { transition(state, reason: "The power policy changed.") }
@@ -351,6 +386,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
                           TrackingPolicy.sameStationaryArea(self.makeObservation(anchor, source: .location), self.makeObservation(latest, source: .location)) else { return }
                     // Obtain a fresh sample before treating a quiet sensor as proof of a stop.
                     self.live.stopUpdatingLocation(); self.standardActive = false
+                    self.energy.setStandardLocation(active: false, uptime: ProcessInfo.processInfo.systemUptime)
+                    self.energy.singleLocationRequests += 1
                     self.live.requestLocation()
                     self.beginRecoveryDeadline()
                 }
@@ -429,6 +466,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
                   self.sensorGeneration == expectedGeneration else { return }
             self.wifiUnavailable(fallback: next)
         }
+        energy.wifiReads += 1
         wifiReader { [weak self] network in
             guard let self, self.wifiCheckID == request, self.sensorGeneration == expectedGeneration,
                   self.canLocate, self.accuracy == .fullAccuracy else { return }
@@ -480,7 +518,9 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard hasStarted else { return }
+        energy.locationCallbacks += 1
         let accepted = locations.filter { $0.horizontalAccuracy >= 0 && $0.timestamp <= Date().addingTimeInterval(60) }
+        energy.locationSamples += accepted.count
         onObservations?(accepted.map { makeObservation($0, source: manager === passive ? .significantChange : .location) })
         guard let latest = accepted.max(by: { $0.timestamp < $1.timestamp }), Date().timeIntervalSince(latest.timestamp) <= 120 else { return }
         currentLocation = latest

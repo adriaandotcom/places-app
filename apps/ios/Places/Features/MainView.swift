@@ -69,65 +69,40 @@ struct TimelineView: View {
     private var placeCount: Int { Set(model.timeline.filter { $0.kind == .stay }.map { $0.placeID ?? "unknown-\($0.id)" }).count }
 
     @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var visibleWeekEnd = Calendar.current.startOfDay(for: Date())
-
+    @State private var dayProgress: CGFloat = 0
+    @State private var settings = false
+    private var heading: String {
+        if model.timeline.isEmpty { return "Your day,\nremembered." }
+        if placeCount == 1 { return "\(title) you were\nat 1 place" }
+        if placeCount == 0 { return "\(title)’s timeline" }
+        return "\(title) you went\nto \(placeCount) places"
+    }
     var body: some View {
         VStack(spacing: Layout.spacing) {
-            VStack(alignment: .leading, spacing: Layout.spacing) {
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                HStack(alignment: .top) {
+                    Text(heading).font(typeSize.isAccessibilitySize ? BrandFont.title : BrandFont.heading)
+                        .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("timeline-heading")
+                    Spacer(minLength: Layout.compact)
+                    Button("Settings", systemImage: "slider.horizontal.3") { settings = true }
+                        .labelStyle(.iconOnly).frame(width: Layout.touchTarget, height: Layout.touchTarget)
+                        .accessibilityIdentifier("open-settings")
+                }
                 HStack {
-                    Label(model.tracking.state.title, systemImage: model.tracking.state == .paused ? "pause.circle" : "location.circle")
-                        .font(.caption.weight(.medium)).foregroundStyle(Palette.muted)
+                    Text(model.selectedDay.formatted(.dateTime.month(.wide).year())).font(.subheadline).foregroundStyle(Palette.muted)
                     Spacer()
                     Button { showDate = true } label: { Image(systemName: "calendar").frame(width: 44, height: 44) }
                         .accessibilityLabel("Choose date")
                 }
-                Text(model.timeline.isEmpty ? "Your day,\nremembered." : "\(title) you went\nto \(placeCount) \(placeCount == 1 ? "place" : "places")")
-                    .font(typeSize.isAccessibilitySize ? BrandFont.title : BrandFont.hero)
-                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("timeline-heading")
-                dayPicker
-            }.padding(.horizontal, Layout.gutter)
-            TimelinePager(select: { selected = $0 }, addPlace: { addPlace = true })
+                TimelineDayStrip(progress: dayProgress)
+            }.padding(.horizontal, Layout.gutter).padding(.top, Layout.compact)
+            TimelinePager(progress: $dayProgress, select: { selected = $0 }, addPlace: { addPlace = true })
         }.background(Palette.background).foregroundStyle(Palette.ink)
-            .navigationTitle("Places").navigationBarTitleDisplayMode(.inline)
-            .toolbar { SettingsToolbar() }
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
             .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) } }
             .sheet(isPresented: $addPlace) { NavigationStack { PlaceEditor() } }
-            .sheet(isPresented: $showDate) {
-                NavigationStack {
-                    DatePicker("Date", selection: Binding(get: { model.selectedDay }, set: { model.selectDay($0) }), in: ...Date(), displayedComponents: .date)
-                        .datePickerStyle(.graphical).padding().navigationTitle("Your history")
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showDate = false } } }
-                }.presentationDetents([.medium, .large])
-            }
-            .onChange(of: model.selectedDay, initial: true) { _, selected in
-                let start = Calendar.current.date(byAdding: .day, value: -6, to: visibleWeekEnd)!
-                let day = Calendar.current.startOfDay(for: selected)
-                if day < start { visibleWeekEnd = Calendar.current.date(byAdding: .day, value: 6, to: day)! }
-                else if day > visibleWeekEnd { visibleWeekEnd = day }
-            }
-    }
-
-    private var dayPicker: some View {
-        HStack(spacing: 7) {
-            ForEach(-6...0, id: \.self) { offset in
-                let day = Calendar.current.date(byAdding: .day, value: offset, to: visibleWeekEnd)!
-                let selected = Calendar.current.isDate(day, inSameDayAs: model.selectedDay)
-                Button { model.selectDay(day) } label: {
-                    VStack(spacing: 8) {
-                        Text(day.formatted(.dateTime.weekday(.abbreviated))).font(.caption2)
-                        Text(day.formatted(.dateTime.day())).font(BrandFont.title)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .foregroundStyle(selected ? Palette.background : Palette.ink)
-                        .background(selected ? Palette.ink : Palette.paper, in: RoundedRectangle(cornerRadius: 18))
-                }.buttonStyle(.plain).accessibilityLabel(day.formatted(date: .complete, time: .omitted))
-                    .accessibilityIdentifier("timeline-day-\(offset)")
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                    .disabled(day > Calendar.current.startOfDay(for: Date()))
-            }
-        }.accessibilityElement(children: .contain)
-            .accessibilityLabel("Timeline date")
-            .accessibilityValue(model.selectedDay.formatted(date: .complete, time: .omitted))
-            .accessibilityAdjustableAction { direction in model.shiftDay(direction == .increment ? 1 : -1) }
+            .sheet(isPresented: $showDate) { NavigationStack { HistoryDatePicker(timelineOnly: true) } }
     }
 }
 

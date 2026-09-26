@@ -29,7 +29,7 @@ struct OfflineMapView: View {
     @State private var selectedPlace: Place?
     @State private var showSettings = false
     @State private var suggestedPack: MapPack?
-    @State private var offered = false
+    @State private var offered: Set<MapPack.ID> = []
     @State private var settleTask: Task<Void, Never>?
     @State private var mapIssue: String?
     var body: some View {
@@ -78,16 +78,21 @@ struct OfflineMapView: View {
         if model.mapDownloads.transfers.values.contains(where: { $0.phase == .paused || $0.phase == .failed }) { return "Map download paused · Maps settings" }
         return nil
     }
-    private func suggestCountry(_ center: Coordinate, _ zoom: Double) {
+    private func suggestCountry(_ viewport: MapViewport, _ zoom: Double) {
         settleTask?.cancel()
         settleTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.2))
-            guard !Task.isCancelled, pinChanged == nil, model.mapDownloads.installed[.world] != nil,
-                  let id = OfflineMapCoverage.country(at: center),
-                  MapDownloadPolicy.canSuggest(id: id, zoom: zoom, installed: Set(model.mapDownloads.installed.keys),
-                    pending: model.mapDownloads.pending, dismissedAt: model.mapDownloads.dismissedAt(id), now: Date(), offeredThisSession: offered),
-                  let pack = model.mapDownloads.pack(id) else { return }
-            offered = true; suggestedPack = pack
+            guard !Task.isCancelled, pinChanged == nil, model.mapDownloads.installed[.world] != nil else { return }
+            let candidates = OfflineMapCoverage.countries(in: viewport)
+            if let current = suggestedPack, (!candidates.contains(current.id) || zoom < 8 || model.mapDownloads.installed[current.id] != nil) {
+                suggestedPack = nil
+            }
+            guard suggestedPack == nil,
+                  let id = candidates.first(where: {
+                    MapDownloadPolicy.canSuggest(id: $0, zoom: zoom, installed: Set(model.mapDownloads.installed.keys),
+                        pending: model.mapDownloads.pending, dismissedAt: model.mapDownloads.dismissedAt($0), now: Date(), offeredThisSession: offered)
+                  }), let pack = model.mapDownloads.pack(id) else { return }
+            offered.insert(id); suggestedPack = pack
         }
     }
 }
@@ -99,7 +104,7 @@ private struct OfflineMapSurface: UIViewRepresentable {
     @Binding var viewport: MapViewport?
     let pinChanged: ((Coordinate) -> Void)?
     let selected: (MapPin) -> Void
-    let settled: (Coordinate, Double) -> Void
+    let settled: (MapViewport, Double) -> Void
     let failed: () -> Void
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MLNMapView {
@@ -150,9 +155,10 @@ private struct OfflineMapSurface: UIViewRepresentable {
             guard framed else { return }
             let bounds = mapView.visibleCoordinateBounds
             let center = Coordinate(latitude: mapView.centerCoordinate.latitude, longitude: mapView.centerCoordinate.longitude)
-            parent.viewport = MapViewport(center: center, latitudeSpan: max(0.0001, bounds.ne.latitude - bounds.sw.latitude),
+            let viewport = MapViewport(center: center, latitudeSpan: max(0.0001, bounds.ne.latitude - bounds.sw.latitude),
                 longitudeSpan: max(0.0001, bounds.ne.longitude - bounds.sw.longitude))
-            parent.settled(center, mapView.zoomLevel)
+            parent.viewport = viewport
+            parent.settled(viewport, mapView.zoomLevel)
         }
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             guard let map = gesture.view as? MLNMapView else { return }

@@ -3,10 +3,11 @@ import UIKit
 import PlacesCore
 
 /// UIKit owns the gesture, deceleration and cancellation. Only the history below
-/// the date strip moves. The 44pt edge bands avoid stealing ordinary vertical drags.
+/// the date strip moves. The 77pt edge bands avoid stealing ordinary vertical drags.
 struct TimelinePager: UIViewControllerRepresentable {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var progress: CGFloat
     let select: (TimelineItem) -> Void
     let addPlace: () -> Void
 
@@ -15,6 +16,10 @@ struct TimelinePager: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ controller: TimelinePagerController, context: Context) {
         controller.changeDay = { model.selectDay($0) }
+        controller.progressChanged = { value in
+            // UIKit can recenter while SwiftUI is updating this controller.
+            Task { @MainActor in if progress != value { progress = value } }
+        }
         controller.makePage = { day in
             AnyView(TimelineDayPage(day: day, select: select, addPlace: addPlace).environment(model))
         }
@@ -26,6 +31,7 @@ struct TimelinePager: UIViewControllerRepresentable {
 final class TimelinePagerController: UIViewController, UIScrollViewDelegate {
     let scroll = TimelinePagingScrollView()
     var changeDay: ((Date) -> Void)?
+    var progressChanged: ((CGFloat) -> Void)?
     var makePage: ((Date) -> AnyView)?
     private var selectedDay: Date?
     private var days: [Date] = []
@@ -77,6 +83,7 @@ final class TimelinePagerController: UIViewController, UIScrollViewDelegate {
         }
         layoutPages(recenter: true)
         rebuilding = false
+        progressChanged?(0)
     }
 
     override func viewDidLayoutSubviews() {
@@ -101,6 +108,10 @@ final class TimelinePagerController: UIViewController, UIScrollViewDelegate {
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { settle() }
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if !rebuilding, width > 0, scroll.allowsDayChange, let selectedDay, let index = days.firstIndex(of: selectedDay) {
+            progressChanged?(max(-1, min(1, scroll.contentOffset.x / width - CGFloat(index))))
+        }
+
         // Still recognize a sideways drag in the middle so it cancels a card
         // tap, but only an edge-started gesture is allowed to move the history.
         guard !rebuilding, !scroll.allowsDayChange, scroll.isDragging,
@@ -137,7 +148,7 @@ final class TimelinePagingScrollView: UIScrollView {
             let velocity = panGestureRecognizer.velocity(in: self)
             let translation = panGestureRecognizer.translation(in: self)
             let start = panGestureRecognizer.location(in: self).x - translation.x - bounds.minX
-            let edge: CGFloat = 44
+            let edge: CGFloat = 77
             guard abs(velocity.x) > abs(velocity.y) * 1.4 else { return false }
             allowsDayChange = start <= edge || start >= bounds.width - edge
         }

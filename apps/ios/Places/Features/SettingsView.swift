@@ -21,6 +21,7 @@ struct SettingsView: View {
                 Toggle("Record my history", isOn: Binding(get: { model.trackingEnabled }, set: { value in Task { await model.setTrackingEnabled(value) } })).tint(Palette.controlGreen)
                     .accessibilityIdentifier("tracking-toggle")
                 LabeledContent("Status", value: model.tracking.state.title)
+                NavigationLink("Battery & recording activity") { BatteryActivityView() }.accessibilityIdentifier("battery-activity")
                 if model.storageNeedsRetry {
                     Text("Recording is paused until your history can be saved.").foregroundStyle(Palette.muted)
                     Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }
@@ -210,6 +211,7 @@ private struct AboutPlacesView: View {
                 LabeledContent("Version", value: "\(version) (\(build))")
             }
             Section {
+                NavigationLink("Place suggestions") { PlaceSuggestionsAboutView() }
                 NavigationLink("Offline place data") { OfflinePlaceDataView() }
                 NavigationLink("Third-party licenses") { LicensesView() }
             }

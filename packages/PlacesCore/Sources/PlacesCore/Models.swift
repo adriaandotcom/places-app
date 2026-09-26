@@ -226,6 +226,7 @@ public struct TrackingEvent: Codable, Identifiable, Sendable {
     public var timestamp: Date
     public var state: TrackingState
     public var reason: String
+    public var energy: EnergySnapshot?
     public var previousStateDuration: TimeInterval
     public var standardLocationActive: Bool
     public var policyVersion: String
@@ -261,6 +262,7 @@ public struct DiagnosticReport: Codable, Sendable {
     public let stateDurations: [String: Double]
     public let locationFixCount: Int
     public let standardLocationSeconds: Double
+    public var energy: EnergySummary? = nil
     public let note: String
 }
 

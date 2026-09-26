@@ -56,11 +56,34 @@ import PlacesCore
 // Point-in-polygon on bundled country boundaries. Map browsing never calls a
 // geocoder to decide which download to suggest; islands and holes are retained.
 @MainActor enum OfflineMapCoverage {
+    private static let boundaries: [MapPack.ID: [[[[Double]]]]] = Dictionary(uniqueKeysWithValues: MapPack.ID.allCases.filter { $0 != .world }.compactMap { id in
+        guard let geometry = OfflineMapStyle.geometry(id), let raw = geometry["coordinates"] else { return nil }
+        let polygons = geometry["type"] as? String == "Polygon" ? [(raw as? [[[Double]]]) ?? []] : (raw as? [[[[Double]]]]) ?? []
+        return (id, polygons)
+    })
+
+    static func countries(in viewport: MapViewport) -> [MapPack.ID] {
+        let south = viewport.center.latitude - viewport.latitudeSpan / 2
+        let north = viewport.center.latitude + viewport.latitudeSpan / 2
+        let west = viewport.center.longitude - viewport.longitudeSpan / 2
+        let east = viewport.center.longitude + viewport.longitudeSpan / 2
+        let corners = [Coordinate(latitude: south, longitude: west), Coordinate(latitude: south, longitude: east),
+                       Coordinate(latitude: north, longitude: west), Coordinate(latitude: north, longitude: east)]
+        let centerCountry = country(at: viewport.center)
+        return MapPack.ID.allCases.filter { id in
+            guard id != .world else { return false }
+            if id == centerCountry || corners.contains(where: { country(at: $0) == id }) { return true }
+            return boundaries[id, default: []].contains { polygon in
+                guard let ring = polygon.first else { return false }
+                // A country island can be visible even when the camera centre is at sea.
+                return ring.contains { point in point.count >= 2 && (west...east).contains(point[0]) && (south...north).contains(point[1]) }
+            }
+        }.sorted { $0 == centerCountry && $1 != centerCountry }
+    }
+
     static func country(at coordinate: Coordinate) -> MapPack.ID? {
         for id in MapPack.ID.allCases where id != .world {
-            guard let geometry = OfflineMapStyle.geometry(id), let raw = geometry["coordinates"] else { continue }
-            let polygons = geometry["type"] as? String == "Polygon" ? [(raw as? [[[Double]]]) ?? []] : (raw as? [[[[Double]]]]) ?? []
-            for polygon in polygons {
+            for polygon in boundaries[id, default: []] {
                 guard let outer = polygon.first, contains(coordinate, ring: outer) else { continue }
                 if !polygon.dropFirst().contains(where: { contains(coordinate, ring: $0) }) { return id }
             }

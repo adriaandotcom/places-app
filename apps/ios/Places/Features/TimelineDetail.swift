@@ -12,6 +12,7 @@ struct TimelineDetail: View {
         let suggestion: CatalogPlace?
     }
     @State private var suggestions: [CatalogPlace] = []
+    @State private var adjacent: [AdjacentPlaceSuggestion] = []
     @State private var splitting = false
     @State private var didSplit = false
     @State private var createdPlace = false
@@ -46,13 +47,12 @@ struct TimelineDetail: View {
                         namingDraft = NamingDraft(suggestion: nil)
                     }.buttonStyle(PrimaryButton()).accessibilityIdentifier("assign-place")
                 }
+                if (isUnnamedStay || item.kind == .gap) && !adjacent.isEmpty {
+                    AdjacentPlaceRows(suggestions: adjacent) { place in correct(kind: .stay, placeID: place.id) }
+                }
                 if isUnnamedStay && !suggestions.isEmpty {
                     VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text("Nearby suggestions").font(.subheadline.weight(.semibold))
-                            Spacer()
-                            OfflineSuggestionsInfoButton()
-                        }.padding(.horizontal, Layout.spacing)
+                        Text("Nearby suggestions").font(.subheadline.weight(.semibold)).padding(.horizontal, Layout.spacing)
                         ForEach(suggestions) { candidate in
                             Button {
                                 namingDraft = NamingDraft(suggestion: candidate)
@@ -120,6 +120,7 @@ struct TimelineDetail: View {
             }.padding(Layout.gutter)
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .task(id: item) {
+                adjacent = (try? await model.store?.adjacentPlaces(for: item)) ?? []
                 transportSuggestions = (try? await model.store?.transportSuggestions(for: item)) ?? .none
                 if isUnnamedStay, let point = item.coordinate {
                     suggestions = (try? await PlaceCatalog.shared.nearby(point, limit: 3)) ?? []

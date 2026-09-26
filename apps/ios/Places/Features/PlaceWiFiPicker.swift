@@ -8,50 +8,7 @@ struct WiFiSuggestionQuery: Equatable {
     var revision: Int
 }
 
-struct PlaceWiFiPicker: View {
-    @Environment(\.dismiss) private var dismiss
-    let suggestions: [WiFiSuggestion]
-    let add: (WiFiSuggestion) -> Void
-    let enterName: () -> Void
-    @State private var search = ""
-    private var matching: [WiFiSuggestion] {
-        suggestions.filter { search.isEmpty || $0.ssid.localizedStandardContains(search) }
-    }
-
-    var body: some View {
-        List {
-            if matching.contains(where: \.isConnected) {
-                Section("Connected now") {
-                    ForEach(matching.filter(\.isConnected)) { suggestion in
-                        WiFiSuggestionRow(suggestion: suggestion) { add(suggestion) }
-                    }
-                }
-            }
-            if matching.contains(where: { !$0.isConnected }) {
-                Section("Seen nearby") {
-                    ForEach(matching.filter { !$0.isConnected }) { suggestion in
-                        WiFiSuggestionRow(suggestion: suggestion) { add(suggestion) }
-                    }
-                }
-            }
-            if matching.isEmpty {
-                Text(search.isEmpty ? "No more networks to add here." : "No matching networks.")
-                    .foregroundStyle(Palette.muted)
-            }
-            Section {
-                Button("Enter Wi-Fi name…", systemImage: "keyboard", action: enterName)
-                    .accessibilityIdentifier("enter-wifi-manually")
-            } footer: {
-                Text("Networks Places has observed around this location. Saved only on this iPhone.")
-            }
-        }.scrollContentBackground(.hidden).background(Palette.background)
-            .navigationTitle("Add Wi-Fi to this place").navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $search, prompt: "Find a network")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-    }
-}
-
-private struct WiFiSuggestionRow: View {
+struct WiFiSuggestionRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let suggestion: WiFiSuggestion
     let add: () -> Void
@@ -63,7 +20,8 @@ private struct WiFiSuggestionRow: View {
                 }
                 VStack(alignment: .leading, spacing: Layout.compact) {
                     Text(suggestion.ssid).foregroundStyle(Palette.ink)
-                    if !suggestion.isConnected {
+                    if suggestion.isConnected { Text("Connected now").font(.caption).foregroundStyle(Palette.green) }
+                    else {
                         Text("Last seen \(suggestion.lastSeen.formatted(date: .abbreviated, time: .omitted))")
                             .font(.caption).foregroundStyle(Palette.muted)
                     }

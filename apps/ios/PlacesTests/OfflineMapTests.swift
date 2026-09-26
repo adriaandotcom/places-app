@@ -72,6 +72,24 @@ import PlacesCore
         XCTAssertTrue(manager.ready)
     }
 
+    func testDownloadCoverageIncludesVisibleGreekIslandsWithCameraAtSea() {
+        for point in [Coordinate(latitude: 36.85, longitude: 27.16), Coordinate(latitude: 35.3, longitude: 24.8),
+                      Coordinate(latitude: 37.98, longitude: 23.72), Coordinate(latitude: 52.37, longitude: 4.9)] {
+            let viewport = MapViewport(center: point, latitudeSpan: 0.4, longitudeSpan: 0.4)
+            let expected: MapPack.ID = point.latitude > 50 ? .netherlands : .greece
+            XCTAssertTrue(OfflineMapCoverage.countries(in: viewport).contains(expected))
+        }
+        XCTAssertTrue(OfflineMapCoverage.countries(in: MapViewport(center: Coordinate(latitude: 36.8, longitude: 27.3),
+            latitudeSpan: 0.3, longitudeSpan: 0.3)).contains(.greece))
+        XCTAssertTrue(OfflineMapCoverage.countries(in: MapViewport(center: Coordinate(latitude: 0, longitude: 0),
+            latitudeSpan: 0.3, longitudeSpan: 0.3)).isEmpty)
+        let offered: Set<MapPack.ID> = [.netherlands]
+        for id in MapPack.ID.allCases where id != .world {
+            XCTAssertEqual(MapDownloadPolicy.canSuggest(id: id, zoom: 9, installed: [], pending: [],
+                dismissedAt: nil, now: Date(), offeredThisSession: offered), id != .netherlands)
+        }
+    }
+
     func testBundledManifestIsCompleteAndLimitedToImmutableReleaseAssets() throws {
         let downloads = MapDownloads(testing: true)
         XCTAssertEqual(Set(downloads.packs.map(\.id)), Set(MapPack.ID.allCases))

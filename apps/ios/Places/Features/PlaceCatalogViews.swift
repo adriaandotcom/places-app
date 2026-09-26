@@ -1,31 +1,16 @@
 import SwiftUI
 import PlacesCore
 
-struct OfflineSuggestionsInfoButton: View {
-    @State private var showing = false
+struct PlaceSuggestionsAboutView: View {
     var body: some View {
-        Button("About place suggestions", systemImage: "info.circle") { showing = true }
-            .labelStyle(.iconOnly).buttonStyle(.plain)
-            .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-            .foregroundStyle(Palette.green)
-            .accessibilityIdentifier("offline-suggestions-info")
-            .sheet(isPresented: $showing) {
-                NavigationStack {
-                    ScrollView {
-                    VStack(alignment: .leading, spacing: Layout.spacing) {
-                        Label("Suggestions stay on your iPhone", systemImage: "iphone.gen3")
-                            .font(BrandFont.title)
-                        Text("Places searches local area databases. Your location, searches and history aren’t sent to a place-search service.")
-                        Text("Amsterdam and Kos are included with the app. More downloadable areas are planned.")
-                            .foregroundStyle(Palette.muted)
-                        NavigationLink("Included areas & sources") { OfflinePlaceDataView() }
-                    }.font(BrandFont.body).padding(Layout.gutter)
-                    }
-                        .background(Palette.background).foregroundStyle(Palette.ink)
-                        .navigationTitle("Place suggestions").navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showing = false }.accessibilityIdentifier("close-suggestions-info") } }
-                }.presentationDetents([.medium, .large])
+        List {
+            Section {
+                Text("Places searches local area databases. Your location, searches and history aren’t sent to a place-search service.")
+                Text("Amsterdam and Kos are included with the app. More downloadable areas are planned.").foregroundStyle(Palette.muted)
             }
+            NavigationLink("Included areas & sources") { OfflinePlaceDataView() }
+        }.scrollContentBackground(.hidden).background(Palette.background)
+            .navigationTitle("Place suggestions").navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -94,7 +79,6 @@ struct PlaceCatalogSearch: View {
             .navigationTitle("Find a place").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .topBarTrailing) { OfflineSuggestionsInfoButton() }
             }
             .task(id: searchKey) {
                 results = []; failed = false

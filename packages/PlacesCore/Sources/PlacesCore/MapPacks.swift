@@ -55,8 +55,8 @@ public enum MapDownloadPolicy {
         available >= packBytes * 2 + 50_000_000
     }
     public static func canSuggest(id: MapPack.ID, zoom: Double, installed: Set<MapPack.ID>, pending: Set<MapPack.ID>,
-                                  dismissedAt: Date?, now: Date, offeredThisSession: Bool) -> Bool {
-        id != .world && zoom >= 8 && !installed.contains(id) && !pending.contains(id) && !offeredThisSession
+                                  dismissedAt: Date?, now: Date, offeredThisSession: Set<MapPack.ID>) -> Bool {
+        id != .world && zoom >= 8 && !installed.contains(id) && !pending.contains(id) && !offeredThisSession.contains(id)
         && (dismissedAt.map { now.timeIntervalSince($0) >= 7 * 24 * 60 * 60 } ?? true)
     }
 }

@@ -23,7 +23,8 @@ struct PlaceEditor: View {
     @State private var wifiError: String?
     @State private var removingWiFi: String?
     @State private var choosingWiFi = false
-    @State private var enteringWiFiAfterPicker = false
+    @State private var wifiSearch = ""
+    @State private var adjacent: [AdjacentPlaceSuggestion] = []
     @State private var wifiSuggestions: [WiFiSuggestion] = []
     @State private var wifiSuggestionsUnavailable = false
     @State private var choosingIcon = false
@@ -105,6 +106,9 @@ struct PlaceEditor: View {
                     }.accessibilityIdentifier("choose-saved-place")
                 }
             }
+            if !adjacent.isEmpty {
+                Section("From your timeline") { AdjacentPlaceRows(suggestions: adjacent, select: useSavedPlace) }
+            }
             Section {
                 Button("Find a place", systemImage: "magnifyingglass") { choosingCatalog = true }
                     .accessibilityIdentifier("find-catalog-place")
@@ -118,11 +122,7 @@ struct PlaceEditor: View {
                     if let catalogMessage { Text(catalogMessage).font(.footnote).foregroundStyle(Palette.muted) }
                 }
             } header: {
-                HStack {
-                    Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions")
-                    Spacer()
-                    OfflineSuggestionsInfoButton()
-                }
+                Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions")
             }
             Section("Details") {
                 TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
@@ -238,8 +238,17 @@ struct PlaceEditor: View {
                     Button("Choose a network", systemImage: "wifi.badge.plus") {
                         focusedField = nil
                         if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
-                        choosingWiFi = true
+                        choosingWiFi.toggle()
                     }.accessibilityIdentifier("choose-wifi-network")
+                    if choosingWiFi {
+                        TextField("Find a network", text: $wifiSearch).autocorrectionDisabled().textInputAutocapitalization(.never)
+                            .accessibilityIdentifier("filter-wifi-networks")
+                        ForEach(availableWiFi.filter { wifiSearch.isEmpty || $0.ssid.localizedStandardContains(wifiSearch) }) { suggestion in
+                            WiFiSuggestionRow(suggestion: suggestion) {
+                                wifiNames.append(suggestion.ssid); wifiError = nil
+                            }
+                        }
+                    }
                 }
             } header: { Text("Wi-Fi networks") } footer: {
                 Text(wifiSuggestionsUnavailable ? "Suggestions couldn’t be loaded. You can enter a network name."
@@ -255,6 +264,7 @@ struct PlaceEditor: View {
             }
             .interactiveDismissDisabled(saving)
             .task {
+                if let assigning { adjacent = (try? await model.store?.adjacentPlaces(for: assigning)) ?? [] }
                 if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
                 // Reuse a fresh authorized fix; searching must never start sensors
                 // or silently set the new place's coordinates.
@@ -274,18 +284,6 @@ struct PlaceEditor: View {
                     wifiSuggestions = values
                 } catch is CancellationError { }
                 catch { if !Task.isCancelled { wifiSuggestionsUnavailable = true } }
-            }
-            .sheet(isPresented: $choosingWiFi, onDismiss: {
-                if enteringWiFiAfterPicker { enteringWiFiAfterPicker = false; focusedField = .wifi }
-            }) {
-                NavigationStack {
-                    PlaceWiFiPicker(suggestions: availableWiFi, add: { suggestion in
-                        if !wifiNames.contains(suggestion.ssid) { wifiNames.append(suggestion.ssid) }
-                        wifiError = nil
-                    }, enterName: {
-                        enteringWiFiAfterPicker = true; choosingWiFi = false
-                    })
-                }
             }
             .task(id: searchAnchor) {
                 nearbyPlaces = []; catalogMessage = nil

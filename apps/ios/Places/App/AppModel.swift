@@ -16,6 +16,7 @@ final class AppModel {
     private(set) var places: [Place] = []
     private(set) var timeline: [TimelineItem] = []
     private(set) var historyRevision = 0
+    private(set) var historyDays: [HistoryDay] = []
     private(set) var networks: [WiFiNetwork] = []
     private(set) var accessPoints: [WiFiAccessPoint] = []
     private(set) var recentObservations: [SensorObservation] = []
@@ -91,7 +92,20 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-nearby-wifi") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-transport-choices") {
+                        let calendar = Calendar.current
+                        let yesterday = calendar.date(byAdding: .day, value: -1, to: Date())!
+                        let evening = calendar.date(bySettingHour: 19, minute: 0, second: 0, of: yesterday)!
+                        try await DemoFixtures.seed(opened, now: evening)
+                        selectedDay = calendar.startOfDay(for: evening)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-gap-suggestions") {
+                        selectedDay = try await DemoFixtures.seedGapSuggestions(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-history-navigation") {
+                        try await DemoFixtures.seedHistoryNavigation(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-nearby-wifi") {
                         try await DemoFixtures.seedNearbyWiFi(opened)
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-wifi-recovery") {
@@ -141,6 +155,7 @@ final class AppModel {
         do {
             let newPlaces = try await store.places()
             let newTimeline = try await store.timeline(on: day)
+            let newDays = try await store.historyDays()
             let calendar = Calendar.current
             let interval = calendar.dateInterval(of: .day, for: day)!
             let newPoints = try await store.routePoints(from: interval.start, to: interval.end)
@@ -156,6 +171,7 @@ final class AppModel {
             let newObservations = nerdMode ? try await store.observations(limit: 80) : []
             let newEvents = nerdMode ? try await store.trackingEvents(limit: 60) : []
             guard !deleting, generation == expectedGeneration else { return }
+            historyDays = newDays
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
@@ -366,6 +382,7 @@ final class AppModel {
     func export(fullHistory: Bool) async {
         guard let store else { return }
         let expectedGeneration = generation
+        tracking.recordEnergyCheckpoint()
         await pendingWrite?.value
         do {
             let data = try await (fullHistory ? store.exportHistory() : store.exportDiagnostics())
@@ -400,7 +417,7 @@ final class AppModel {
         do {
             try mapDownloads.deleteAll()
             try await store.eraseHistory(resetSettings: true)
-            retryObservations = []; timeline = []; places = []; networks = []; accessPoints = []
+            retryObservations = []; timeline = []; historyDays = []; places = []; networks = []; accessPoints = []
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()
             exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil; storageNeedsRetry = false

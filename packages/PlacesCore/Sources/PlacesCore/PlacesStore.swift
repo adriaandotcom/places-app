@@ -193,6 +193,22 @@ public actor PlacesStore {
         }
     }
 
+    public func historyDays(now: Date = Date(), calendar: Calendar = .current) throws -> [HistoryDay] {
+        try queue.read { db in
+            let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")
+            let edits = try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
+            return HistoryDay.summarize(InferenceEngine.applying(edits, to: items), now: now, calendar: calendar)
+        }
+    }
+
+    public func adjacentPlaces(for item: TimelineItem) throws -> [AdjacentPlaceSuggestion] {
+        try queue.read { db in
+            let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")
+            let edits = try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
+            return AdjacentPlaceSuggestion.make(for: item, in: InferenceEngine.applying(edits, to: items))
+        }
+    }
+
     public func suggestedPeriods(now: Date = Date()) throws -> [HistoryPeriod] {
         guard let first = try queue.read({ try Double.fetchOne($0, sql: "SELECT MIN(start) FROM timeline") }),
               first < now.timeIntervalSince1970 else { return [] }
@@ -316,6 +332,7 @@ public actor PlacesStore {
                 stateDurations: durations,
                 locationFixCount: try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM observations WHERE source IN ('location','significantChange')") ?? 0,
                 standardLocationSeconds: activeTime,
+                energy: EnergySummary(snapshots: events.compactMap(\.energy)),
                 note: "Local policy counters, not a measurement of battery drain. No names, coordinates, network identifiers, or raw observations are included.")
         }
     }
