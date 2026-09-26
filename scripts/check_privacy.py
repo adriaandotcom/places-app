@@ -74,8 +74,10 @@ def audit(root):
     sources = list(native.rglob('*.swift')) + list((root / 'packages/PlacesCore/Sources').rglob('*.swift'))
     for source in sources:
         text = source.read_text()
-        if re.search(r'\b(URLSession|WKWebView|AsyncImage|CKContainer|MKLocalSearch|CLGeocoder|MKMapSnapshotter)\b', text):
+        if re.search(r'\b(WKWebView|AsyncImage|CKContainer|MKLocalSearch|CLGeocoder|MKMapSnapshotter)\b', text):
             errors.append(f'{source.name}: unapproved runtime network entry point')
+        if re.search(r'\bURLSession\b', text) and source != native / 'App/MapDownloads.swift':
+            errors.append(f'{source.name}: downloads must stay in the approved map pack adapter')
         if ('import MapKit' in text or 'MKReverseGeocodingRequest(' in text) and source.name != 'AppleMapsView.swift':
             errors.append(f'{source.name}: Maps must stay inside the consent-gated adapter')
         if re.search(r'https?://', text):
@@ -89,12 +91,56 @@ def audit(root):
         errors.append('City lookup must check live opt-in before constructing a request')
     if 'request?.cancel()' not in maps or 'generation == expected' not in maps:
         errors.append('City lookup must cancel and discard responses after consent revocation')
+    errors += check_map_resources(native / 'Resources/OfflineMaps')
+    downloads = (native / 'App/MapDownloads.swift').read_text()
+    for safeguard in ['pack.isValid', 'packs.contains(pack)', 'MapPackFiles.validate(', 'MapDownloadPolicy.canStart(',
+                      'configuration.allowsCellularAccess = approved', 'configuration.allowsConstrainedNetworkAccess = approved']:
+        if safeguard not in downloads:
+            errors.append(f'Map downloads missing safeguard: {safeguard}')
+    offline = (native / 'Features/OfflineMapView.swift').read_text()
+    if 'configuration.protocolClasses = [OfflineMapNetworkBlocker.self]' not in offline or 'URLError(.notConnectedToInternet)' not in offline:
+        errors.append('Offline renderer must block remote requests')
     manifest = plistlib.loads((native / 'Resources/PrivacyInfo.xcprivacy').read_bytes())
     if manifest.get('NSPrivacyTracking') or manifest.get('NSPrivacyTrackingDomains') or manifest.get('NSPrivacyCollectedDataTypes'):
         errors.append('privacy manifest unexpectedly declares tracking or collection')
     for asset in json.loads((root / 'asset-provenance.json').read_text()):
         if hashlib.sha256((root / asset['path']).read_bytes()).hexdigest() != asset['sha256']:
             errors.append(f'asset differs from recorded source: {asset["path"]}')
+    return errors
+
+
+def check_map_manifest(packs):
+    errors = []
+    if len(packs) != 3 or {p.get('id') for p in packs} != {'world', 'netherlands', 'greece'}:
+        errors.append('Map pack manifest must contain exactly the three supported packs')
+    for pack in packs:
+        version = pack.get('version', '')
+        expected = f'https://github.com/adriaandotcom/places-app/releases/download/maps-{version}/{pack.get("id")}.pmtiles'
+        if not re.fullmatch(r'[0-9.]+', version) or pack.get('url') != expected:
+            errors.append('Map pack URL must be an immutable Places release asset with no query or fragment')
+        if not re.fullmatch('[0-9a-f]{64}', pack.get('sha256', '')):
+            errors.append('Map pack must have a SHA-256 checksum')
+        size = pack.get('bytes', 0)
+        if not isinstance(size, int) or size <= 127 or (pack.get('id') == 'world' and size > 100_000_000):
+            errors.append('Map pack needs a measured size within the World ceiling')
+        if (pack.get('minZoom'), pack.get('maxZoom')) != ((0, 6) if pack.get('id') == 'world' else (7, 12)):
+            errors.append('Unexpected map pack zoom coverage')
+    return errors
+
+
+def check_map_resources(directory):
+    errors = check_map_manifest(json.loads((directory / 'packs.json').read_text()))
+    for name in ['style-light.json', 'style-dark.json']:
+        style = json.loads((directory / name).read_text())
+        # Runtime injects only local glyph/source URLs into these templates.
+        if style.get('sources') or style.get('glyphs') or style.get('sprite') or re.search(r'https?://', json.dumps(style)):
+            errors.append(f'{name}: map styles must not contain external resources')
+    for first in range(0, 65536, 256):
+        if not (directory / 'fonts/Noto Sans Regular' / f'{first}-{first + 255}.pbf').is_file():
+            errors.append('Missing bundled map font range')
+            break
+    if list(directory.rglob('*.pmtiles')):
+        errors.append('Map archives belong in release assets, not the application bundle')
     return errors
 
 

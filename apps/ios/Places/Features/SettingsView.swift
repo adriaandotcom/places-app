@@ -6,7 +6,6 @@ import PlacesCore
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @State private var confirmMaps = false
     @State private var confirmExport = false
     @State private var confirmTestExport = false
     @State private var confirmDelete = false
@@ -22,7 +21,10 @@ struct SettingsView: View {
                 Toggle("Record my history", isOn: Binding(get: { model.trackingEnabled }, set: { value in Task { await model.setTrackingEnabled(value) } })).tint(Palette.controlGreen)
                     .accessibilityIdentifier("tracking-toggle")
                 LabeledContent("Status", value: model.tracking.state.title)
-                Button("Retry storage", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }
+                if model.storageNeedsRetry {
+                    Text("Recording is paused until your history can be saved.").foregroundStyle(Palette.muted)
+                    Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }
+                }
             }
             Section("Permissions") {
                 Button { model.tracking.requestLocation() } label: { LabeledContent("Location", value: model.tracking.locationStatus) }
@@ -35,12 +37,14 @@ struct SettingsView: View {
                 Button("Open system settings") { model.tracking.openSettings() }
             }
             Section {
-                Toggle("Apple Maps", isOn: Binding(get: { model.mapsEnabled }, set: { value in
-                    if value { confirmMaps = true } else { Task { await model.setMapsEnabled(false) } }
-                })).tint(Palette.controlGreen).accessibilityIdentifier("maps-toggle")
-                NavigationLink("City & country lookup") { CityLookupSettings() }
-            } header: { Text("Optional Apple service") } footer: {
-                Text("Enabling maps sends requests to Apple for the areas you view. Turn this off to remove maps immediately. Places, history, and local search keep working.")
+                NavigationLink { MapsSettings() } label: {
+                    LabeledContent("Maps", value: model.mapProvider.title)
+                }.accessibilityIdentifier("map-settings")
+            }
+            Section {
+                AppleLocationDetailsToggle()
+            } header: { Text("Apple Services") } footer: {
+                Text("Add city and country names to group your trips.")
             }
             Section {
                 NavigationLink("Saved Wi-Fi networks") {
@@ -65,22 +69,13 @@ struct SettingsView: View {
                 Button(deleting ? "Starting again…" : "Delete all data and start again…", role: .destructive) { confirmDelete = true }
                     .accessibilityIdentifier("reset-all-data")
             }
-            Section("About Places") {
-                Text("Built independently by Adriaan, founder of Simple Analytics. This is a separate personal project.").font(.footnote)
-                Text("Public source code · PolyForm Noncommercial 1.0.0").font(.footnote)
-                Text("Version 0.1 · iOS 26 or newer").font(.footnote).foregroundStyle(.secondary)
-                NavigationLink("Offline place data") { OfflinePlaceDataView() }
-                NavigationLink("Third-party licenses") { LicensesView() }
-            }
             Section {
-                Text("Background recording depends on iOS permissions and delivery. Force-quitting Places can stop recording until you reopen it. This foundation still needs physical-device battery and lifecycle validation.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                NavigationLink("About Places") { AboutPlacesView() }
+                    .font(.footnote).frame(minHeight: Layout.touchTarget)
+                    .listRowBackground(Color.clear).accessibilityIdentifier("about-places")
             }
         }.disabled(deleting).scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .confirmationDialog("Enable Apple Maps?", isPresented: $confirmMaps, titleVisibility: .visible) {
-                Button("Enable Apple Maps") { Task { await model.setMapsEnabled(true) } }
-            } message: { Text("Map data requests go to Apple and can reveal the area you’re viewing. You can turn this off at any time.") }
             .confirmationDialog("Export your private history?", isPresented: $confirmExport, titleVisibility: .visible) {
                 Button("Export full history") { Task { await model.export(fullHistory: true) } }
             } message: { Text("This file includes exact locations, Wi-Fi identifiers, raw observations, and corrections. Anyone with the file can read them. Where you save it may synchronize it to a cloud service.") }
@@ -100,7 +95,7 @@ struct SettingsView: View {
                     }
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: { Text("Permanently delete all history, places, Wi-Fi, corrections, diagnostics, and app settings, then return to setup. Recording stays paused until you finish setup. iOS permissions and files you already exported are not removed. This cannot be undone.") }
+            } message: { Text("Permanently delete all history, places, Wi-Fi, corrections, diagnostics, downloaded maps, and app settings, then return to setup. Recording stays paused until you finish setup. iOS permissions and files you already exported are not removed. This cannot be undone.") }
             .fileExporter(isPresented: $model.showExporter, document: model.exportDocument, contentType: .json, defaultFilename: model.exportFilename) { result in
                 model.exportDocument = nil
                 if case .failure = result { model.errorMessage = "The export could not be saved. Your history has not changed." }
@@ -156,76 +151,69 @@ struct DiagnosticsView: View {
 private struct LicensesView: View {
     var body: some View {
         List {
-            ForEach(["OFL", "GRDB-LICENSE"], id: \.self) { name in
-                Section(name == "OFL" ? "Bricolage Grotesque" : "GRDB.swift") {
+            ForEach(["OFL", "GRDB-LICENSE", "MapLibre-LICENSE", "Map-data", "Map-fonts"], id: \.self) { name in
+                Section(["OFL": "Bricolage Grotesque", "GRDB-LICENSE": "GRDB.swift", "MapLibre-LICENSE": "MapLibre", "Map-data": "On-device map data", "Map-fonts": "Noto Sans map labels"][name] ?? name) {
                     Text(license(name)).font(.caption).textSelection(.enabled)
                 }
             }
         }.navigationTitle("Licenses")
     }
     private func license(_ name: String) -> String {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "txt"),
+        let filename = name == "Map-fonts" ? "OFL" : name
+        let folder = name == "Map-fonts" ? "OfflineMaps/fonts" : "OfflineMaps"
+        guard let url = Bundle.main.url(forResource: name, withExtension: "txt") ?? Bundle.main.url(forResource: filename, withExtension: "txt", subdirectory: folder),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return "License included in the source distribution." }
         return text
     }
 }
 
-struct CityLookupSettings: View {
+struct AppleLocationDetailsToggle: View {
     @Environment(AppModel.self) private var model
     @State private var confirm = false
-    private var missing: [Place] { model.places.filter { $0.locality == nil } }
     var body: some View {
-        Form {
-            Section {
-                Toggle("Look up city & country", isOn: Binding(get: { model.placeLookupEnabled }, set: { value in
-                    if !value { Task { await model.setPlaceLookupEnabled(false) } }
-                    else if model.placeLookupExplained { enableLookup() }
-                    else { confirm = true }
-                })).tint(Palette.controlGreen).accessibilityIdentifier("city-lookup-toggle")
-            } footer: {
-                Text("Find your trips by city and country in date pickers.")
-            }
-            if model.placeLookupEnabled {
-                Section("Your places") {
-                    if model.places.isEmpty {
-                        Text("Save a place to find its city and country.").foregroundStyle(Palette.muted)
-                    }
-                    ForEach(model.places) { place in
-                        VStack(alignment: .leading, spacing: Layout.compact) {
-                            Label(place.name, systemImage: place.symbol)
-                            if let locality = place.locality {
-                                Text([locality.city, locality.country].filter { !$0.isEmpty }.joined(separator: ", "))
-                                    .font(.subheadline).foregroundStyle(Palette.muted)
-                            } else if let issue = model.regionLookupIssues[place.id] {
-                                Text(issue).font(.subheadline).foregroundStyle(Palette.muted)
-                            } else {
-                                Text(model.lookingUpRegions ? "Finding names…" : "Names not found yet")
-                                    .font(.subheadline).foregroundStyle(Palette.muted)
-                            }
-                        }.accessibilityElement(children: .combine)
-                            .accessibilityIdentifier("place-locality-\(place.id)")
-                    }
-                    if model.lookingUpRegions {
-                        ProgressView("Finding city & country…")
-                    } else if !missing.isEmpty {
-                        Button("Retry missing names") { model.retryRegionLookup() }
-                            .accessibilityIdentifier("retry-city-lookup")
-                    }
-                }
-            }
-        }.scrollContentBackground(.hidden).background(Palette.background)
-            .navigationTitle("City & country").navigationBarTitleDisplayMode(.inline)
+        Toggle("Apple Location Details", isOn: Binding(get: { model.placeLookupEnabled }, set: { value in
+            if !value { Task { await model.setPlaceLookupEnabled(false) } }
+            else if model.placeLookupExplained { enableLookup() }
+            else { confirm = true }
+        })).tint(Palette.controlGreen).accessibilityIdentifier("city-lookup-toggle")
             .alert("Find city & country with Apple?", isPresented: $confirm) {
                 Button("Not now", role: .cancel) { }
                 Button("Enable lookup", action: enableLookup)
             } message: {
-                Text("Places sends saved place coordinates to Apple to find city and country names. This also enables Apple Maps. Results stay on this iPhone. You can turn this off anytime.")
+                Text("Places sends saved place coordinates to Apple to find city and country names. Results stay on this iPhone. Your map choice is separate. Turning this off stops lookups and keeps names already saved.")
             }
     }
-    private func enableLookup() {
-        Task {
-            if !model.mapsEnabled { await model.setMapsEnabled(true) }
-            await model.setPlaceLookupEnabled(true)
-        }
+    private func enableLookup() { Task { await model.setPlaceLookupEnabled(true) } }
+}
+
+struct CityLookupSettings: View {
+    var body: some View {
+        Form {
+            Section {
+                AppleLocationDetailsToggle()
+            } footer: {
+                Text("Add city and country names to group your trips. Saved names remain with each place when you turn this off.")
+            }
+        }.scrollContentBackground(.hidden).background(Palette.background)
+            .navigationTitle("Apple Location Details").navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct AboutPlacesView: View {
+    private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
+    private var build: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "" }
+    var body: some View {
+        List {
+            Section {
+                Text("Built independently by Adriaan, founder of Simple Analytics. This is a separate personal project.")
+                Text("Public source code · PolyForm Noncommercial 1.0.0")
+                LabeledContent("Version", value: "\(version) (\(build))")
+            }
+            Section {
+                NavigationLink("Offline place data") { OfflinePlaceDataView() }
+                NavigationLink("Third-party licenses") { LicensesView() }
+            }
+        }.scrollContentBackground(.hidden).background(Palette.background)
+            .navigationTitle("About Places").navigationBarTitleDisplayMode(.inline)
     }
 }

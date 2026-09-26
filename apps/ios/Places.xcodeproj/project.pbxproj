@@ -8,9 +8,12 @@
 
 /* Begin PBXBuildFile section */
 		033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135F35535FF26FED0627E38 /* DesignSystem.swift */; };
+		0406B697C7B67839B5EA122A /* MapDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A209ED936BD094A91EF7BC97 /* MapDownloads.swift */; };
 		0AD411802A704DA4FFA4C550 /* GRDB-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */; };
+		0ED2B97434350FC9C53E3D25 /* MapPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1606887387E5B16905FC86 /* MapPresentation.swift */; };
 		1BE484548285A1988C171A4C /* PlaceIconPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */; };
 		2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */; };
+		2DEED30D0157CF0DC566A67D /* OfflineMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */; };
 		2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */; };
 		300455B22DB5874297921CD9 /* PlaceWiFiPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113678CA5798BA16EBB3B196 /* PlaceWiFiPicker.swift */; };
 		32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074E8339AD3313BBFD04D7BA /* TrackingController.swift */; };
@@ -19,15 +22,19 @@
 		4BB09FFB84861510F74BD203 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA197721E63F4B0F2F74FC75 /* AppModel.swift */; };
 		4C8059CBABE8F045A1CF08E9 /* WiFiClassificationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */; };
 		595DA971976AEDA5373D9931 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE309F70353EBEDB7069F031 /* MainView.swift */; };
+		5CFD873D521F99D2384FCAD5 /* MapPackFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */; };
+		5FD9FBF86AD3822E430BE2D0 /* MapsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67E766F77511EDADA6182DA6 /* MapsSettings.swift */; };
 		60E1ED003E6B7C1B9FA108AA /* TimelinePager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB102BB0DB953EC91699D45 /* TimelinePager.swift */; };
 		623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */; };
 		66549826CB59C29A042DBFAB /* PlacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19157741242CE715116913F2 /* PlacesView.swift */; };
+		6F2A64643DF8EBE2C7D4255C /* OfflineMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D5BEBE17D2BE0926E0AE70 /* OfflineMapTests.swift */; };
 		796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 763BB8E666C49E7CFF673E53 /* AppIcon.icon */; };
 		7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */; };
 		7D8274BFBC6054B26A47EEBB /* ProtectedStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B116AB54E14230415ABC727 /* ProtectedStorage.swift */; };
 		7EBB269AAA837E5F5C546BFC /* PlacesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */; };
 		841E94E0B0181A9A68A8E9A7 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E16CB5D0FBE5CF702B4018 /* SearchView.swift */; };
 		8647C674E084BD7A59785677 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 4A0FD5DD320094D0C71ADC76 /* OFL.txt */; };
+		9162EEFC324833E93A1486AF /* OfflineMaps in Resources */ = {isa = PBXBuildFile; fileRef = 3D4D0C7A10D98A0969FDD33A /* OfflineMaps */; };
 		9612B46A325D2254206D4715 /* AppleMapsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */; };
 		A3FB6C17CAEF0EE2EBFE79D6 /* BricolageGrotesque-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */; };
 		A48B0DD0D51FE08FD52CA6EA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6ED1792B97EE623188206D05 /* Assets.xcassets */; };
@@ -38,9 +45,11 @@
 		D2CC4FB79F9D9EEBFA596703 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA29D2F244CDCEC41CCBFC07 /* SettingsView.swift */; };
 		D2F3D55DC34DFAF82D780991 /* TimelineDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */; };
 		D39E32808EE109D32D743656 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */; };
+		D414EAFD38C1EB439C7C1793 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 6F34812A8C1EB34B9C7A7931 /* MapLibre */; };
 		DC70013C8EECEAF7F2EF04C8 /* BricolageGrotesque-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */; };
 		E99EF9C7B7D61B58D2B7B6DF /* BricolageGrotesque-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8128F6BB84B25BE437EE88D2 /* BricolageGrotesque-Bold.ttf */; };
 		FA2762FE9E093C51EC46D4D6 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5B36C3B3E2E85B7532E1B16A /* PlacesCore */; };
+		FA596101EE4C9EAC8807681D /* OfflineMapStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142945BC6C090A8B8874AC76 /* OfflineMapStyle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +76,7 @@
 		0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceEditor.swift; sourceTree = "<group>"; };
 		113678CA5798BA16EBB3B196 /* PlaceWiFiPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceWiFiPicker.swift; sourceTree = "<group>"; };
+		142945BC6C090A8B8874AC76 /* OfflineMapStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapStyle.swift; sourceTree = "<group>"; };
 		17246D2B38F558823736D16B /* Places.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Places.entitlements; sourceTree = "<group>"; };
 		19157741242CE715116913F2 /* PlacesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesView.swift; sourceTree = "<group>"; };
 		19E16CB5D0FBE5CF702B4018 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
@@ -74,21 +84,26 @@
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesApp.swift; sourceTree = "<group>"; };
+		3D4D0C7A10D98A0969FDD33A /* OfflineMaps */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OfflineMaps; path = Places/Resources/OfflineMaps; sourceTree = SOURCE_ROOT; };
 		4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryDatePicker.swift; sourceTree = "<group>"; };
 		48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCatalogViews.swift; sourceTree = "<group>"; };
 		4A0FD5DD320094D0C71ADC76 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
 		4BF477ADFC16882EBD9CC8CF /* PlacesUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Regular.ttf"; sourceTree = "<group>"; };
+		5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapView.swift; sourceTree = "<group>"; };
 		64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiClassificationPicker.swift; sourceTree = "<group>"; };
+		67E766F77511EDADA6182DA6 /* MapsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapsSettings.swift; sourceTree = "<group>"; };
 		6ED1792B97EE623188206D05 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		763BB8E666C49E7CFF673E53 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineDetail.swift; sourceTree = "<group>"; };
+		7F1606887387E5B16905FC86 /* MapPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresentation.swift; sourceTree = "<group>"; };
 		8128F6BB84B25BE437EE88D2 /* BricolageGrotesque-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Bold.ttf"; sourceTree = "<group>"; };
 		82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMapsView.swift; sourceTree = "<group>"; };
 		85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceIconPicker.swift; sourceTree = "<group>"; };
 		96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "GRDB-LICENSE.txt"; sourceTree = "<group>"; };
 		986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-ExtraBold.ttf"; sourceTree = "<group>"; };
 		9B116AB54E14230415ABC727 /* ProtectedStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectedStorage.swift; sourceTree = "<group>"; };
+		A209ED936BD094A91EF7BC97 /* MapDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDownloads.swift; sourceTree = "<group>"; };
 		A63BC26235D3DD07B406598B /* Places.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Places.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesUITests.swift; sourceTree = "<group>"; };
 		BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -99,6 +114,8 @@
 		E2484224F90AFD4F0609C882 /* PlacesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EEB102BB0DB953EC91699D45 /* TimelinePager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelinePager.swift; sourceTree = "<group>"; };
 		F135F35535FF26FED0627E38 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPackFiles.swift; sourceTree = "<group>"; };
+		F8D5BEBE17D2BE0926E0AE70 /* OfflineMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,6 +132,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FA2762FE9E093C51EC46D4D6 /* PlacesCore in Frameworks */,
+				D414EAFD38C1EB439C7C1793 /* MapLibre in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -136,6 +154,10 @@
 				82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */,
 				4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */,
 				DE309F70353EBEDB7069F031 /* MainView.swift */,
+				7F1606887387E5B16905FC86 /* MapPresentation.swift */,
+				67E766F77511EDADA6182DA6 /* MapsSettings.swift */,
+				142945BC6C090A8B8874AC76 /* OfflineMapStyle.swift */,
+				5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */,
 				BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */,
 				48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */,
 				0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */,
@@ -190,6 +212,7 @@
 		80901FE114D132F5DF3880B9 /* PlacesTests */ = {
 			isa = PBXGroup;
 			children = (
+				F8D5BEBE17D2BE0926E0AE70 /* OfflineMapTests.swift */,
 				06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */,
 				2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */,
 			);
@@ -199,6 +222,7 @@
 		89ED2C52C2B6B4AF28267AD9 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */,
 				9B116AB54E14230415ABC727 /* ProtectedStorage.swift */,
 			);
 			path = Storage;
@@ -227,6 +251,7 @@
 				29B425FD3CF228275A8853E9 /* Places */,
 				80901FE114D132F5DF3880B9 /* PlacesTests */,
 				F4915DAAFEE8B05F38E8D427 /* PlacesUITests */,
+				3D4D0C7A10D98A0969FDD33A /* OfflineMaps */,
 				245871B45378E2F27A1D77C2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -248,6 +273,7 @@
 			children = (
 				CA197721E63F4B0F2F74FC75 /* AppModel.swift */,
 				0129CE07ADA04E88C1C23E71 /* DemoFixtures.swift */,
+				A209ED936BD094A91EF7BC97 /* MapDownloads.swift */,
 				3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */,
 			);
 			path = App;
@@ -279,6 +305,7 @@
 			name = Places;
 			packageProductDependencies = (
 				5B36C3B3E2E85B7532E1B16A /* PlacesCore */,
+				6F34812A8C1EB34B9C7A7931 /* MapLibre */,
 			);
 			productName = Places;
 			productReference = A63BC26235D3DD07B406598B /* Places.app */;
@@ -355,6 +382,7 @@
 			mainGroup = C6CC9FE9940EB627776C45F4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				2D587D9018EEECF4FB30B1C4 /* XCRemoteSwiftPackageReference "maplibre-native-distribution" */,
 				897C92EF8142DB418D792668 /* XCLocalSwiftPackageReference "../../packages/PlacesCore" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -381,6 +409,7 @@
 				DC70013C8EECEAF7F2EF04C8 /* BricolageGrotesque-Regular.ttf in Resources */,
 				0AD411802A704DA4FFA4C550 /* GRDB-LICENSE.txt in Resources */,
 				8647C674E084BD7A59785677 /* OFL.txt in Resources */,
+				9162EEFC324833E93A1486AF /* OfflineMaps in Resources */,
 				D39E32808EE109D32D743656 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -392,6 +421,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6F2A64643DF8EBE2C7D4255C /* OfflineMapTests.swift in Sources */,
 				2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */,
 				BA60D0E791CB46DE7E6E47DF /* WiFiTrackingControllerTests.swift in Sources */,
 			);
@@ -408,6 +438,12 @@
 				033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */,
 				7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */,
 				595DA971976AEDA5373D9931 /* MainView.swift in Sources */,
+				0406B697C7B67839B5EA122A /* MapDownloads.swift in Sources */,
+				5CFD873D521F99D2384FCAD5 /* MapPackFiles.swift in Sources */,
+				0ED2B97434350FC9C53E3D25 /* MapPresentation.swift in Sources */,
+				5FD9FBF86AD3822E430BE2D0 /* MapsSettings.swift in Sources */,
+				FA596101EE4C9EAC8807681D /* OfflineMapStyle.swift in Sources */,
+				2DEED30D0157CF0DC566A67D /* OfflineMapView.swift in Sources */,
 				34D3AFF05BABD6B247482405 /* OnboardingView.swift in Sources */,
 				2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */,
 				BD22F1A51DD600D357144295 /* PlaceEditor.swift in Sources */,
@@ -735,10 +771,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		2D587D9018EEECF4FB30B1C4 /* XCRemoteSwiftPackageReference "maplibre-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-native-distribution";
+			requirement = {
+				kind = exactVersion;
+				version = 6.31.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		5B36C3B3E2E85B7532E1B16A /* PlacesCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PlacesCore;
+		};
+		6F34812A8C1EB34B9C7A7931 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D587D9018EEECF4FB30B1C4 /* XCRemoteSwiftPackageReference "maplibre-native-distribution" */;
+			productName = MapLibre;
 		};
 		D2A07C0F4B1A7B4218C6F725 /* PlacesCore */ = {
 			isa = XCSwiftPackageProductDependency;

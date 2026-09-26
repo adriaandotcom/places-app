@@ -1,0 +1,35 @@
+[
+  {
+    "id": "world",
+    "name": "World",
+    "version": "20260925.1",
+    "bytes": 28014752,
+    "sha256": "286fc8dd380b12042f63e033373a3ab5c0ac655a0db94b609a674b63dc5c6c45",
+    "minZoom": 0,
+    "maxZoom": 6,
+    "url": "https://github.com/adriaandotcom/places-app/releases/download/maps-20260925.1/world.pmtiles",
+    "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Natural Earth \u00b7 Protomaps"
+  },
+  {
+    "id": "netherlands",
+    "name": "Netherlands",
+    "version": "20260925.1",
+    "bytes": 35353432,
+    "sha256": "a462b74da869b2912bdbdbedf61951617352d22b404a988dd46b259198b40716",
+    "minZoom": 7,
+    "maxZoom": 12,
+    "url": "https://github.com/adriaandotcom/places-app/releases/download/maps-20260925.1/netherlands.pmtiles",
+    "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Natural Earth \u00b7 Protomaps"
+  },
+  {
+    "id": "greece",
+    "name": "Greece",
+    "version": "20260925.1",
+    "bytes": 36428648,
+    "sha256": "5d754fa09847a5ce29f081c230c471de004c58d4d84cf1c924e1d7814b78b4e9",
+    "minZoom": 7,
+    "maxZoom": 12,
+    "url": "https://github.com/adriaandotcom/places-app/releases/download/maps-20260925.1/greece.pmtiles",
+    "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Natural Earth \u00b7 Protomaps"
+  }
+]

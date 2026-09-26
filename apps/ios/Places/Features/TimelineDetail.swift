@@ -79,7 +79,7 @@ struct TimelineDetail: View {
                         Label(model.endpointName(connection.to, fallback: "Later location"), systemImage: "b.circle.fill")
                     }.font(BrandFont.body)
                 }
-                if model.mapsEnabled && (item.kind != .gap || item.connection != nil) {
+                if model.mapsAvailable && (item.kind != .gap || item.connection != nil) {
                     PrivacyMapView(items: [item]).frame(height: Layout.mapHeight).clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
                     if item.connection != nil {
                         Text("Dashed lines link known endpoints; they aren’t a recorded route.")

@@ -39,6 +39,22 @@ struct PlaceDetail: View {
                     PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex, size: 72).padding(.vertical, 12)
                     Text(place.name).font(BrandFont.hero)
                     if !place.address.isEmpty { Text(place.address).font(BrandFont.body).foregroundStyle(Palette.muted) }
+                    if let locality = place.locality {
+                        Text([locality.city, locality.country].filter { !$0.isEmpty }.joined(separator: ", "))
+                            .font(BrandFont.body).foregroundStyle(Palette.muted)
+                            .accessibilityIdentifier("place-locality-\(place.id)")
+                    } else if model.placeLookupEnabled {
+                        if model.lookingUpRegions {
+                            ProgressView("Finding city & country…")
+                        } else {
+                            VStack(alignment: .leading, spacing: Layout.compact) {
+                                Text(model.regionLookupIssues[place.id] ?? "City and country haven’t been found yet.")
+                                    .font(.footnote).foregroundStyle(Palette.muted)
+                                Button("Try location details again") { model.retryRegionLookup(for: place.id) }
+                                    .frame(minHeight: Layout.touchTarget).accessibilityIdentifier("retry-city-lookup")
+                            }
+                        }
+                    }
                     InfoRow(symbol: "scope", title: "Recognition area", subtitle: "Within \(Int(place.radius)) metres, when the evidence is clear.", colorIndex: place.colorIndex)
                     Text("Wi-Fi at this place").font(BrandFont.heading)
                     let points = model.accessPoints.filter { $0.placeID == placeID }

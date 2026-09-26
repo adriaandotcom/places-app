@@ -3,8 +3,8 @@
 ## Product and privacy
 
 - Native Swift/SwiftUI for iOS 26+. Local storage and processing by default. No account or backend is required.
-- No analytics, telemetry, advertising SDKs, hosted AI, third-party services, CDNs, remote fonts/images, or downloaded executable code. These restrictions apply to the website too.
-- The only network exceptions are explicitly enabled Apple Maps/place lookup and iCloud sync, and StoreKit purchases when implemented. Strava is excluded. Build-time dependency downloads are not runtime services.
+- No analytics, telemetry, advertising SDKs, hosted AI, general third-party services, remote rendering resources, or downloaded executable code. These restrictions apply to the website too.
+- The only network exceptions are separately enabled Apple Maps/place lookup, user-chosen offline map pack downloads from the bundled, immutable Places GitHub release manifest, and iCloud sync and StoreKit purchases when implemented. Offline rendering must use local files only; never send coordinates/history with pack requests. Require measured-size confirmation for metered/Low Data downloads, verify checksums before installation, and exclude downloaded packs from backup. Strava is excluded. Build-time dependency downloads are not runtime services.
 - Gate every Maps view, preview, snapshot, search, and geocoder behind persisted consent before constructing it. Disabling consent must tear down active map UI. No implicit cloud storage or synchronization.
 - Bundle and license assets. Use SF Symbols in native UI. Website resources must come from its own origin; external links must never prefetch.
 - Request only permissions used by implemented features. Every onboarding permission is skippable. Reflect actual system authorization and offer recovery through Settings. Never imitate system permission alerts.

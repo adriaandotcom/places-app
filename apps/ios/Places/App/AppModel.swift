@@ -12,6 +12,7 @@ final class AppModel {
     private(set) var store: PlacesStore?
     private(set) var ready = false
     private(set) var waitingForUnlock = false
+    private(set) var storageNeedsRetry = false
     private(set) var places: [Place] = []
     private(set) var timeline: [TimelineItem] = []
     private(set) var historyRevision = 0
@@ -21,7 +22,17 @@ final class AppModel {
     private(set) var events: [TrackingEvent] = []
     private(set) var routePoints: [RoutePoint] = []
     private(set) var diagnostics: DiagnosticReport?
-    private(set) var mapsEnabled = false
+    private(set) var mapProvider = MapProvider.off
+    var mapsEnabled: Bool { mapProvider == .apple }
+    var mapsAvailable: Bool { mapProvider != .off }
+    let mapDownloads: MapDownloads = {
+        #if DEBUG
+        MapDownloads(testing: ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+        #else
+        MapDownloads()
+        #endif
+    }()
+    private var mapPreference = UUID()
     private(set) var mapsChoiceMade = false
     private(set) var nerdMode = false
     private(set) var trackingEnabled = true
@@ -70,8 +81,12 @@ final class AppModel {
             tracking.onEvent = { [weak self] event in self?.enqueue(event) }
             Task {
                 do {
-                    mapsEnabled = try await opened.setting("mapsEnabled") == "true"
-                    mapsChoiceMade = try await opened.setting("mapsChoiceMade") == "true" || mapsEnabled
+                    let legacyMaps = try await opened.setting("mapsEnabled") == "true"
+                    let savedProvider = try await opened.setting("mapProvider")
+                    mapProvider = MapProvider.migrated(stored: savedProvider, appleEnabled: legacyMaps)
+                    try await opened.setSetting("mapProvider", value: mapProvider.rawValue)
+                    mapDownloads.start()
+                    mapsChoiceMade = try await opened.setting("mapsChoiceMade") == "true" || mapsAvailable
                     nerdMode = try await opened.setting("nerdMode") == "true"
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
@@ -96,10 +111,15 @@ final class AppModel {
                         try await DemoFixtures.seed(opened); onboardingComplete = true
                     }
                     #endif
+                    #if DEBUG
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-on-device-map") {
+                        mapProvider = .onDevice; mapsChoiceMade = true
+                    }
+                    #endif
                     let lookupConsent = try await opened.setting("placeLookupEnabled") == "true"
                     placeLookupExplained = try await opened.setting("placeLookupExplained") == "true" || lookupConsent
                     if lookupConsent { try await opened.setSetting("placeLookupExplained", value: "true") }
-                    placeLookupEnabled = mapsEnabled && lookupConsent
+                    placeLookupEnabled = lookupConsent
                     regionLookup.setEnabled(placeLookupEnabled && !uiTesting)
                     await refresh()
                     enrichRegions()
@@ -191,7 +211,8 @@ final class AppModel {
             } catch {
                 self.retryObservations = batch
                 self.tracking.configure(places: self.places, enabled: false)
-                self.fail("Recording paused because your history could not be saved. Free some storage and tap Retry in Settings. Unsaved observations are kept while the app remains open.")
+                self.storageNeedsRetry = true
+                self.fail("Recording paused because your history could not be saved. Free some storage, then try again. Unsaved observations are kept while the app remains open.")
             }
         }
     }
@@ -211,7 +232,7 @@ final class AppModel {
         do {
             try await store.append(retryObservations); retryObservations = []
             if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
-            errorMessage = nil; await refresh()
+            storageNeedsRetry = false; errorMessage = nil; await refresh()
         } catch { fail("Storage is still unavailable. Your history has not been deleted.") }
     }
     func finishOnboarding() async {
@@ -223,16 +244,21 @@ final class AppModel {
         }
         catch { fail("Could not save onboarding progress. Please try again.") }
     }
-    func setMapsEnabled(_ value: Bool) async {
-        // Revoke immediately, even when a disk write fails. Only enable after persistence succeeds.
-        if !value { mapsEnabled = false; await setPlaceLookupEnabled(false) }
+    func setMapsEnabled(_ value: Bool) async { await setMapProvider(value ? .apple : .off) }
+    func setMapProvider(_ provider: MapProvider) async {
+        let preference = UUID(); mapPreference = preference
+        // Stop an Apple surface immediately, including if saving consent fails.
+        if provider != .apple { mapProvider = .off }
         do {
             guard let store else { return }
-            try await store.setSetting("mapsEnabled", value: String(value))
+            try await store.setSetting("mapProvider", value: provider.rawValue)
             try await store.setSetting("mapsChoiceMade", value: "true")
-            mapsChoiceMade = true; mapsEnabled = value
+            guard mapPreference == preference, !deleting else { return }
+            mapsChoiceMade = true; mapProvider = provider
+        } catch {
+            guard mapPreference == preference, !deleting else { return }
+            fail("Could not save your map preference. Maps remain off for this session."); mapProvider = .off
         }
-        catch { fail("Could not save your map preference. Apple Maps remains off for this session."); mapsEnabled = false }
     }
     func setPlaceLookupEnabled(_ value: Bool) async {
         let preference = UUID(); lookupPreference = preference
@@ -242,10 +268,10 @@ final class AppModel {
             regionAttempts = []
         }
         do {
-            guard let store, !value || mapsEnabled else { return }
+            guard let store else { return }
             try await store.setSetting("placeLookupEnabled", value: String(value))
             if value { try await store.setSetting("placeLookupExplained", value: "true") }
-            guard lookupPreference == preference, !deleting, !value || mapsEnabled else { return }
+            guard lookupPreference == preference, !deleting else { return }
             placeLookupEnabled = value
             if value { placeLookupExplained = true }
             regionLookup.setEnabled(value && !uiTesting)
@@ -253,7 +279,7 @@ final class AppModel {
         } catch { fail("Could not save your city lookup preference.") }
     }
     func enrichRegions() {
-        guard placeLookupEnabled, mapsEnabled, !uiTesting, regionTask == nil, let store else { return }
+        guard placeLookupEnabled, !uiTesting, regionTask == nil, let store else { return }
         let expectedGeneration = generation
         lookingUpRegions = true
         let run = UUID(); regionRun = run
@@ -262,11 +288,11 @@ final class AppModel {
             defer { if self.regionRun == run { self.lookingUpRegions = false; self.regionTask = nil } }
             // Read the latest list each time so a newly saved place joins this queue.
             while let place = self.places.first(where: { $0.locality == nil && !self.regionAttempts.contains("\($0.id)-\($0.coordinate)") }) {
-                guard !Task.isCancelled, self.placeLookupEnabled, self.mapsEnabled, self.generation == expectedGeneration else { return }
+                guard !Task.isCancelled, self.placeLookupEnabled, self.generation == expectedGeneration else { return }
                 self.regionAttempts.insert("\(place.id)-\(place.coordinate)")
                 do {
                     let locality = try await self.regionLookup.lookup(place.coordinate)
-                    guard !Task.isCancelled, self.placeLookupEnabled, self.mapsEnabled, self.generation == expectedGeneration else { return }
+                    guard !Task.isCancelled, self.placeLookupEnabled, self.generation == expectedGeneration else { return }
                     if let locality {
                         do {
                             try await store.saveLocality(locality, for: place.id, at: place.coordinate)
@@ -285,9 +311,13 @@ final class AppModel {
             }
         }
     }
-    func retryRegionLookup() {
+    func retryRegionLookup(for placeID: String? = nil) {
         guard !lookingUpRegions else { return }
-        regionAttempts = []; regionLookupIssues = [:]; enrichRegions()
+        if let place = places.first(where: { $0.id == placeID }) {
+            regionAttempts.remove("\(place.id)-\(place.coordinate)")
+            regionLookupIssues[place.id] = nil
+        } else { regionAttempts = []; regionLookupIssues = [:] }
+        enrichRegions()
     }
     func setNerdMode(_ value: Bool) async {
         do { try await store?.setSetting("nerdMode", value: String(value)); nerdMode = value; await refresh() }
@@ -360,7 +390,7 @@ final class AppModel {
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
-        mapsEnabled = false; trackingEnabled = false
+        mapPreference = UUID(); mapProvider = .off; trackingEnabled = false
         lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
         placeLookupExplained = false; regionLookupIssues = [:]
         regionRun = UUID(); regionTask?.cancel(); regionTask = nil; regionAttempts = []; lookingUpRegions = false
@@ -368,11 +398,12 @@ final class AppModel {
         tracking.configure(places: [], enabled: false)
         await pendingWrite?.value
         do {
+            try mapDownloads.deleteAll()
             try await store.eraseHistory(resetSettings: true)
             retryObservations = []; timeline = []; places = []; networks = []; accessPoints = []
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()
-            exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil
+            exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil; storageNeedsRetry = false
             mapsChoiceMade = false; nerdMode = false; selectedDay = Date(); selectedTab = .timeline
             UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
             UNUserNotificationCenter.current().removeAllDeliveredNotifications()

@@ -46,7 +46,7 @@ struct PlaceEditor: View {
     @State private var saving = false
     @FocusState private var focusedField: Field?
     private enum Field { case name, address, latitude, longitude, wifi }
-    private var usesCoordinates: Bool { !model.mapsEnabled && (manualCoordinates || model.mapsChoiceMade) }
+    private var usesCoordinates: Bool { !model.mapsAvailable && (manualCoordinates || model.mapsChoiceMade) }
     private var wifiCoordinate: Coordinate? {
         if usesCoordinates {
             guard let lat = Double(latitude), let lon = Double(longitude) else { return nil }
@@ -152,7 +152,7 @@ struct PlaceEditor: View {
                 DisclosureGroup("City & country") {
                     TextField("City (optional)", text: $city).accessibilityIdentifier("place-city")
                     TextField("Country (optional)", text: $country).accessibilityIdentifier("place-country")
-                    NavigationLink("Find names with Apple Maps…") { CityLookupSettings() }
+                    NavigationLink("Apple Location Details…") { CityLookupSettings() }
                 }
             }
             Section("Location") {
@@ -164,7 +164,7 @@ struct PlaceEditor: View {
                             .accessibilityLabel("Change this place’s location")
                     }
                 } else {
-                    if model.mapsEnabled {
+                    if model.mapsAvailable {
                         PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex)
                             .frame(height: Layout.mapHeight).listRowInsets(EdgeInsets())
                         Label(coordinate == nil ? "Tap the map to place your pin" : "Tap the map to move your pin", systemImage: "hand.tap")
@@ -172,14 +172,14 @@ struct PlaceEditor: View {
                     } else if !usesCoordinates {
                         VStack(alignment: .leading, spacing: Layout.spacing) {
                             Text("Choose your place on a map").font(BrandFont.title)
-                            Text("Apple Maps requests map data from Apple for the area you view.").font(.subheadline).foregroundStyle(Palette.muted)
-                            Button("Use Apple Maps") { Task { await model.setMapsEnabled(true) } }
-                                .buttonStyle(.borderedProminent).tint(Palette.controlGreen).foregroundStyle(.white).accessibilityIdentifier("editor-enable-maps")
-                            Button("Enter coordinates instead") {
-                                manualCoordinates = true
-                                Task { await model.setMapsEnabled(false) }
-                            }.accessibilityIdentifier("enter-coordinates")
+                            Text("Choose Apple Maps or download maps for use on this iPhone.").font(.subheadline).foregroundStyle(Palette.muted)
                         }.padding(.vertical, Layout.compact)
+                        NavigationLink("Choose maps") { MapsSettings() }
+                            .accessibilityIdentifier("editor-enable-maps")
+                        Button("Enter coordinates instead") {
+                            manualCoordinates = true
+                            Task { await model.setMapsEnabled(false) }
+                        }.accessibilityIdentifier("enter-coordinates")
                     }
                     Button { useCurrentLocation() } label: {
                         HStack(spacing: Layout.compact) {
@@ -204,8 +204,11 @@ struct PlaceEditor: View {
                         TextField("Longitude", text: $longitude).keyboardType(.numbersAndPunctuation)
                             .accessibilityIdentifier("place-longitude").focused($focusedField, equals: .longitude)
                     }
-                    if model.mapsEnabled || usesCoordinates {
-                        HStack { Text("Recognition radius"); Spacer(); Text("\(Int(radius)) m").foregroundStyle(Palette.muted) }
+                    if model.mapsAvailable || usesCoordinates {
+                        HStack {
+                            Text("Recognition radius"); Spacer()
+                            Text("\(Int(radius)) m").foregroundStyle(Palette.muted).accessibilityIdentifier("recognition-radius-value")
+                        }
                         Slider(value: $radius, in: 50...1000, step: 25).accessibilityLabel("Recognition radius in metres")
                     }
                 }

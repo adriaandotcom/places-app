@@ -2,6 +2,12 @@ import SwiftUI
 import UIKit
 
 @MainActor final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        guard identifier.hasPrefix(MapDownloads.sessionID) else { completionHandler(); return }
+        AppModel.shared.mapDownloads.start()
+        AppModel.shared.mapDownloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
+    }
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Start from the lifecycle entry point too, including location-triggered background launches.
         AppModel.shared.start()
@@ -35,6 +41,7 @@ import UIKit
             }
             .alert("Places needs your attention", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
                 if !model.ready { Button("Retry") { model.errorMessage = nil; model.start() } }
+                else if model.storageNeedsRetry { Button("Try again") { Task { await model.retryStorage() } } }
                 Button("OK") { model.errorMessage = nil }
             } message: { Text(model.errorMessage ?? "") }
         }

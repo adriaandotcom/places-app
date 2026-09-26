@@ -1,0 +1,22 @@
+Places Lite · 20260925.1
+
+Map data © OpenStreetMap contributors. Available under the Open Database License (ODbL) 1.0.
+https://www.openstreetmap.org/copyright
+https://opendatacommons.org/licenses/odbl/1-0/
+
+Natural Earth land, water and administrative boundaries are public domain.
+https://www.naturalearthdata.com/about/terms-of-use/
+
+Tiles derived from Protomaps' 25 September 2026 basemap build (schema 4.15.2).
+https://docs.protomaps.com/basemaps/downloads
+
+Places Lite retains context layers and local/English labels. Buildings, addresses,
+business listings, small paths, source feature IDs and unused attributes are removed.
+World: zoom 0–6. Netherlands and Greece: zoom 7–12, with vector overzoom.
+
+The downloadable archives and source transformation are available in the Places
+source distribution and maps-20260925.1 release. The archives retain the ODbL terms.
+https://github.com/adriaandotcom/places-app
+
+MapLibre Native is licensed under the BSD 2-Clause license (see MapLibre-LICENSE).
+Noto Sans map labels are licensed under the SIL Open Font License 1.1 (see Map-fonts).

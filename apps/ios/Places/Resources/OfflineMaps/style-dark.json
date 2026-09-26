@@ -1,0 +1,291 @@
+{
+  "version": 8,
+  "name": "Places Lite",
+  "sources": {},
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#183239"
+      }
+    },
+    {
+      "id": "land",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "earth",
+      "paint": {
+        "fill-color": "#222720"
+      }
+    },
+    {
+      "id": "forest",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "landcover",
+      "paint": {
+        "fill-color": "#294334"
+      }
+    },
+    {
+      "id": "parks",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "landuse",
+      "paint": {
+        "fill-color": "#294334"
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#183239"
+      },
+      "filter": [
+        "==",
+        [
+          "geometry-type"
+        ],
+        "Polygon"
+      ]
+    },
+    {
+      "id": "rivers",
+      "type": "line",
+      "source": "base",
+      "source-layer": "water",
+      "paint": {
+        "line-color": "#183239",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6,
+          0.5,
+          12,
+          2
+        ]
+      },
+      "filter": [
+        "==",
+        [
+          "geometry-type"
+        ],
+        "LineString"
+      ]
+    },
+    {
+      "id": "boundaries",
+      "type": "line",
+      "source": "base",
+      "source-layer": "boundaries",
+      "paint": {
+        "line-color": "#7e8777",
+        "line-width": 1,
+        "line-dasharray": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "id": "minor-roads",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#5e6c59",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          7,
+          0.3,
+          12,
+          2.5,
+          16,
+          6
+        ]
+      },
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "minor_road"
+      ],
+      "minzoom": 10
+    },
+    {
+      "id": "roads",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#84957c",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          6,
+          0.6,
+          12,
+          3,
+          16,
+          8
+        ]
+      },
+      "filter": [
+        "in",
+        [
+          "get",
+          "kind"
+        ],
+        [
+          "literal",
+          [
+            "highway",
+            "major_road"
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "rail",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#99a894",
+        "line-width": 1,
+        "line-dasharray": [
+          2,
+          2
+        ]
+      },
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "rail"
+      ],
+      "minzoom": 8
+    },
+    {
+      "id": "ferries",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#99a894",
+        "line-width": 1,
+        "line-dasharray": [
+          3,
+          3
+        ]
+      },
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "ferry"
+      ],
+      "minzoom": 7
+    },
+    {
+      "id": "settlements",
+      "type": "symbol",
+      "source": "base",
+      "source-layer": "places",
+      "paint": {
+        "text-color": "#eeeede",
+        "text-halo-color": "#222720",
+        "text-halo-width": 1.5
+      },
+      "layout": {
+        "text-field": [
+          "coalesce",
+          [
+            "get",
+            "name:en"
+          ],
+          [
+            "get",
+            "name"
+          ]
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          0,
+          10,
+          7,
+          12,
+          12,
+          15
+        ],
+        "text-padding": 5,
+        "symbol-sort-key": [
+          "coalesce",
+          [
+            "get",
+            "min_zoom"
+          ],
+          0
+        ]
+      },
+      "filter": [
+        "all",
+        [
+          "has",
+          "name"
+        ],
+        [
+          "in",
+          [
+            "get",
+            "kind"
+          ],
+          [
+            "literal",
+            [
+              "country",
+              "region",
+              "locality",
+              "neighbourhood"
+            ]
+          ]
+        ]
+      ]
+    }
+  ]
+}

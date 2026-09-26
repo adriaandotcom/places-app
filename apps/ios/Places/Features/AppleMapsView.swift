@@ -7,22 +7,30 @@ struct PrivacyMapView: View {
     @Environment(AppModel.self) private var model
     var items: [TimelineItem]?
     var routePoints: [RoutePoint]?
+    @State private var viewport: MapViewport?
+    @State private var showMapSettings = false
     var body: some View {
+        Group {
         if model.mapsEnabled {
-            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints)
+            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: $viewport)
                 .accessibilityIdentifier("apple-map")
+        } else if model.mapProvider == .onDevice {
+            OfflineMapView(presentation: MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: $viewport)
         } else {
             ScrollView {
             VStack(spacing: 18) {
                 PlaceIcon(symbol: "map.fill", colorIndex: 1, size: 56)
                 Text("A map, on your terms").font(BrandFont.heading)
-                Text("Apple Maps loads map data from Apple. Your map view can reveal the area you’re looking at. Enable it only if you’re comfortable with those requests.")
+                Text("Choose Apple Maps, or download maps to keep map browsing on this iPhone.")
                     .font(BrandFont.body).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
                 Text("Your timeline, places, and search work without it.").font(.footnote).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
-                Button("Enable Apple Maps") { Task { await model.setMapsEnabled(true) } }
-                    .buttonStyle(PrimaryButton()).accessibilityIdentifier("enable-apple-maps")
+                Button("Choose maps") { showMapSettings = true }
+                    .buttonStyle(PrimaryButton()).accessibilityIdentifier("choose-maps")
             }.padding(24).frame(maxWidth: .infinity)
             }.defaultScrollAnchor(.center, for: .alignment).background(Palette.background)
+        }
+        }.sheet(isPresented: $showMapSettings) {
+            NavigationStack { MapsSettings().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showMapSettings = false } } } }
         }
     }
 }
@@ -31,6 +39,7 @@ private struct AppleMapSurface: View {
     @Environment(AppModel.self) private var model
     let items: [TimelineItem]
     let routePoints: [RoutePoint]
+    @Binding var viewport: MapViewport?
     @State private var selectedPlace: Place?
     @State private var camera: MapCameraPosition = .automatic
     private var shownPlaces: [Place] {
@@ -90,15 +99,20 @@ private struct AppleMapSurface: View {
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControls { MapCompass(); MapScaleView() }
-        .onChange(of: framingCoordinates, initial: true) { _, coordinates in
-            if Set(coordinates).count == 1, let coordinate = coordinates.first {
+        .onMapCameraChange(frequency: .onEnd) { context in
+            viewport = MapViewport(center: Coordinate(latitude: context.region.center.latitude, longitude: context.region.center.longitude),
+                latitudeSpan: context.region.span.latitudeDelta, longitudeSpan: context.region.span.longitudeDelta)
+        }
+        .onChange(of: framingCoordinates, initial: true) { old, coordinates in
+            if !old.isEmpty && old != coordinates { viewport = nil }
+            if let viewport {
+                camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: viewport.center.latitude, longitude: viewport.center.longitude),
+                    span: MKCoordinateSpan(latitudeDelta: viewport.latitudeSpan, longitudeDelta: viewport.longitudeSpan)))
+            } else if Set(coordinates).count == 1, let coordinate = coordinates.first {
                 let span = max(1000, (shownPlaces.map(\.radius).max() ?? 100) * 4)
-                camera = .region(MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
+                camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
                     latitudinalMeters: span, longitudinalMeters: span))
-            } else {
-                camera = .automatic
-            }
+            } else { camera = .automatic }
         }
         .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) } }
     }
@@ -118,7 +132,7 @@ struct MapScreen: View {
         VStack(spacing: 0) {
             if model.selectedTab == .map { PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints) }
             else { Color.clear }
-            if model.mapsEnabled {
+            if model.mapsAvailable {
                 MapDateBar().id(model.selectedDay)
             }
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationTitle("Map").navigationBarTitleDisplayMode(.inline)
@@ -132,9 +146,12 @@ struct PlaceLocationMap: View {
     @Binding var coordinate: Coordinate?
     let radius: Double
     let colorIndex: Int
+    @State private var viewport: MapViewport?
     var body: some View {
         if model.mapsEnabled {
-            PlacePinSurface(coordinate: $coordinate, radius: radius, colorIndex: colorIndex)
+            PlacePinSurface(coordinate: $coordinate, radius: radius, colorIndex: colorIndex, viewport: $viewport)
+        } else if model.mapProvider == .onDevice {
+            OfflineMapView(presentation: MapPresentation(pins: coordinate.map { [MapPin(id: "draft", name: "Place", coordinate: $0, symbol: "mappin", colorIndex: colorIndex)] } ?? [], radius: radius), viewport: $viewport, pinChanged: { coordinate = $0 })
         }
     }
 }
@@ -144,6 +161,7 @@ private struct PlacePinSurface: View {
     let radius: Double
     let colorIndex: Int
     @State private var camera: MapCameraPosition = .automatic
+    @Binding var viewport: MapViewport?
     var body: some View {
         MapReader { proxy in
             Map(position: $camera) {
@@ -157,6 +175,10 @@ private struct PlacePinSurface: View {
                     }
                 }
             }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                viewport = MapViewport(center: Coordinate(latitude: context.region.center.latitude, longitude: context.region.center.longitude),
+                    latitudeSpan: context.region.span.latitudeDelta, longitudeSpan: context.region.span.longitudeDelta)
+            }
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
             .mapControls { MapCompass(); MapScaleView() }
             .simultaneousGesture(SpatialTapGesture().onEnded { event in
@@ -167,7 +189,12 @@ private struct PlacePinSurface: View {
             .accessibilityIdentifier("place-pin-map")
             .accessibilityLabel("Place location. Tap to choose a pin, or use your current location below.")
         }
-        .onAppear { centerOnPin() }
+        .onAppear {
+            if let viewport {
+                camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: viewport.center.latitude, longitude: viewport.center.longitude),
+                    span: MKCoordinateSpan(latitudeDelta: viewport.latitudeSpan, longitudeDelta: viewport.longitudeSpan)))
+            } else { centerOnPin() }
+        }
         .onChange(of: coordinate) { old, new in
             if let new, old.map({ $0.distance(to: new) > 500 }) ?? true { centerOnPin() }
         }

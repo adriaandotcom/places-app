@@ -85,7 +85,7 @@ import XCTest
         app.launchArguments = ["--ui-testing", "--ui-airport-stay"]
         app.launch()
         XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
-        app.buttons["tab-map"].tap(); app.buttons["enable-apple-maps"].tap()
+        app.buttons["tab-map"].tap(); enableAppleMaps(in: app)
         XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
         app.buttons["tab-timeline"].tap()
         app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch.tap()
@@ -259,7 +259,7 @@ import XCTest
         today.tap()
         XCTAssertTrue(today.isSelected)
         app.buttons["tab-map"].tap()
-        app.buttons["enable-apple-maps"].tap()
+        enableAppleMaps(in: app)
         let picker = app.buttons["map-period-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         XCTAssertTrue(picker.label.contains("Today"))
@@ -284,14 +284,13 @@ import XCTest
         screenshot.name = "Map visit period with compact date navigation"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
-    func testCityLookupNeedsSeparateOptInAndStopsWithMaps() {
+    func testCityLookupAndMapsHaveIndependentConsentAndKeepSavedNames() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
         app.buttons["open-settings"].tap()
-        let lookup = app.buttons["City & country lookup"]
-        reveal(lookup, in: app); lookup.tap()
         let toggle = app.switches["city-lookup-toggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5)); XCTAssertEqual(toggle.value as? String, "0")
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "0")
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         let consent = app.alerts["Find city & country with Apple?"]
         XCTAssertTrue(consent.waitForExistence(timeout: 5))
@@ -301,17 +300,25 @@ import XCTest
         consent.buttons["Enable lookup"].tap()
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed)
-        XCTAssertTrue(app.staticTexts["Amsterdam, Netherlands"].exists)
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertEqual(toggle.value as? String, "0")
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertFalse(app.alerts.firstMatch.exists, "Consent is explained only on the first enable")
-        XCTAssertEqual(toggle.value as? String, "1")
+        XCTAssertFalse(app.staticTexts["Your places"].exists)
+        reveal(app.buttons["map-settings"], in: app); app.buttons["map-settings"].tap()
+        XCTAssertTrue(app.buttons["map-provider-off"].isSelected, "Enrichment must not enable map requests")
+        app.buttons["map-provider-apple"].tap()
+        app.buttons["Enable Apple Maps"].tap()
+        assertSelected(app.buttons["map-provider-apple"])
+        app.buttons["map-provider-off"].tap()
         app.navigationBars.buttons["BackButton"].tap()
-        let maps = app.switches["maps-toggle"]
-        reveal(maps, in: app); XCTAssertEqual(maps.value as? String, "1"); maps.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        reveal(lookup, in: app); lookup.tap()
-        XCTAssertEqual(toggle.value as? String, "0")
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "1", "Changing maps must not revoke separate enrichment consent")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        app.buttons["Done"].tap()
+        app.buttons["tab-places"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Home")).firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Amsterdam, Netherlands"].waitForExistence(timeout: 5), "Saved names survive disabling enrichment")
     }
 
     func testSelectiveSplitAndCancelPreserveCombinedStay() {
@@ -403,7 +410,7 @@ import XCTest
         XCTAssertTrue(app.staticTexts["Home"].exists)
         XCTAssertFalse(app.maps.firstMatch.exists)
         app.buttons["Done"].tap()
-        app.buttons["tab-map"].tap(); app.buttons["enable-apple-maps"].tap()
+        app.buttons["tab-map"].tap(); enableAppleMaps(in: app)
         XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
         app.buttons["tab-timeline"].tap()
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.tap()
@@ -415,14 +422,25 @@ import XCTest
         screenshot.name = "Known endpoints with an unrecorded path"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["Done"].tap()
         app.buttons["open-settings"].tap()
-        reveal(app.switches["maps-toggle"], in: app)
-        let mapsSwitch = app.switches["maps-toggle"]
-        XCTAssertEqual(mapsSwitch.value as? String, "1")
-        mapsSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertEqual(mapsSwitch.value as? String, "0")
+        reveal(app.buttons["map-settings"], in: app); app.buttons["map-settings"].tap()
+        assertSelected(app.buttons["map-provider-apple"])
+        app.buttons["map-provider-off"].tap()
+        assertSelected(app.buttons["map-provider-off"])
+        app.navigationBars.buttons["BackButton"].tap()
         app.buttons["Done"].tap()
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.tap()
         XCTAssertFalse(app.maps.firstMatch.exists)
+    }
+
+    private func assertSelected(_ element: XCUIElement) {
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: element)], timeout: 5), .completed)
+    }
+
+    private func enableAppleMaps(in app: XCUIApplication) {
+        app.buttons["choose-maps"].tap()
+        app.buttons["map-provider-apple"].tap()
+        app.buttons["Enable Apple Maps"].tap()
+        app.buttons["Done"].tap()
     }
 
     private func launch(fixture: Bool = false) -> XCUIApplication {
@@ -438,11 +456,11 @@ import XCTest
         app.buttons["skip-setup"].tap()
         XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
         app.buttons["tab-map"].tap()
-        XCTAssertTrue(app.buttons["enable-apple-maps"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["choose-maps"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.maps.firstMatch.exists)
         app.buttons["tab-places"].tap()
         app.buttons["tab-map"].tap()
-        XCTAssertTrue(app.buttons["enable-apple-maps"].exists)
+        XCTAssertTrue(app.buttons["choose-maps"].exists)
         XCTAssertFalse(app.maps.firstMatch.exists)
     }
 
@@ -460,11 +478,11 @@ import XCTest
         XCTAssertTrue(app.buttons["skip-setup"].waitForExistence(timeout: 10))
         app.buttons["skip-setup"].tap(); app.buttons["tab-places"].tap()
         app.buttons["add-place"].tap()
-        reveal(app.buttons["enter-coordinates"], in: app)
-        app.buttons["enter-coordinates"].tap()
         let name = app.textFields["place-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("Fixture Garden")
         if app.buttons["dismiss-keyboard"].exists { app.buttons["dismiss-keyboard"].tap() }
+        reveal(app.buttons["enter-coordinates"], in: app)
+        app.buttons["enter-coordinates"].tap()
         reveal(app.textFields["place-latitude"], in: app)
         app.textFields["place-latitude"].tap(); app.textFields["place-latitude"].typeText("0")
         app.buttons["dismiss-keyboard"].tap()
@@ -484,16 +502,27 @@ import XCTest
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Timeline with synthetic history"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.buttons["open-settings"].tap()
-        XCTAssertTrue(app.switches["maps-toggle"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.switches["maps-toggle"].value as? String, "0")
+        XCTAssertFalse(app.buttons["Retry storage"].exists)
+        XCTAssertFalse(app.staticTexts["Optional Apple service"].exists)
+        reveal(app.buttons["map-settings"], in: app)
+        let settings = XCTAttachment(screenshot: app.screenshot())
+        settings.name = "Separate map and Apple service settings"; settings.lifetime = .keepAlways; add(settings)
+        let about = app.buttons["about-places"]
+        reveal(about, in: app); about.tap()
+        XCTAssertTrue(app.buttons["Third-party licenses"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Offline place data"].exists)
     }
 
     func testEveryOnboardingPermissionCanBeSkipped() {
-        let app = launch()
+        let app = XCUIApplication()
+        app.resetAuthorizationStatus(for: .location)
+        app.launchArguments = ["--ui-testing"]
+        app.launch()
         XCTAssertTrue(app.buttons["onboarding-skip"].waitForExistence(timeout: 10))
-        for _ in 0..<7 {
+        for _ in 0..<8 {
             if app.buttons["onboarding-skip"].exists { app.buttons["onboarding-skip"].tap() }
         }
+        reveal(app.staticTexts["Not enabled"], in: app)
         XCTAssertTrue(app.staticTexts["Not enabled"].exists)
         app.buttons["onboarding-primary"].tap()
         XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
@@ -504,17 +533,17 @@ import XCTest
         XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10))
         app.buttons["tab-map"].tap()
         XCTAssertFalse(app.maps.firstMatch.exists)
-        app.buttons["enable-apple-maps"].tap()
+        enableAppleMaps(in: app)
         XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["disable-apple-maps"].exists)
         app.buttons["open-settings"].tap()
-        reveal(app.switches["maps-toggle"], in: app)
-        let mapsSwitch = app.switches["maps-toggle"]
-        XCTAssertEqual(mapsSwitch.value as? String, "1")
-        mapsSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertEqual(mapsSwitch.value as? String, "0")
+        reveal(app.buttons["map-settings"], in: app); app.buttons["map-settings"].tap()
+        assertSelected(app.buttons["map-provider-apple"])
+        app.buttons["map-provider-off"].tap()
+        assertSelected(app.buttons["map-provider-off"])
+        app.navigationBars.buttons["BackButton"].tap()
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["enable-apple-maps"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["choose-maps"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.maps.firstMatch.exists)
         app.buttons["tab-timeline"].tap(); app.buttons["tab-map"].tap()
         XCTAssertFalse(app.maps.firstMatch.exists)
@@ -542,6 +571,7 @@ import XCTest
 
     func testLocationContinueRequiresAccessButNotNowSkips() {
         let app = launch()
+        app.buttons["onboarding-primary"].tap()
         app.buttons["onboarding-primary"].tap()
         app.buttons["onboarding-primary"].tap()
         app.buttons["onboarding-primary"].tap()
@@ -609,6 +639,9 @@ import XCTest
         XCTAssertFalse(app.maps.firstMatch.exists)
         reveal(app.buttons["editor-enable-maps"], in: app)
         app.buttons["editor-enable-maps"].tap()
+        app.buttons["map-provider-apple"].tap()
+        app.buttons["Enable Apple Maps"].tap()
+        app.navigationBars.buttons["BackButton"].tap()
         let map = app.maps.firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 10))
         reveal(map, in: app)
@@ -629,7 +662,7 @@ import XCTest
         let radius = app.sliders["Recognition radius in metres"]
         revealBelowMap(radius)
         radius.adjust(toNormalizedSliderPosition: 0.5)
-        XCTAssertFalse(app.staticTexts["100 m"].exists)
+        XCTAssertNotEqual(app.staticTexts["recognition-radius-value"].label, "100 m")
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Pin"].waitForExistence(timeout: 5))
     }
@@ -658,7 +691,7 @@ import XCTest
         XCTAssertFalse(app.textFields["place-latitude"].exists)
         app.buttons["Cancel"].tap()
         app.buttons["tab-map"].tap()
-        XCTAssertTrue(app.buttons["enable-apple-maps"].exists)
+        XCTAssertTrue(app.buttons["choose-maps"].exists)
     }
 
     func testTestCaseExportExplainsExpectedResultsAndOpensFilePicker() {

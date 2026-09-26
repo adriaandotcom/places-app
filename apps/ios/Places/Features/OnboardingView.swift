@@ -3,7 +3,7 @@ import CoreLocation
 import CoreMotion
 import PlacesCore
 
-private enum OnboardingStep: Int, CaseIterable { case welcome, privacy, location, motion, places, wifi, notifications, ready }
+private enum OnboardingStep: Int, CaseIterable { case welcome, privacy, maps, location, motion, places, wifi, notifications, ready }
 private enum PlacePreset: String, Identifiable {
     case home = "Home", work = "Work", another = ""
     var id: String { rawValue }
@@ -82,9 +82,16 @@ struct OnboardingView: View {
             Text("A private memory.\nNot a data trail.").font(BrandFont.hero)
             Text("Here’s what stays here, and what can connect.").font(BrandFont.body).foregroundStyle(Palette.muted)
             InfoRow(symbol: "iphone", title: "On this iPhone", subtitle: "Your observations, places, search, and history are stored and processed locally.")
-            InfoRow(symbol: "map.fill", title: "Apple Maps, only if you choose", subtitle: "Maps make requests to Apple. Nothing loads until you explicitly enable them.", colorIndex: 1)
-            InfoRow(symbol: "lock.shield.fill", title: "No hidden connections", subtitle: "No analytics, advertising, third-party services, or hosted AI. History is excluded from automatic device backups.", colorIndex: 4)
+            InfoRow(symbol: "map.fill", title: "Your choice of maps", subtitle: "Use Apple Maps, or download maps for use on this iPhone. Nothing loads until you choose.", colorIndex: 1)
+            InfoRow(symbol: "lock.shield.fill", title: "No hidden connections", subtitle: "No analytics, advertising, or hosted AI. Map downloads come from GitHub; downloaded maps and your history stay on this iPhone.", colorIndex: 4)
             Text("Apple’s system location services operate under your device privacy settings. A full history export leaves the app only when you save it somewhere yourself.").font(.footnote).foregroundStyle(Palette.muted)
+        case .maps:
+            Text("Your map,\non your terms").font(BrandFont.hero)
+            Text("Apple Maps is always up to date. On-device Maps keeps map browsing private and works without a connection.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            NavigationLink { MapsSettings() } label: {
+                InfoRow(symbol: "map.fill", title: "Choose maps", subtitle: model.mapProvider.title, colorIndex: 1)
+            }.buttonStyle(.plain).accessibilityIdentifier("onboarding-map-settings")
+            Text("On-device Maps starts with a \(model.mapDownloads.pack(.world)?.sizeLabel ?? "World") download from GitHub. You can add detailed country maps later, or continue without maps.").font(.footnote).foregroundStyle(Palette.muted)
         case .location:
             HStack(spacing: Layout.spacing) {
                 PlaceIcon(symbol: "location.fill", colorIndex: 1, size: 52)
@@ -146,7 +153,7 @@ struct OnboardingView: View {
             Text("Your history begins with the permissions you chose. You can change them later in Settings.").font(BrandFont.body)
             InfoRow(symbol: "location.fill", title: "Location", subtitle: model.tracking.locationStatus, colorIndex: 1)
             InfoRow(symbol: "mappin", title: "Familiar places", subtitle: "\(model.places.count) saved", colorIndex: 2)
-            InfoRow(symbol: "lock.fill", title: "Storage", subtitle: model.mapsEnabled ? "On this iPhone. Apple Maps is enabled." : "On this iPhone. Apple Maps is off.")
+            InfoRow(symbol: "lock.fill", title: "Storage", subtitle: "On this iPhone. Maps: \(model.mapProvider.title).")
         }
     }
 

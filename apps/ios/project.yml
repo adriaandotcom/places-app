@@ -6,6 +6,9 @@ options:
   xcodeVersion: '27.0'
   groupSortPosition: top
 packages:
+  MapLibre:
+    url: https://github.com/maplibre/maplibre-native-distribution
+    exactVersion: 6.31.0
   PlacesCore:
     path: ../../packages/PlacesCore
 settings:
@@ -24,8 +27,12 @@ targets:
     platform: iOS
     sources:
       - path: Places
+        excludes: [Resources/OfflineMaps]
+      - path: Places/Resources/OfflineMaps
+        type: folder
     dependencies:
       - package: PlacesCore
+      - package: MapLibre
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places

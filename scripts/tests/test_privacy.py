@@ -4,7 +4,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check_privacy import ResourceParser, check_css, check_resource
+from check_privacy import ResourceParser, check_css, check_resource, check_map_manifest
+import json
+from copy import deepcopy
 
 
 class PrivacySmokeTests(unittest.TestCase):
@@ -40,6 +42,16 @@ class PrivacySmokeTests(unittest.TestCase):
         parser.feed('<img srcset="https://example.invalid/a.png 2x">')
         self.assertTrue(parser.errors)
         self.assertTrue(check_css('@import "https://example.invalid/style.css";', self.root, self.root))
+
+    def test_map_downloads_allow_only_bundled_release_assets(self):
+        root = Path(__file__).resolve().parents[2]
+        packs = json.loads((root / 'apps/ios/Places/Resources/OfflineMaps/packs.json').read_text())
+        self.assertEqual(check_map_manifest(packs), [])
+        for change in [dict(url=packs[0]['url'] + '?location=private'), dict(url='https://example.invalid/world.pmtiles'),
+                       dict(sha256='missing'), dict(bytes=100_000_001), dict(minZoom=1), dict(version='../main')]:
+            bad = deepcopy(packs)
+            bad[0].update(change)
+            self.assertTrue(check_map_manifest(bad), change)
 
 
 if __name__ == '__main__':

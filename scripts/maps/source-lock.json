@@ -1,0 +1,69 @@
+{
+  "version": "20260925.1",
+  "tiles": {
+    "url": "https://build.protomaps.com/20260925.pmtiles",
+    "schema": "4.15.2"
+  },
+  "extractor": {
+    "repository": "https://github.com/protomaps/go-pmtiles",
+    "version": "1.31.2"
+  },
+  "pythonPackage": "pmtiles==3.7.0",
+  "boundaries": {
+    "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson",
+    "sha256": "239eec57ac17f100a11e2536cffc56752c318b50ae765b0918ff7aab4ce8f255"
+  },
+  "measurements": [
+    {
+      "version": "20260925.1",
+      "region": "world",
+      "bytes": 28014752,
+      "sourceBytes": 44943631,
+      "sha256": "286fc8dd380b12042f63e033373a3ab5c0ac655a0db94b609a674b63dc5c6c45",
+      "features": {
+        "boundaries": 2007,
+        "earth": 3810,
+        "landcover": 2895,
+        "water": 9148,
+        "places": 24301,
+        "landuse": 4738,
+        "roads": 2315
+      },
+      "sourceSha256": "90fe233fe27909338e14d92b9165a45d4d97f6bd460d27e80d953970cf800f9e"
+    },
+    {
+      "version": "20260925.1",
+      "region": "netherlands",
+      "bytes": 35353432,
+      "sourceBytes": 110380174,
+      "sha256": "a462b74da869b2912bdbdbedf61951617352d22b404a988dd46b259198b40716",
+      "features": {
+        "boundaries": 751,
+        "earth": 2361,
+        "landcover": 5,
+        "landuse": 439392,
+        "places": 48990,
+        "roads": 42524,
+        "water": 27175
+      },
+      "sourceSha256": "74be0d9d36e07f01479213025d924174bdbb54574fa66c82793514538d33d522"
+    },
+    {
+      "version": "20260925.1",
+      "region": "greece",
+      "bytes": 36428648,
+      "sourceBytes": 69288155,
+      "sha256": "5d754fa09847a5ce29f081c230c471de004c58d4d84cf1c924e1d7814b78b4e9",
+      "features": {
+        "earth": 11991,
+        "landcover": 14,
+        "places": 77318,
+        "water": 14309,
+        "boundaries": 604,
+        "landuse": 114571,
+        "roads": 47981
+      },
+      "sourceSha256": "d71933270ccbdd93008a6cf4b54780e4543ac815448ba7ed7f95a923f2fb902b"
+    }
+  ]
+}
