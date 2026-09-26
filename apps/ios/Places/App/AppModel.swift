@@ -76,7 +76,10 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-wifi-recovery") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-nearby-wifi") {
+                        try await DemoFixtures.seedNearbyWiFi(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-wifi-recovery") {
                         try await DemoFixtures.seedWiFiRecovery(opened)
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-grouped-history") {

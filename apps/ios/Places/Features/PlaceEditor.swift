@@ -22,6 +22,10 @@ struct PlaceEditor: View {
     @State private var wifiDraft = ""
     @State private var wifiError: String?
     @State private var removingWiFi: String?
+    @State private var choosingWiFi = false
+    @State private var enteringWiFiAfterPicker = false
+    @State private var wifiSuggestions: [WiFiSuggestion] = []
+    @State private var wifiSuggestionsUnavailable = false
     @State private var choosingIcon = false
     @State private var choosingCatalog = false
     @State private var catalogReference: PlaceCatalogReference?
@@ -43,6 +47,19 @@ struct PlaceEditor: View {
     @FocusState private var focusedField: Field?
     private enum Field { case name, address, latitude, longitude, wifi }
     private var usesCoordinates: Bool { !model.mapsEnabled && (manualCoordinates || model.mapsChoiceMade) }
+    private var wifiCoordinate: Coordinate? {
+        if usesCoordinates {
+            guard let lat = Double(latitude), let lon = Double(longitude) else { return nil }
+            let value = Coordinate(latitude: lat, longitude: lon)
+            return value.isValid ? value : nil
+        }
+        return coordinate
+    }
+    private var availableWiFi: [WiFiSuggestion] { wifiSuggestions.filter { !wifiNames.contains($0.ssid) } }
+    private var wifiQuery: WiFiSuggestionQuery {
+        WiFiSuggestionQuery(coordinate: wifiCoordinate, radius: radius,
+                            connectionID: model.tracking.currentWiFiObservation?.id, revision: model.historyRevision)
+    }
 
     init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil,
          assigning: TimelineItem? = nil, suggestion: CatalogPlace? = nil, onSave: (() -> Void)? = nil) {
@@ -214,11 +231,17 @@ struct PlaceEditor: View {
                         .accessibilityLabel("Add Wi-Fi name").accessibilityIdentifier("add-wifi")
                 }
                 if let wifiError { Text(wifiError).font(.footnote).foregroundStyle(.red) }
-                if let ssid = model.tracking.currentSSID, !wifiNames.contains(ssid) {
-                    Button("Add connected Wi-Fi", systemImage: "wifi.badge.plus") { wifiNames.append(ssid); wifiError = nil }
+                if !availableWiFi.isEmpty {
+                    Button("Choose a network", systemImage: "wifi.badge.plus") {
+                        focusedField = nil
+                        if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
+                        choosingWiFi = true
+                    }.accessibilityIdentifier("choose-wifi-network")
                 }
-            } header: { Text("Wi-Fi networks (optional)") } footer: {
-                Text("Add the networks you use here.")
+            } header: { Text("Wi-Fi networks") } footer: {
+                Text(wifiSuggestionsUnavailable ? "Suggestions couldn’t be loaded. You can enter a network name."
+                     : wifiCoordinate == nil ? "Choose this place’s location to see networks recorded nearby."
+                     : "Add the networks you use here.")
             }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle(original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
@@ -229,12 +252,36 @@ struct PlaceEditor: View {
             }
             .interactiveDismissDisabled(saving)
             .task {
+                if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
                 // Reuse a fresh authorized fix; searching must never start sensors
                 // or silently set the new place's coordinates.
                 if let fix = model.tracking.currentLocation,
                    (0...900).contains(Date().timeIntervalSince(fix.timestamp)),
                    (0...200).contains(fix.horizontalAccuracy) {
                     recentSearchAnchor = Coordinate(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
+                }
+            }
+            .task(id: wifiQuery) {
+                wifiSuggestions = []; wifiSuggestionsUnavailable = false
+                guard let coordinate = wifiCoordinate else { return }
+                do {
+                    let values = try await model.store?.wifiSuggestions(near: coordinate, placeRadius: radius,
+                        connected: model.tracking.currentWiFiObservation) ?? []
+                    try Task.checkCancellation()
+                    wifiSuggestions = values
+                } catch is CancellationError { }
+                catch { if !Task.isCancelled { wifiSuggestionsUnavailable = true } }
+            }
+            .sheet(isPresented: $choosingWiFi, onDismiss: {
+                if enteringWiFiAfterPicker { enteringWiFiAfterPicker = false; focusedField = .wifi }
+            }) {
+                NavigationStack {
+                    PlaceWiFiPicker(suggestions: availableWiFi, add: { suggestion in
+                        if !wifiNames.contains(suggestion.ssid) { wifiNames.append(suggestion.ssid) }
+                        wifiError = nil
+                    }, enterName: {
+                        enteringWiFiAfterPicker = true; choosingWiFi = false
+                    })
                 }
             }
             .task(id: searchAnchor) {

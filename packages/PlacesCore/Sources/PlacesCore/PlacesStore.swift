@@ -71,6 +71,7 @@ public actor PlacesStore {
             try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
+        migrator.registerMigration("v5-nearby-wifi-suggestions", migrate: WiFiSuggestionIndex.migrate)
         try migrator.migrate(queue)
     }
 
@@ -126,6 +127,7 @@ public actor PlacesStore {
                 inserted += 1
                 earliest = min(earliest ?? observation.timestamp, observation.timestamp)
                 if observation.source == .wifi {
+                    try WiFiSuggestionIndex.record(observation, db: db)
                     networkEvidenceChanged = try StoreSQL.learnWiFi(observation, places: places, db: db) || networkEvidenceChanged
                 }
             }
@@ -222,6 +224,15 @@ public actor PlacesStore {
 
     public func networks() throws -> [WiFiNetwork] {
         try queue.read { try StoreSQL.decodeAll(WiFiNetwork.self, db: $0, sql: "SELECT payload FROM wifiNetworks ORDER BY ssid") }
+    }
+    public func wifiSuggestions(near coordinate: Coordinate, placeRadius: Double = 100,
+                                connected: SensorObservation? = nil, now: Date = Date()) throws -> [WiFiSuggestion] {
+        try queue.read { db in
+            try WiFiSuggestionIndex.suggestions(near: coordinate, placeRadius: placeRadius, connected: connected, now: now,
+                networks: StoreSQL.decodeAll(WiFiNetwork.self, db: db, sql: "SELECT payload FROM wifiNetworks"),
+                points: StoreSQL.decodeAll(WiFiAccessPoint.self, db: db, sql: "SELECT payload FROM wifiAccessPoints"),
+                places: StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places"), db: db)
+        }
     }
     public func accessPoints() throws -> [WiFiAccessPoint] {
         try queue.read { try StoreSQL.decodeAll(WiFiAccessPoint.self, db: $0, sql: "SELECT payload FROM wifiAccessPoints") }

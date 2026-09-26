@@ -1,6 +1,46 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testWiFiPickerOffersOnlyNearbyNamesAndPreservesThePlaceDraft() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-nearby-wifi"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10))
+        app.buttons["tab-places"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Hotel")).firstMatch.tap()
+        reveal(app.buttons["Edit place"], in: app); app.buttons["Edit place"].tap()
+        let choose = app.buttons["choose-wifi-network"]
+        reveal(choose, in: app); choose.tap()
+        XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(identifier: "Add Fixture Guest").count, 1)
+        XCTAssertTrue(app.buttons["Add Fixture Garden"].exists)
+        XCTAssertFalse(app.buttons["Add Other city"].exists)
+        XCTAssertFalse(app.buttons["Add Already added"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Networks observed around this place"; screenshot.lifetime = .keepAlways; add(screenshot)
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
+        reveal(app.buttons["Add Fixture Guest"], in: app)
+        app.buttons["Add Fixture Guest"].tap()
+        XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForNonExistence(timeout: 5))
+        app.buttons["Add Fixture Garden"].tap()
+        app.buttons["enter-wifi-manually"].tap()
+        let name = app.textFields["wifi-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.typeText("Fixture Extra")
+        app.buttons["add-wifi"].tap()
+        app.buttons["dismiss-keyboard"].tap()
+        XCTAssertTrue(app.staticTexts["Fixture Guest"].exists)
+        XCTAssertTrue(app.staticTexts["Fixture Garden"].exists)
+        XCTAssertFalse(app.buttons["choose-wifi-network"].exists)
+        app.buttons["save-place"].tap()
+        XCTAssertTrue(app.buttons["Edit place"].waitForExistence(timeout: 5))
+        app.buttons["Edit place"].tap()
+        reveal(app.textFields["wifi-name"], in: app)
+        XCTAssertTrue(app.staticTexts["Fixture Guest"].exists)
+        XCTAssertTrue(app.staticTexts["Fixture Garden"].exists)
+        XCTAssertTrue(app.staticTexts["Fixture Extra"].exists)
+    }
+
     func testVisitNamingAndEvidenceAreImmediatelyAccessible() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-unnamed-stay", "--ui-saved-place"]

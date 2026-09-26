@@ -61,10 +61,28 @@ import PlacesCore
         var values: [SensorObservation] = []
         tracker.onObservations = { values += $0 }
         reader.complete(0, connection); reader.complete(0, connection)
+        XCTAssertEqual(tracker.currentWiFiObservation?.ssid, connection.ssid)
         XCTAssertEqual(values.filter { $0.source == .wifi }.count, 1)
         tracker.wifiPathChanged(); reader.complete(1, nil)
+        XCTAssertNil(tracker.currentWiFiObservation)
         XCTAssertEqual(values.filter { $0.source == .wifi }.count, 2)
         tracker.configure(places: [], enabled: false)
+    }
+
+    func testWiFiPairsWithAnAlreadyDeliveredFixAndDoesNotStartAnotherRead() {
+        let (tracker, live, _, reader) = makeTracker()
+        var values: [SensorObservation] = []
+        tracker.onObservations = { values += $0 }
+        let fix = CLLocation(coordinate: .init(latitude: 1.01, longitude: 1.01), altitude: 0,
+                             horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: Date())
+        tracker.locationManager(live, didUpdateLocations: [fix])
+        XCTAssertEqual(reader.callbacks.count, 1, "Reuse the pending connected-network request")
+        reader.complete(0, connection)
+        XCTAssertEqual(values.first(where: { $0.source == .wifi })?.usableCoordinate,
+                       Coordinate(latitude: 1.01, longitude: 1.01))
+        XCTAssertEqual(tracker.currentWiFiObservation?.coordinateTimestamp, fix.timestamp)
+        tracker.configure(places: [], enabled: false)
+        XCTAssertNil(tracker.currentWiFiObservation)
     }
 
     func testRoamingAndInternetOutageKeepKnownWiFiButDisconnectionChecksLocation() {

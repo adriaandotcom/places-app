@@ -3,6 +3,19 @@ import Foundation
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedNearbyWiFi(_ store: PlacesStore) async throws {
+        let coordinate = Coordinate(latitude: 1, longitude: 1)
+        try await store.savePlace(Place(name: "Fixture Hotel", coordinate: coordinate, expectedSSIDs: ["Already added"]))
+        let values = [("Fixture Guest", coordinate), ("Fixture Guest", coordinate),
+                      ("Fixture Garden", Coordinate(latitude: 1.01, longitude: 1)),
+                      ("Other city", Coordinate(latitude: 2, longitude: 2)), ("Already added", coordinate)]
+        try await store.append(values.enumerated().map { index, value in
+            SensorObservation(timestamp: Date().addingTimeInterval(Double(index - 10) * 60), source: .wifi,
+                coordinate: value.1, horizontalAccuracy: 10, ssid: value.0,
+                bssid: String(format: "02:00:00:00:00:%02x", index))
+        })
+    }
+
     static func seedWiFiRecovery(_ store: PlacesStore) async throws {
         let start = Calendar.current.startOfDay(for: Date())
         let home = Place(id: "recovery-home", name: "Home", coordinate: .init(latitude: 1, longitude: 1), symbol: "house.fill")
