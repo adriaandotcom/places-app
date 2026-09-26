@@ -288,8 +288,11 @@ import XCTest
             .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.45)),
                    withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertTrue(today.isSelected)
-        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.45))
-            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.45)))
+        // The zone is measured in points, not a percentage of a particular iPhone.
+        // Start beyond the old 44pt zone and move past halfway without flick inertia.
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.45)).withOffset(CGVector(dx: 60, dy: 0))
+            .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.45)),
+                   withVelocity: .slow, thenHoldForDuration: 0.3)
         let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: yesterday)
         XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 5), .completed)
         XCTAssertEqual(today.frame.minX, todayFrame.minX, accuracy: 0.5, "Dates stay in place while the highlight moves")
