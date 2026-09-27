@@ -36,5 +36,6 @@
 - Use PolyForm Noncommercial 1.0.0 for original code. Call the public project source-available, not OSI open source. Preserve dependency/asset license notices.
 - Pin dependencies. For larger features, check published vulnerable version ranges and read release/changelog notes before necessary upgrades.
 - Test critical inference, migration, recovery, data deletion, consent gating, and durable corrections. Add inexpensive smoke tests for workflow scripts. Never replace device validation with simulator claims.
+- Run tests locally before pushing with `python3 scripts/validate_local.py --simulator <QA-simulator-UUID>`. GitHub Actions only checks privacy and builds/releases the app; do not add server-side test execution. Keep dependency and compilation caches enabled and verify cache reuse when changing the workflows.
 - XcodeGen's `apps/ios/project.yml` is the project source of truth; commit the generated project and resolved dependency versions. Signing settings stay local.
 - This personal project publishes validated changes directly to `main`; no PR or issue is required. Keep the repository public. Stage explicit paths and verify the remote commit and CI after pushing.

@@ -6,7 +6,8 @@ ASC_KEY_ID and ASC_ISSUER_ID. Keep the private key outside this repository.
 Create an internal TestFlight group with automatic distribution once in App Store
 Connect. Apple processing and installation happen after this uploader finishes.
 Use --archive-only to benchmark without uploading; --dry-run prints the steps.
-The full simulator/UI suite runs independently in ci.yml.
+Run scripts/validate_local.py before pushing. CI uses --skip-tests because the
+test suites run locally; archive and upload still validate the release build.
 """
 import argparse
 from datetime import datetime, timezone
@@ -63,6 +64,13 @@ def clean_revision():
     return subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 
 
+def compilation_cache_summary(log):
+    # Count compiler diagnostics, never publish archive/signing command lines.
+    hits = re.findall(r'remark: cache hit\b', log)
+    misses = re.findall(r'remark: cache miss\b', log)
+    return {'hits': len(hits), 'misses': len(misses)}
+
+
 def execute(args, env=os.environ):
     if not re.fullmatch(r'[A-Z0-9]{10}', args.team or ''):
         raise ValueError('Provide --team or PLACES_TEAM_ID (the 10-character Apple Developer team ID).')
@@ -91,16 +99,24 @@ def execute(args, env=os.environ):
         options.write_bytes(plistlib.dumps(export_options(args.team, profile)))
         phases = [
             ('Privacy checks', [sys.executable, 'scripts/check_privacy.py']),
-            ('Workflow smoke tests', [sys.executable, '-m', 'unittest', 'discover', '-s', 'scripts/tests']),
-            ('Core tests', ['swift', 'test', '--package-path', 'packages/PlacesCore']),
+        ]
+        if not args.skip_tests:
+            phases.extend([
+                ('Workflow smoke tests', [sys.executable, '-m', 'unittest', 'discover', '-s', 'scripts/tests']),
+                ('Core tests', ['swift', 'test', '--package-path', 'packages/PlacesCore']),
+            ])
+        phases.extend([
             ('Archive', ['xcodebuild', '-project', 'apps/ios/Places.xcodeproj', '-scheme', 'Places',
                          '-configuration', 'Release', '-destination', 'generic/platform=iOS',
                          '-derivedDataPath', str(work / 'DerivedData'),
                          '-clonedSourcePackagesDirPath', str(work / 'SourcePackages'),
                          '-disableAutomaticPackageResolution', '-archivePath', str(archive),
+                         'COMPILATION_CACHE_ENABLE_CACHING=YES',
+                         'COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES',
+                         f'COMPILATION_CACHE_CAS_PATH={work / "CompilationCache.noindex"}',
                          f'DEVELOPMENT_TEAM={args.team}', f'CURRENT_PROJECT_VERSION={args.build_number}',
                          *signing, '-allowProvisioningUpdates', *auth, 'archive']),
-        ]
+        ])
         if not args.archive_only:
             phases.append(('Upload', ['xcodebuild', '-exportArchive', '-archivePath', str(archive),
                                      '-exportPath', str(work / 'Export'), '-exportOptionsPlist', str(options),
@@ -128,6 +144,10 @@ def execute(args, env=os.environ):
                         print(error[:800], file=sys.stderr, flush=True)
                     raise RuntimeError(f'{label} failed. See {log}. No later release steps were run.')
                 print(f'{label}: {timings["phases"][label]}s', flush=True)
+                if label == 'Archive':
+                    cache = compilation_cache_summary(log.read_text(errors='replace'))
+                    timings['compilationCache'] = cache
+                    print(f'Compiler cache: {cache["hits"]} hits, {cache["misses"]} misses.', flush=True)
             if not args.dry_run:
                 print('Archive ready; nothing uploaded.' if args.archive_only else
                       'Upload accepted. Apple must finish processing before TestFlight can install it.\n'
@@ -142,6 +162,8 @@ def main():
     parser.add_argument('--team', default=os.environ.get('PLACES_TEAM_ID'))
     parser.add_argument('--archive-only', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--skip-tests', action='store_true',
+                        help='CI only: tests have already been run locally before pushing.')
     parser.add_argument('--build-number', default=build_number())
     parser.add_argument('--work-dir', type=Path, default=ROOT / 'build/testflight')
     args = parser.parse_args()

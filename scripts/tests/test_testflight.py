@@ -16,9 +16,32 @@ spec.loader.exec_module(release)
 
 
 class TestFlightSmokeTests(unittest.TestCase):
+    def test_cache_report_counts_only_compiler_diagnostics(self):
+        log = ('command: cache hit\n'
+               "remark: cache hit for input file 'Places.swift': key 'fixture'\n"
+               "remark: cache miss for input file 'Changed.swift': key 'fixture'\n")
+        self.assertEqual(release.compilation_cache_summary(log), {'hits': 1, 'misses': 1})
+
     def options(self, directory, archive_only=False):
         return argparse.Namespace(team='TESTTEAM01', build_number='2460.10.25',
-                                  work_dir=Path(directory), archive_only=archive_only, dry_run=False)
+                                  work_dir=Path(directory), archive_only=archive_only, dry_run=False,
+                                  skip_tests=False)
+
+    def test_ci_skips_tests_but_still_checks_archives_and_uploads(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(release, 'clean_revision', return_value='fixture-commit'), \
+             patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
+            options = self.options(directory)
+            options.skip_tests = True
+            release.execute(options, {})
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(commands), 3)
+            self.assertIn('scripts/check_privacy.py', commands[0])
+            archive = commands[1]
+            self.assertIn('archive', archive)
+            self.assertIn('COMPILATION_CACHE_ENABLE_CACHING=YES', archive)
+            self.assertIn(f'COMPILATION_CACHE_CAS_PATH={Path(directory).resolve() / "CompilationCache.noindex"}', archive)
+            self.assertIn('-exportArchive', commands[2])
 
     def test_failed_checks_prevent_archive_and_upload(self):
         with tempfile.TemporaryDirectory() as directory, \
@@ -123,16 +146,27 @@ class TestFlightSmokeTests(unittest.TestCase):
                                      str(Path(directory) / 'fixture.pem')], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_workflow_only_releases_main_and_keeps_full_ci_separate(self):
+    def test_workflow_only_releases_main_and_runs_tests_locally(self):
         root = SCRIPT.parents[1]
         workflow = (root / '.github/workflows/testflight.yml').read_text()
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
         self.assertIn("vars.PLACES_TESTFLIGHT_ENABLED == 'true'", workflow)
         self.assertNotIn('pull_request:', workflow)
         self.assertNotIn('pull_request_target:', workflow)
-        self.assertIn('run: python3 scripts/testflight.py', workflow)
+        self.assertIn('run: python3 scripts/testflight.py --skip-tests', workflow)
         self.assertIn('if: always()', workflow)
-        self.assertIn('Permission-free UI smoke tests', (root / '.github/workflows/ci.yml').read_text())
+        validation = (root / '.github/workflows/ci.yml').read_text()
+        for text in (workflow, validation):
+            self.assertNotIn('swift test', text)
+            self.assertNotIn('unittest discover', text)
+            self.assertNotIn('bootstatus', text)
+            self.assertIn('/CompilationCache.noindex', text)
+            self.assertIn('/SourcePackages', text)
+            self.assertNotIn('packages/PlacesCore/.build', text)
+        local = (root / 'scripts/validate_local.py').read_text()
+        self.assertIn("'swift', 'test'", local)
+        self.assertIn("'unittest', 'discover'", local)
+        self.assertIn("'test'", local)
 
 
 if __name__ == '__main__':

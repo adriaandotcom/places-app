@@ -91,18 +91,27 @@ jobs:
           security import "$RUNNER_TEMP/places-signing.p12" -P "$PLACES_SIGNING_PASSWORD" -A -t cert -f pkcs12 -k "$places_keychain"
           security set-key-partition-list -S apple-tool:,apple: -k "$places_password" "$places_keychain" > /dev/null
           security list-keychains -d user -s "$places_keychain" "$HOME/Library/Keychains/login.keychain-db"
-      - name: Restore dependency and core-test caches
+      - name: Identify the Xcode toolchain
+        id: toolchain
+        run: echo "version=$(xcodebuild -version | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Cache Swift package downloads
+        id: packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # No keychains, profiles, app archives, signing logs or private keys.
-          path: |
-            build/testflight/SourcePackages
-            packages/PlacesCore/.build
-          key: places-beta-${{ runner.os }}-xcode26.6-${{ hashFiles('**/Package.resolved', 'packages/PlacesCore/Package.swift') }}-${{ github.sha }}
+          path: build/testflight/SourcePackages
+          key: places-packages-v2-ios-release-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('**/Package.resolved', '**/Package.swift') }}
+      - name: Cache compiled code
+        id: compiled
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          # Xcode's content-addressed compiler results, not signed archives,
+          # provisioning profiles, credentials, build logs or whole DerivedData.
+          path: build/testflight/CompilationCache.noindex
+          key: places-compiled-v1-ios-release-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            places-beta-${{ runner.os }}-xcode26.6-${{ hashFiles('**/Package.resolved', 'packages/PlacesCore/Package.swift') }}-
+            places-compiled-v1-ios-release-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-
       - name: Check, archive and upload internal beta
-        run: python3 scripts/testflight.py
+        run: python3 scripts/testflight.py --skip-tests
       - name: Report measured release time
         if: always()
         run: |
@@ -116,6 +125,8 @@ jobs:
                   output.write('## Internal beta timings\n\n')
                   for phase, seconds in data['phases'].items():
                       output.write(f'- {phase}: {seconds}s\n')
+                  if cache := data.get('compilationCache'):
+                      output.write(f"- Compiler cache: {cache['hits']} hits, {cache['misses']} misses\n")
                   output.write(f"\nTotal: {data['totalSeconds']}s. Apple processing and installation are additional.\n")
           PY
       - name: Remove temporary signing credentials
