@@ -30,7 +30,11 @@ struct PlacesView: View {
 struct PlaceDetail: View {
     @Environment(AppModel.self) private var model
     let placeID: String
-    @State private var editing = false
+    private enum Editor: String, Identifiable {
+        case place, wifi
+        var id: String { rawValue }
+    }
+    @State private var editor: Editor?
     private var place: Place? { model.places.first { $0.id == placeID } }
     var body: some View {
         ScrollView {
@@ -56,16 +60,40 @@ struct PlaceDetail: View {
                         }
                     }
                     InfoRow(symbol: "scope", title: "Recognition area", subtitle: "Within \(Int(place.radius)) metres, when the evidence is clear.", colorIndex: place.colorIndex)
-                    Text("Wi-Fi at this place").font(BrandFont.heading)
                     let points = model.accessPoints.filter { $0.placeID == placeID }
                     let networks = model.networks.filter { network in points.contains { $0.networkID == network.id } || place.expectedSSIDs.contains(network.ssid) }
-                    if networks.isEmpty { Text("No networks learned yet. You can add expected Wi-Fi names when editing this place.").font(BrandFont.body).foregroundStyle(Palette.muted) }
-                    ForEach(networks) { network in WiFiClassificationPicker(network: network) }
+                    let names = place.expectedSSIDs + networks.map(\.ssid).filter { !place.expectedSSIDs.contains($0) }
+                    HStack {
+                        Text("Wi-Fi networks").font(BrandFont.heading)
+                        Spacer()
+                        Button(names.isEmpty ? "Add" : "Edit") { editor = .wifi }
+                            .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
+                            .foregroundStyle(Palette.green)
+                            .accessibilityLabel("Edit Wi-Fi networks").accessibilityIdentifier("place-edit-wifi")
+                    }
+                    if names.isEmpty { Text("No Wi-Fi networks added.").font(BrandFont.body).foregroundStyle(Palette.muted) }
+                    else {
+                        VStack(alignment: .leading, spacing: Layout.compact) {
+                            ForEach(names, id: \.self) { name in
+                                if name != names.first { Divider() }
+                                if let network = networks.first(where: { $0.ssid == name }) {
+                                    NavigationLink {
+                                        ScrollView { WiFiClassificationPicker(network: network).padding(Layout.gutter) }
+                                            .background(Palette.background).navigationTitle("Network type").navigationBarTitleDisplayMode(.inline)
+                                    } label: {
+                                        HStack { WiFiNameLabel(name: name, subtitle: place.expectedSSIDs.contains(name) ? nil : "Learned here"); Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted) }
+                                    }.buttonStyle(.plain)
+                                } else { WiFiNameLabel(name: name) }
+                            }
+                        }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                    }
                     Text("Coordinates are stored locally. Changing a place re-evaluates observations, while preserving your timeline corrections.").font(.footnote).foregroundStyle(Palette.muted)
-                    Button("Edit place") { editing = true }.buttonStyle(PrimaryButton())
+                    Button("Edit place") { editor = .place }.buttonStyle(PrimaryButton())
                 }.padding(Layout.gutter)
             }
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $editing) { if let place { NavigationStack { PlaceEditor(place: place) } } }
+            .sheet(item: $editor) { target in
+                if let place { NavigationStack { PlaceEditor(place: place, wifiOnly: target == .wifi) } }
+            }
     }
 }

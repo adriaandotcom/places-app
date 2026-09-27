@@ -27,7 +27,8 @@ struct PlaceWiFiEditor: View {
     let coordinate: Coordinate?
     let radius: Double
     @FocusState.Binding var fieldFocused: Bool
-    @State private var adding = false
+    @State private var editing = false
+    let chooseNetwork: ([WiFiSuggestion]) -> Void
     @State private var removing: String?
     @State private var suggestions: [WiFiSuggestion] = []
     @State private var unavailable = false
@@ -39,48 +40,58 @@ struct PlaceWiFiEditor: View {
     var body: some View {
         Section {
             ForEach(draft.names, id: \.self) { name in
-                HStack(spacing: Layout.spacing) {
-                    Label(name, systemImage: "wifi").foregroundStyle(Palette.ink)
+                HStack(spacing: Layout.compact) {
+                    WiFiNameLabel(name: name)
                     Spacer(minLength: 0)
-                    Button { removing = name } label: { Image(systemName: "minus.circle.fill") }
-                        .buttonStyle(.borderless).foregroundStyle(Palette.muted)
-                        .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                        .accessibilityLabel("Remove \(name)")
+                    if editing {
+                        Button { removing = name } label: { WiFiActionIcon(symbol: "minus") }
+                            .buttonStyle(.borderless).accessibilityLabel("Remove \(name)")
+                    }
                 }.accessibilityIdentifier("saved-wifi-\(name)")
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Remove", systemImage: "trash") { removing = name }.tint(.red)
                     }
             }
-            ForEach(available) { suggestion in
-                WiFiSuggestionRow(suggestion: suggestion) {
-                    draft.names.append(suggestion.ssid); draft.error = nil
-                }
-            }
-            if adding {
-                HStack {
-                    TextField("Network name", text: $draft.entry)
-                        .autocorrectionDisabled().textInputAutocapitalization(.never)
-                        .focused($fieldFocused).submitLabel(.done).onSubmit(add)
-                        .accessibilityLabel("Wi-Fi network name").accessibilityIdentifier("wifi-name")
-                    Button(action: add) { Image(systemName: "plus.circle.fill") }
-                        .buttonStyle(.borderless).font(.title3)
-                        .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                        .accessibilityLabel("Add Wi-Fi name").accessibilityIdentifier("add-wifi")
-                }
-            }
+            HStack(spacing: Layout.compact) {
+                Button { fieldFocused = true } label: { WiFiActionIcon(symbol: "plus") }
+                    .buttonStyle(.borderless).accessibilityLabel("Enter a Wi-Fi name")
+                TextField("Network name", text: $draft.entry)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
+                    .focused($fieldFocused).submitLabel(.done).onSubmit(add)
+                    .padding(Layout.compact)
+                    .overlay { RoundedRectangle(cornerRadius: Layout.compact)
+                        .strokeBorder(fieldFocused ? Palette.green : Palette.line) }
+                    .accessibilityLabel("Wi-Fi network name").accessibilityIdentifier("wifi-name")
+                Button(action: add) { WiFiActionIcon(symbol: "checkmark") }
+                    .buttonStyle(.borderless).accessibilityLabel("Add Wi-Fi name").accessibilityIdentifier("add-wifi")
+            }.id("place-wifi-entry")
             if let error = draft.error { Text(error).font(.footnote).foregroundStyle(.red) }
-            if !adding {
-                Button {
-                    adding = true; fieldFocused = true
-                } label: {
-                    Label("Add Wi-Fi network", systemImage: "plus.circle")
-                        .frame(minHeight: Layout.touchTarget)
-                }.accessibilityIdentifier("add-wifi-network")
-            }
-        } header: { Text("Wi-Fi at this place") } footer: {
-            Text(unavailable ? "Suggestions couldn’t be loaded. You can add a network name."
-                : coordinate == nil ? "Choose this place’s location to see networks recorded nearby."
-                : "Networks recorded nearby appear here. Add any that belong to this place.")
+        } header: {
+            HStack {
+                Text("Wi-Fi networks")
+                Spacer()
+                if !draft.names.isEmpty {
+                    Button(editing ? "Done" : "Edit") { editing.toggle() }
+                        .font(.body).foregroundStyle(Palette.green)
+                        .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
+                        .accessibilityLabel(editing ? "Finish editing Wi-Fi networks" : "Edit Wi-Fi networks")
+                        .accessibilityIdentifier("edit-wifi-networks")
+                }
+            }.textCase(nil)
+        } footer: {
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                if !available.isEmpty {
+                    Button {
+                        fieldFocused = false; chooseNetwork(suggestions)
+                        if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
+                    } label: {
+                        Label("Choose a Wi-Fi network", systemImage: "wifi")
+                            .font(.body).padding(.vertical, Layout.compact)
+                    }.buttonStyle(.bordered).buttonBorderShape(.capsule).tint(Palette.green)
+                        .frame(maxWidth: .infinity).accessibilityIdentifier("choose-wifi-network")
+                }
+                if unavailable { Text("Suggestions couldn’t be loaded. You can enter a network name.") }
+            }.textCase(nil)
         }
         .task { if !model.uiTesting { model.tracking.refreshCurrentWiFi() } }
         .task(id: query) {
@@ -97,10 +108,38 @@ struct PlaceWiFiEditor: View {
         .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
             titleVisibility: .visible, presenting: removing) { name in
             Button("Remove Wi-Fi name", role: .destructive) { draft.names.removeAll { $0 == name }; removing = nil }
-        } message: { _ in Text("It will be removed from this place when you save. Recorded history stays intact.") }
+        } message: { _ in Text("The saved name will be removed when you save this place. Learned connections and recorded history stay intact.") }
     }
     private func add() {
-        if draft.add() { adding = false; fieldFocused = false }
+        if draft.add() { fieldFocused = false }
+    }
+}
+
+/// Identical geometry and weight for plus, confirmation and removal controls.
+private struct WiFiActionIcon: View {
+    let symbol: String
+    @ScaledMetric(relativeTo: .body) private var diameter = Layout.spacing * 2
+    var body: some View {
+        Image(systemName: symbol).font(.body.weight(.semibold)).foregroundStyle(.white)
+            .frame(width: diameter, height: diameter)
+            .background(Palette.controlGreen, in: Circle())
+            .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
+            .contentShape(Rectangle()).accessibilityHidden(true)
+    }
+}
+
+struct WiFiNameLabel: View {
+    let name: String
+    var subtitle: String? = nil
+    var body: some View {
+        HStack(spacing: Layout.spacing) {
+            Image(systemName: "wifi").font(.title3)
+                .frame(width: Layout.touchTarget).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                Text(name).font(.body).fixedSize(horizontal: false, vertical: true)
+                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(Palette.muted) }
+            }
+        }.frame(minHeight: Layout.touchTarget).foregroundStyle(Palette.ink)
     }
 }
 
@@ -111,26 +150,55 @@ struct WiFiSuggestionQuery: Equatable {
     var revision: Int
 }
 
-struct WiFiSuggestionRow: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let suggestion: WiFiSuggestion
-    let add: () -> Void
+struct PlaceWiFiPicker: View {
+    @Environment(\.dismiss) private var dismiss
+    let suggestions: [WiFiSuggestion]
+    @Binding var draft: PlaceWiFiDraft
+    let enterName: () -> Void
+    @State private var search = ""
+    private var matching: [WiFiSuggestion] {
+        suggestions.filter { !draft.names.contains($0.ssid) && (search.isEmpty || $0.ssid.localizedStandardContains(search)) }
+    }
     var body: some View {
-        Button(action: add) {
-            HStack(spacing: Layout.spacing) {
-                if !dynamicTypeSize.isAccessibilitySize {
-                    Image(systemName: "wifi").font(.system(size: 22)).foregroundStyle(Palette.green)
+        List {
+            if matching.contains(where: \.isConnected) {
+                Section("Connected now") {
+                    ForEach(matching.filter(\.isConnected)) { suggestion in WiFiSuggestionRow(suggestion: suggestion, draft: $draft) }
                 }
+            }
+            if matching.contains(where: { !$0.isConnected }) {
+                Section("Seen near this place") {
+                    ForEach(matching.filter { !$0.isConnected }) { suggestion in WiFiSuggestionRow(suggestion: suggestion, draft: $draft) }
+                }
+            }
+            if matching.isEmpty {
+                Text(search.isEmpty ? "No more networks to add here." : "No matching networks.").foregroundStyle(Palette.muted)
+            }
+            Button("Enter a Wi-Fi name", systemImage: "keyboard", action: enterName)
+        }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
+            .navigationTitle("Choose a Wi-Fi network").navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $search, prompt: "Find a network")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+    }
+}
+
+private struct WiFiSuggestionRow: View {
+    let suggestion: WiFiSuggestion
+    @Binding var draft: PlaceWiFiDraft
+    var body: some View {
+        Button {
+            guard !draft.names.contains(suggestion.ssid) else { return }
+            draft.names.append(suggestion.ssid); draft.error = nil
+        } label: {
+            HStack(spacing: Layout.compact) {
                 VStack(alignment: .leading, spacing: Layout.compact) {
-                    Text(suggestion.ssid).foregroundStyle(Palette.ink)
-                    if suggestion.isConnected { Text("Connected now").font(.caption).foregroundStyle(Palette.green) }
-                    else {
+                    Text(suggestion.ssid).font(.body).foregroundStyle(Palette.ink)
+                    if !suggestion.isConnected {
                         Text("Last seen \(suggestion.lastSeen.formatted(date: .abbreviated, time: .omitted))")
                             .font(.caption).foregroundStyle(Palette.muted)
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                Image(systemName: "plus.circle.fill").font(.system(size: 22)).foregroundStyle(Palette.green)
+                }.frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                WiFiActionIcon(symbol: "plus")
             }.frame(minHeight: Layout.touchTarget).contentShape(Rectangle())
         }.accessibilityLabel("Add \(suggestion.ssid)")
     }

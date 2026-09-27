@@ -136,8 +136,10 @@ import XCTest
         app.buttons["tab-places"].tap()
         app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Hotel")).firstMatch.tap()
         reveal(app.buttons["Edit place"], in: app); app.buttons["Edit place"].tap()
-        XCTAssertFalse(app.textFields["wifi-name"].exists, "Wi-Fi starts with rows, not a text box")
-        reveal(app.buttons["Add Fixture Guest"], in: app)
+        reveal(app.buttons["choose-wifi-network"], in: app)
+        XCTAssertTrue(app.textFields["wifi-name"].exists)
+        let editorShot = XCTAttachment(screenshot: app.screenshot()); editorShot.name = "05 Saved place - inline Wi-Fi"; editorShot.lifetime = .keepAlways; add(editorShot)
+        app.buttons["choose-wifi-network"].tap()
         XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons.matching(identifier: "Add Fixture Guest").count, 1)
         XCTAssertTrue(app.buttons["Add Fixture Garden"].exists)
@@ -150,9 +152,10 @@ import XCTest
         app.buttons["Add Fixture Guest"].tap()
         XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForNonExistence(timeout: 5))
         app.buttons["Add Fixture Garden"].tap()
-        app.buttons["add-wifi-network"].tap()
+        app.buttons["Done"].tap()
         let name = app.textFields["wifi-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
+        reveal(name, in: app)
         name.tap(); name.typeText("Fixture Extra")
         app.buttons["add-wifi"].tap()
         if app.buttons["dismiss-keyboard"].exists { app.buttons["dismiss-keyboard"].tap() }
@@ -161,10 +164,23 @@ import XCTest
         XCTAssertFalse(app.buttons["choose-wifi-network"].exists)
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.buttons["Edit place"].waitForExistence(timeout: 5))
-        app.buttons["Edit place"].tap()
-        reveal(app.buttons["add-wifi-network"], in: app)
+        reveal(app.staticTexts["Fixture Extra"], in: app)
+        XCTAssertTrue(app.staticTexts["Fixture Extra"].exists)
+        app.buttons["place-edit-wifi"].tap()
+        XCTAssertTrue(app.navigationBars["Wi-Fi networks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["wifi-name"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Fixture Guest"].exists)
         XCTAssertTrue(app.staticTexts["Fixture Garden"].exists)
+        XCTAssertTrue(app.staticTexts["Fixture Extra"].exists)
+        name.tap(); name.typeText("Unsaved network")
+        app.buttons["add-wifi"].tap()
+        if app.buttons["dismiss-keyboard"].exists { app.buttons["dismiss-keyboard"].tap() }
+        app.buttons["Cancel"].tap()
+        reveal(app.buttons["place-edit-wifi"], in: app)
+        app.buttons["place-edit-wifi"].tap()
+        XCTAssertTrue(app.navigationBars["Wi-Fi networks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["wifi-name"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Unsaved network"].exists)
         XCTAssertTrue(app.staticTexts["Fixture Extra"].exists)
     }
 
@@ -747,9 +763,9 @@ import XCTest
     func testWiFiNamesHaveRowsAndConfirmedSwipeRemoval() {
         let app = launch(fixture: true)
         app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()
-        reveal(app.buttons["add-wifi-network"], in: app)
-        app.buttons["add-wifi-network"].tap()
+        reveal(app.textFields["wifi-name"], in: app)
         app.textFields["wifi-name"].tap(); app.textFields["wifi-name"].typeText("Fixture Guest")
+        XCTAssertFalse(app.staticTexts["Choose this place’s location to see networks recorded nearby."].exists)
         app.buttons["add-wifi"].tap()
         if app.buttons["dismiss-keyboard"].exists { app.buttons["dismiss-keyboard"].tap() }
         let row = app.staticTexts["Fixture Guest"]

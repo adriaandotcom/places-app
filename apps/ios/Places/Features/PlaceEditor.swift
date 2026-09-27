@@ -7,6 +7,7 @@ struct PlaceEditor: View {
     private let original: Place?
     private let assigning: TimelineItem?
     private let onSave: (() -> Void)?
+    private let wifiOnly: Bool
     @State private var name: String
     @State private var city: String
     @State private var country: String
@@ -20,6 +21,9 @@ struct PlaceEditor: View {
     @State private var colorIndex: Int
     @State private var wifi: PlaceWiFiDraft
     @FocusState private var wifiFocused: Bool
+    @State private var choosingWiFi = false
+    @State private var wifiSuggestions: [WiFiSuggestion] = []
+    @State private var enterWiFiAfterPicker = false
     @State private var adjacent: [AdjacentPlaceSuggestion] = []
     @State private var choosingIcon = false
     @State private var choosingCatalog = false
@@ -40,7 +44,7 @@ struct PlaceEditor: View {
     @State private var validation: String?
     @State private var saving = false
     @FocusState private var focusedField: Field?
-    private enum Field { case name, address, latitude, longitude }
+    private enum Field { case name, address, city, country, latitude, longitude }
     private var usesCoordinates: Bool { !model.mapsAvailable && (manualCoordinates || model.mapsChoiceMade) }
     private var wifiCoordinate: Coordinate? {
         if usesCoordinates {
@@ -52,10 +56,11 @@ struct PlaceEditor: View {
     }
 
     init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil,
-         assigning: TimelineItem? = nil, suggestion: CatalogPlace? = nil, onSave: (() -> Void)? = nil) {
+         assigning: TimelineItem? = nil, suggestion: CatalogPlace? = nil, wifiOnly: Bool = false, onSave: (() -> Void)? = nil) {
         original = place
         self.assigning = assigning
         self.onSave = onSave
+        self.wifiOnly = wifiOnly
         let point = place?.coordinate ?? suggestion?.coordinate ?? coordinate
         _name = State(initialValue: place?.name ?? suggestion?.name ?? suggestedName)
         _city = State(initialValue: place?.locality?.city ?? "")
@@ -75,7 +80,9 @@ struct PlaceEditor: View {
     }
 
     var body: some View {
+        ScrollViewReader { scroll in
         Form {
+            if !wifiOnly {
             Section("Name") {
                 TextField("Name", text: $name).accessibilityIdentifier("place-name").focused($focusedField, equals: .name)
             }
@@ -139,8 +146,8 @@ struct PlaceEditor: View {
             }
             Section {
                 DisclosureGroup("City & country") {
-                    TextField("City (optional)", text: $city).accessibilityIdentifier("place-city")
-                    TextField("Country (optional)", text: $country).accessibilityIdentifier("place-country")
+                    TextField("City (optional)", text: $city).accessibilityIdentifier("place-city").focused($focusedField, equals: .city)
+                    TextField("Country (optional)", text: $country).accessibilityIdentifier("place-country").focused($focusedField, equals: .country)
                     NavigationLink("Apple Location Details…") { CityLookupSettings() }
                 }
             }
@@ -202,13 +209,31 @@ struct PlaceEditor: View {
                     }
                 }
             }
-            PlaceWiFiEditor(draft: $wifi, coordinate: wifiCoordinate, radius: radius, fieldFocused: $wifiFocused)
+            }
+            PlaceWiFiEditor(draft: $wifi, coordinate: wifiCoordinate, radius: radius, fieldFocused: $wifiFocused) { suggestions in
+                wifiSuggestions = suggestions; choosingWiFi = true
+            }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
-            .navigationTitle(original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                if wifiFocused {
+                    withAnimation { scroll.scrollTo("place-wifi-entry", anchor: .bottom) }
+                }
+            }
+            .navigationTitle(wifiOnly ? "Wi-Fi networks" : original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) { Button(saving ? "Saving…" : "Save", action: save).disabled(saving).accessibilityIdentifier("save-place") }
-                ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil; wifiFocused = false }.accessibilityIdentifier("dismiss-keyboard") }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if focusedField != nil || wifiFocused {
+                    HStack {
+                        Spacer()
+                        Button("Done") { focusedField = nil; wifiFocused = false }
+                            .buttonStyle(.glass).buttonBorderShape(.capsule).tint(Palette.green)
+                            .accessibilityIdentifier("dismiss-keyboard")
+                    }.padding(.horizontal, Layout.gutter).padding(.vertical, Layout.compact)
+                        .background(Palette.background)
+                }
             }
             .interactiveDismissDisabled(saving)
             .task {
@@ -234,6 +259,16 @@ struct PlaceEditor: View {
                 } catch is CancellationError { }
                 catch { if !Task.isCancelled { catalogMessage = "Suggestions are unavailable. You can enter a place yourself." } }
             }
+            .sheet(isPresented: $choosingWiFi, onDismiss: {
+                withAnimation { scroll.scrollTo("place-wifi-entry", anchor: .bottom) }
+                if enterWiFiAfterPicker { enterWiFiAfterPicker = false; wifiFocused = true }
+            }) {
+                NavigationStack {
+                    PlaceWiFiPicker(suggestions: wifiSuggestions, draft: $wifi) {
+                        enterWiFiAfterPicker = true; choosingWiFi = false
+                    }
+                }
+            }
             .sheet(isPresented: $choosingCatalog, onDismiss: {
                 existingSuggestion = pendingSavedSuggestion; pendingSavedSuggestion = nil
             }) {
@@ -256,6 +291,7 @@ struct PlaceEditor: View {
                 if let value { latitude = String(value.latitude); longitude = String(value.longitude); locationError = nil }
             }
             .onDisappear { locationRequest.cancel() }
+        }
     }
     private func selectCatalog(_ candidate: CatalogPlace) {
         if let existing = candidate.reference.savedPlace(in: model.places), existing.id != original?.id {
