@@ -66,12 +66,16 @@ struct HistoryDatePicker: View {
                 }
                 if range {
                     DatePicker("From", selection: $start, in: ...Date(), displayedComponents: .date)
-                    DatePicker("Through", selection: $end, in: start...max(start, Date()), displayedComponents: .date)
+                    DatePicker("To", selection: $end, in: start...max(start, Date()), displayedComponents: .date)
                 } else {
                     HistoryCalendar(days: model.historyDays, selection: $start).frame(minHeight: 360)
                 }
-                Button(range ? "Show period" : "Show day") { apply() }.accessibilityIdentifier("show-history-period")
+            }
+            Section {
+                Button(range ? "Show period" : "Show day") { apply() }.buttonStyle(PrimaryButton())
+                    .accessibilityIdentifier("show-history-period")
                     .disabled(!range && !model.historyDays.contains { calendar.isDate($0.date, inSameDayAs: start) })
+                    .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
             if !timelineOnly {
                 Section("Quick dates") {
@@ -80,6 +84,10 @@ struct HistoryDatePicker: View {
                         selectDays(from: calendar.date(byAdding: .day, value: -6, to: Date())!, through: Date(), title: "Last 7 days")
                     }
                     Button("This month") { selectDays(from: calendar.dateInterval(of: .month, for: Date())!.start, through: Date(), title: "This month") }
+                    if let first = model.historyDays.first {
+                        Button("All history") { selectDays(from: first.date, through: Date(), title: "All history") }
+                            .accessibilityIdentifier("all-history-period")
+                    }
                 }
                 Section("Your visits") {
                     if loadError { Text("Visits couldn’t be loaded. You can still choose dates above.") }

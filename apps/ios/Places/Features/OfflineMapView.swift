@@ -25,6 +25,7 @@ struct OfflineMapView: View {
     @Environment(AppModel.self) private var model
     let presentation: MapPresentation
     @Binding var viewport: MapViewport?
+    var focusRequest: UUID?
     var pinChanged: ((Coordinate) -> Void)?
     @State private var selectedPlace: Place?
     @State private var showSettings = false
@@ -33,7 +34,7 @@ struct OfflineMapView: View {
     @State private var settleTask: Task<Void, Never>?
     @State private var mapIssue: String?
     var body: some View {
-        OfflineMapSurface(presentation: presentation, installed: model.mapDownloads.installed, viewport: $viewport,
+        OfflineMapSurface(presentation: presentation, installed: model.mapDownloads.installed, viewport: $viewport, focusRequest: focusRequest,
             pinChanged: pinChanged,
             selected: { pin in selectedPlace = model.places.first { $0.id == pin.placeID } },
             settled: suggestCountry, failed: { mapIssue = "The downloaded map could not be displayed." })
@@ -102,6 +103,7 @@ private struct OfflineMapSurface: UIViewRepresentable {
     let presentation: MapPresentation
     let installed: [MapPack.ID: URL]
     @Binding var viewport: MapViewport?
+    let focusRequest: UUID?
     let pinChanged: ((Coordinate) -> Void)?
     let selected: (MapPin) -> Void
     let settled: (MapViewport, Double) -> Void
@@ -126,6 +128,11 @@ private struct OfflineMapSurface: UIViewRepresentable {
     private var signature: String { installed.keys.sorted { $0.rawValue < $1.rawValue }.map { installed[$0]!.path }.joined() + (colorScheme == .dark ? "dark" : "light") }
     func updateUIView(_ map: MLNMapView, context: Context) {
         context.coordinator.parent = self
+        if context.coordinator.focusRequest != focusRequest {
+            context.coordinator.focusRequest = focusRequest
+            context.coordinator.framed = false
+            context.coordinator.restoreViewport = false
+        }
         if context.coordinator.styleSignature != signature {
             context.coordinator.styleSignature = signature
             map.styleJSON = (try? OfflineMapStyle.make(installed: installed, dark: colorScheme == .dark)) ?? OfflineMapStyle.empty
@@ -140,9 +147,11 @@ private struct OfflineMapSurface: UIViewRepresentable {
         var styleSignature = ""
         var rendered: MapPresentation?
         var framed = false
+        var focusRequest: UUID?
+        var restoreViewport = true
         var routeLayerIDs: [String] = []
         var annotations: [MapAnnotation] = []
-        init(_ parent: OfflineMapSurface) { self.parent = parent }
+        init(_ parent: OfflineMapSurface) { self.parent = parent; focusRequest = parent.focusRequest }
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             rendered = nil; routeLayerIDs = []; render(mapView)
             // Installing a pack reloads the style without moving the camera.
@@ -157,8 +166,14 @@ private struct OfflineMapSurface: UIViewRepresentable {
             let center = Coordinate(latitude: mapView.centerCoordinate.latitude, longitude: mapView.centerCoordinate.longitude)
             let viewport = MapViewport(center: center, latitudeSpan: max(0.0001, bounds.ne.latitude - bounds.sw.latitude),
                 longitudeSpan: max(0.0001, bounds.ne.longitude - bounds.sw.longitude))
-            parent.viewport = viewport
-            parent.settled(viewport, mapView.zoomLevel)
+            let request = parent.focusRequest, zoom = mapView.zoomLevel
+            // Framing can synchronously call this delegate from updateUIView.
+            // Deliver the settled camera after that SwiftUI update has finished.
+            Task { @MainActor [weak self] in
+                guard let self, self.parent.focusRequest == request else { return }
+                self.parent.viewport = viewport
+                self.parent.settled(viewport, zoom)
+            }
         }
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             guard let map = gesture.view as? MLNMapView else { return }
@@ -168,10 +183,10 @@ private struct OfflineMapSurface: UIViewRepresentable {
         }
         func render(_ map: MLNMapView) {
             guard let style = map.style, rendered != parent.presentation else { frame(map); return }
-            if let rendered, rendered.coordinates != parent.presentation.coordinates, parent.pinChanged == nil { framed = false; parent.viewport = nil }
+            if let rendered, rendered.coordinates != parent.presentation.coordinates, parent.pinChanged == nil { framed = false; restoreViewport = false }
             if parent.pinChanged != nil, let point = parent.presentation.pins.first?.coordinate,
                (rendered?.pins.first?.coordinate).map({ $0.distance(to: point) > 500 }) ?? true {
-                framed = false; parent.viewport = nil
+                framed = false; restoreViewport = false
             }
             rendered = parent.presentation
             for id in routeLayerIDs {
@@ -212,26 +227,27 @@ private struct OfflineMapSurface: UIViewRepresentable {
         func frame(_ map: MLNMapView) {
             guard !framed, map.bounds.width > 0, map.bounds.height > 0 else { return }
             framed = true
-            if let viewport = parent.viewport {
+            if restoreViewport, let viewport = parent.viewport {
                 let center = viewport.center
                 map.setVisibleCoordinateBounds(MLNCoordinateBounds(
                     sw: CLLocationCoordinate2D(latitude: max(-85, center.latitude - viewport.latitudeSpan / 2), longitude: center.longitude - viewport.longitudeSpan / 2),
                     ne: CLLocationCoordinate2D(latitude: min(85, center.latitude + viewport.latitudeSpan / 2), longitude: center.longitude + viewport.longitudeSpan / 2)), animated: false)
             } else {
-                let points = parent.presentation.coordinates
+                let points = parent.presentation.coordinates.filter(\.isValid)
                 if Set(points).count == 1, let point = points.first {
                     map.setCenter(CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude), zoomLevel: 14, animated: false)
-                } else if let first = points.first {
-                    let south = points.map(\.latitude).min() ?? first.latitude, north = points.map(\.latitude).max() ?? first.latitude
-                    let west = points.map(\.longitude).min() ?? first.longitude, east = points.map(\.longitude).max() ?? first.longitude
-                    map.setVisibleCoordinateBounds(MLNCoordinateBounds(sw: CLLocationCoordinate2D(latitude: south, longitude: west), ne: CLLocationCoordinate2D(latitude: north, longitude: east)), edgePadding: UIEdgeInsets(top: 70, left: 45, bottom: 70, right: 45), animated: false, completionHandler: nil)
+                } else if let region = parent.presentation.fittingViewport {
+                    map.setVisibleCoordinateBounds(MLNCoordinateBounds(
+                        sw: CLLocationCoordinate2D(latitude: max(-85, region.center.latitude - region.latitudeSpan / 2), longitude: region.center.longitude - region.longitudeSpan / 2),
+                        ne: CLLocationCoordinate2D(latitude: min(85, region.center.latitude + region.latitudeSpan / 2), longitude: region.center.longitude + region.longitudeSpan / 2)),
+                        edgePadding: UIEdgeInsets(top: 60, left: 45, bottom: 70, right: 45), animated: false, completionHandler: nil)
                 } else { map.setCenter(CLLocationCoordinate2D(latitude: 20, longitude: 0), zoomLevel: 1, animated: false) }
             }
         }
         func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
             guard let annotation = annotation as? MapAnnotation else { return nil }
             let pin = annotation.pin
-            let view = MLNAnnotationView(annotation: annotation, reuseIdentifier: nil)
+            let view = OfflineAnnotationView(annotation: annotation, reuseIdentifier: nil)
             view.frame = CGRect(x: 0, y: 0, width: 140, height: 70)
             view.isAccessibilityElement = true; view.accessibilityLabel = pin.name
             let badge = UIView(frame: CGRect(x: 50, y: 0, width: 40, height: 40))
@@ -254,6 +270,15 @@ private struct OfflineMapSurface: UIViewRepresentable {
             if let annotation = annotation as? MapAnnotation { parent.selected(annotation.pin) }
             mapView.deselectAnnotation(annotation, animated: false)
         }
+    }
+}
+
+private final class OfflineAnnotationView: MLNAnnotationView {
+    // MapLibre returns the frame in map coordinates. Accessibility requires
+    // screen coordinates, including the navigation bar above the map.
+    override var accessibilityFrame: CGRect {
+        get { UIAccessibility.convertToScreenCoordinates(bounds, in: self) }
+        set { super.accessibilityFrame = newValue }
     }
 }
 

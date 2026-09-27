@@ -3,6 +3,44 @@ import Foundation
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedMapPeriods(_ store: PlacesStore) async throws {
+        let start = Calendar.current.date(byAdding: .day, value: -3, to: Calendar.current.startOfDay(for: Date()))!
+        let places = [
+            Place(id: "map-amsterdam-west", name: "Fixture Amsterdam West", coordinate: Coordinate(latitude: 52.37, longitude: 4.85)),
+            Place(id: "map-amsterdam-east", name: "Fixture Amsterdam East", coordinate: Coordinate(latitude: 52.37, longitude: 4.90)),
+            Place(id: "map-kos-west", name: "Fixture Kos West", coordinate: Coordinate(latitude: 36.81, longitude: 27.09)),
+            Place(id: "map-kos-east", name: "Fixture Kos East", coordinate: Coordinate(latitude: 36.89, longitude: 27.28))
+        ]
+        for (index, var place) in places.enumerated() {
+            place.locality = PlaceLocality(city: index < 2 ? "Amsterdam" : "Kos", country: index < 2 ? "Netherlands" : "Greece")
+            try await store.savePlace(place)
+        }
+        var observations: [SensorObservation] = []
+        for (index, offset) in [0.0, 900, 86_400, 87_300].enumerated() {
+            for (seconds, source) in [(offset, ObservationSource.visitArrival), (offset + 600, .visitDeparture)] {
+                observations.append(SensorObservation(timestamp: start.addingTimeInterval(seconds), source: source,
+                    coordinate: places[index].coordinate, horizontalAccuracy: 10))
+            }
+        }
+        for (offset, first, last) in [(600.0, places[0], places[1]), (87_000.0, places[2], places[3])] {
+            for step in 1...4 {
+                let fraction = Double(step) / 5
+                observations.append(SensorObservation(timestamp: start.addingTimeInterval(offset + fraction * 300), source: .location,
+                    coordinate: Coordinate(latitude: first.coordinate.latitude + (last.coordinate.latitude - first.coordinate.latitude) * fraction,
+                        longitude: first.coordinate.longitude + (last.coordinate.longitude - first.coordinate.longitude) * fraction),
+                    horizontalAccuracy: 10, speed: 8, motion: .automotive))
+            }
+        }
+        try await store.append(observations.sorted { $0.timestamp < $1.timestamp })
+        for (index, offset) in [0.0, 900, 86_400, 87_300].enumerated() {
+            try await store.correct(UserOverride(start: start.addingTimeInterval(offset), end: start.addingTimeInterval(offset + 600),
+                kind: .stay, placeID: places[index].id))
+        }
+        for (from, to, mode) in [(600.0, 900.0, TransportMode.driving), (1500, 86_400, .plane), (87_000, 87_300, .driving)] {
+            try await store.correct(UserOverride(start: start.addingTimeInterval(from), end: start.addingTimeInterval(to), kind: .journey, mode: mode))
+        }
+    }
+
     static func seedNearbyWiFi(_ store: PlacesStore) async throws {
         let coordinate = Coordinate(latitude: 1, longitude: 1)
         try await store.savePlace(Place(name: "Fixture Hotel", coordinate: coordinate, expectedSSIDs: ["Already added"]))

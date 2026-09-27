@@ -73,8 +73,13 @@ struct TimelineDayStrip: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var position = ScrollPosition(x: 0)
+    @State private var scrollOffset: CGFloat = 0
     let progress: CGFloat
     private let calendar = Calendar.current
+    private var cellHeight: CGFloat { typeSize.isAccessibilitySize ? 104 : 72 }
+    private let cellRadius: CGFloat = 18
+    private let spacing: CGFloat = 7
     private var days: [Date] {
         let today = calendar.startOfDay(for: Date())
         var day = min(model.historyDays.first?.date ?? today, calendar.date(byAdding: .day, value: -6, to: today)!, calendar.startOfDay(for: model.selectedDay))
@@ -88,51 +93,73 @@ struct TimelineDayStrip: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let width = max(typeSize.isAccessibilitySize ? 72 : 48, (geometry.size.width - 6 * 7) / 7)
-            ScrollViewReader { reader in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 7) {
-                        ForEach(days, id: \.self) { day in
-                            let entry = model.historyDays.first { $0.date == day }
-                            let selected = calendar.isDate(day, inSameDayAs: model.selectedDay)
-                            let distance = CGFloat(calendar.dateComponents([.day], from: day, to: calendar.startOfDay(for: model.selectedDay)).day ?? 0)
-                            let x = (distance + (reduceMotion ? 0 : progress)) * (width + 7)
-                            Button {
-                                withAnimation(reduceMotion ? nil : .smooth(duration: 0.22)) { model.selectDay(day) }
-                            } label: {
-                                dayLabel(day, count: entry?.placeCount ?? 0)
-                                    .foregroundStyle(entry == nil ? Palette.muted.opacity(0.55) : Palette.ink)
-                                    .frame(width: width, height: typeSize.isAccessibilitySize ? 104 : 86)
-                                    .background(Palette.paper)
-                                    .overlay {
-                                        GeometryReader { _ in
-                                            Palette.ink.offset(x: x)
-                                            dayLabel(day, count: entry?.placeCount ?? 0).foregroundStyle(Palette.background)
-                                                .frame(width: width, height: typeSize.isAccessibilitySize ? 104 : 86)
-                                                .mask { Rectangle().offset(x: x) }
-                                        }.allowsHitTesting(false).accessibilityHidden(true)
-                                    }
-                                    .contentShape(Rectangle())
-                                    .clipShape(RoundedRectangle(cornerRadius: 18))
-                            }.buttonStyle(.plain).id(day)
-                                .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
-                                .accessibilityValue(entry.map { "\($0.placeCount) \($0.placeCount == 1 ? "place" : "places")" } ?? "No history")
-                                .accessibilityAddTraits(selected ? .isSelected : [])
-                                .accessibilityIdentifier("timeline-day-\(calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: day).day ?? 0)")
-                        }
+            let width = max(typeSize.isAccessibilitySize ? 72 : 48, (geometry.size.width - 6 * spacing) / 7)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: spacing) {
+                    ForEach(days, id: \.self) { day in
+                        let entry = model.historyDays.first { $0.date == day }
+                        let selected = calendar.isDate(day, inSameDayAs: model.selectedDay)
+                        let distance = CGFloat(calendar.dateComponents([.day], from: day, to: calendar.startOfDay(for: model.selectedDay)).day ?? 0)
+                        let x = (distance + (reduceMotion ? 0 : progress)) * (width + spacing)
+                        Button {
+                            withAnimation(reduceMotion ? nil : .smooth(duration: 0.22)) { model.selectDay(day) }
+                        } label: {
+                            dayLabel(day, count: entry?.placeCount ?? 0)
+                                .foregroundStyle(entry == nil ? Palette.muted.opacity(0.55) : Palette.ink)
+                                .frame(width: width, height: cellHeight)
+                                .background(Palette.paper)
+                                .overlay {
+                                    GeometryReader { _ in
+                                        RoundedRectangle(cornerRadius: cellRadius).fill(Palette.ink).offset(x: x)
+                                        dayLabel(day, count: entry?.placeCount ?? 0).foregroundStyle(Palette.background)
+                                            .frame(width: width, height: cellHeight)
+                                            .mask { RoundedRectangle(cornerRadius: cellRadius).offset(x: x) }
+                                    }.allowsHitTesting(false).accessibilityHidden(true)
+                                }
+                                .contentShape(Rectangle())
+                                .clipShape(RoundedRectangle(cornerRadius: cellRadius))
+                        }.buttonStyle(.plain).id(day)
+                            .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+                            .accessibilityValue(entry.map { "\($0.placeCount) \($0.placeCount == 1 ? "place" : "places")" } ?? "No history")
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                            .accessibilityIdentifier("timeline-day-\(calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()), to: day).day ?? 0)")
                     }
-                }.accessibilityIdentifier("timeline-days")
-                    .accessibilityLabel("Timeline date")
-                    .accessibilityValue(model.selectedDay.formatted(date: .complete, time: .omitted))
-                    .accessibilityAdjustableAction { direction in model.shiftDay(direction == .increment ? 1 : -1) }
-                    .onChange(of: model.selectedDay, initial: true) { _, day in
-                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.22)) { reader.scrollTo(calendar.startOfDay(for: day), anchor: .center) }
+                }.scrollTargetLayout()
+            }.scrollPosition($position)
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, offset in scrollOffset = offset }
+                .accessibilityIdentifier("timeline-days")
+                .accessibilityLabel("Timeline date")
+                .accessibilityValue(model.selectedDay.formatted(date: .complete, time: .omitted))
+                .accessibilityAdjustableAction { direction in model.shiftDay(direction == .increment ? 1 : -1) }
+                .onAppear { position.scrollTo(id: calendar.startOfDay(for: model.selectedDay), anchor: .center) }
+                .onChange(of: model.selectedDay) { _, _ in
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.22)) {
+                        revealSelection(width: width, viewportWidth: geometry.size.width, progress: 0, settled: true)
                     }
-            }
-        }.frame(height: typeSize.isAccessibilitySize ? 104 : 86)
+                }
+                .onChange(of: progress) { _, value in
+                    if !reduceMotion, value != 0 { revealSelection(width: width, viewportWidth: geometry.size.width, progress: value) }
+                }
+        }.frame(height: cellHeight)
+    }
+    private func revealSelection(width: CGFloat, viewportWidth: CGFloat, progress: CGFloat, settled: Bool = false) {
+        guard let index = days.firstIndex(of: calendar.startOfDay(for: model.selectedDay)) else { return }
+        let left = (CGFloat(index) + progress) * (width + spacing)
+        if settled {
+            // Resolve the actual lazy-cell bounds at rest instead of relying on
+            // estimated content positions, which can include an inter-cell gap.
+            if left <= scrollOffset + spacing { position.scrollTo(id: days[index], anchor: .leading) }
+            else if left + width >= scrollOffset + viewportWidth - spacing { position.scrollTo(id: days[index], anchor: .trailing) }
+            return
+        }
+        let maximum = max(0, CGFloat(days.count) * (width + spacing) - spacing - viewportWidth)
+        // Follow the moving highlight only at an edge. Ordinary horizontal browsing
+        // keeps its native momentum and visible dates stay still during a day swipe.
+        let target = min(maximum, max(0, min(left - spacing, max(scrollOffset, left + width + spacing - viewportWidth))))
+        if abs(target - scrollOffset) > 0.5 { position.scrollTo(x: target) }
     }
     private func dayLabel(_ day: Date, count: Int) -> some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 3) {
             Text(day.formatted(.dateTime.weekday(.abbreviated))).font(.caption2)
             Text(day.formatted(.dateTime.day())).font(BrandFont.title)
             HStack(spacing: 3) { ForEach(0..<min(3, count), id: \.self) { _ in Circle().frame(width: 4, height: 4) } }

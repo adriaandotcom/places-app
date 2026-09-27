@@ -4,6 +4,29 @@ import PlacesCore
 @testable import Places
 
 @MainActor final class OfflineMapTests: XCTestCase {
+    func testPeriodMapsContainEveryPlaceAndKeepRecordedPathsDistinctFromEndpointLinks() async throws {
+        let store = try PlacesStore()
+        try await DemoFixtures.seedMapPeriods(store)
+        let places = try await store.places()
+        let visits = try await store.suggestedPeriods()
+        let kos = try XCTUnwrap(visits.first { $0.title == "Kos" })
+        for (interval, count) in [(kos.interval, 2), (DateInterval(start: .distantPast, end: Date()), 4)] {
+            let items = try await store.timeline(in: interval)
+            let points = try await store.routePoints(from: interval.start, to: interval.end)
+            let map = MapPresentation(items: items, routePoints: points, places: places)
+            XCTAssertEqual(Set(map.pins.compactMap(\.placeID)).count, count)
+            XCTAssertTrue(map.paths.contains { !$0.dashed }, "Recorded travel stays visible")
+            XCTAssertTrue(map.paths.contains { $0.dashed }, "Unrecorded links stay distinct")
+            let viewport = try XCTUnwrap(map.fittingViewport)
+            for point in map.coordinates {
+                XCTAssertLessThan(abs(point.latitude - viewport.center.latitude), viewport.latitudeSpan / 2)
+                XCTAssertLessThan(abs(point.longitude - viewport.center.longitude), viewport.longitudeSpan / 2)
+            }
+            if count == 2 { XCTAssertLessThan(viewport.latitudeSpan, 1) }
+            else { XCTAssertGreaterThan(viewport.latitudeSpan, 15) }
+        }
+    }
+
     func testRestartRecoversVerifiedFilesAndRejectsCorruptedInstalledFiles() async throws {
         let (directory, pack, data) = try archiveFixture()
         defer { try? FileManager.default.removeItem(at: directory) }

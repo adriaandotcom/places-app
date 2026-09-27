@@ -1,6 +1,92 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testDayStripFollowsRepeatedSwipesBeyondItsVisibleDates() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-history-navigation"]
+        app.launch()
+        let days = app.scrollViews["timeline-days"]
+        XCTAssertTrue(days.waitForExistence(timeout: 10))
+        let left = app.buttons["timeline-day--6"]
+        XCTAssertTrue(left.isHittable); left.tap()
+        let pager = app.scrollViews["timeline-pager"]
+        for offset in 7...10 {
+            pager.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.4)).withOffset(CGVector(dx: 60, dy: 0))
+                .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.4)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+            let selected = app.buttons["timeline-day--\(offset)"]
+            let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: selected)
+            XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+            XCTAssertGreaterThanOrEqual(selected.frame.minX, days.frame.minX - 1)
+            XCTAssertLessThanOrEqual(selected.frame.maxX, days.frame.maxX + 1)
+            XCTAssertTrue(selected.isHittable)
+        }
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Day strip follows history beyond viewport"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["timeline-day--5"].tap()
+        for offset in stride(from: 4, through: 2, by: -1) {
+            pager.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.4)).withOffset(CGVector(dx: -60, dy: 0))
+                .press(forDuration: 0.05, thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.4)),
+                       withVelocity: .slow, thenHoldForDuration: 0.3)
+            let selected = app.buttons["timeline-day--\(offset)"]
+            let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: selected)
+            XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+            XCTAssertGreaterThanOrEqual(selected.frame.minX, days.frame.minX - 1)
+            XCTAssertLessThanOrEqual(selected.frame.maxX, days.frame.maxX + 1)
+        }
+    }
+
+    func testRegionAndAllHistorySelectionsFrameTheirPlacesOnBothMaps() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-map-periods"] + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10)); app.buttons["tab-map"].tap()
+            if !offline { enableAppleMaps(in: app) }
+            let picker = app.buttons["map-period-picker"]
+            let names = ["Fixture Kos West", "Fixture Kos East"]
+            func checkVisible(_ expected: [String]) {
+                for name in expected {
+                    let pin = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).firstMatch
+                    XCTAssertTrue(pin.waitForExistence(timeout: 10), name)
+                    // Nearby pins overlap at a continent-wide scale; validate the
+                    // frame here and exercise an unobstructed pin separately below.
+                    XCTAssertGreaterThan(pin.frame.width, 0)
+                    XCTAssertGreaterThan(pin.frame.height, 0)
+                    XCTAssertGreaterThanOrEqual(pin.frame.minX, app.frame.minX)
+                    XCTAssertLessThanOrEqual(pin.frame.maxX, app.frame.maxX)
+                    XCTAssertGreaterThan(pin.frame.minY, app.navigationBars.firstMatch.frame.maxY - 1)
+                    XCTAssertLessThan(pin.frame.maxY, picker.frame.minY + 1)
+                }
+            }
+            picker.tap()
+            let kos = app.buttons["suggested-period-Kos"].firstMatch
+            reveal(kos, in: app); kos.tap()
+            checkVisible(names)
+            let region = XCTAttachment(screenshot: app.screenshot()); region.name = "Kos fit \(offline ? "offline" : "Apple")"; region.lifetime = .keepAlways; add(region)
+            // Re-selecting the very same period must restore its frame after a pan.
+            let map = offline ? app.otherElements["on-device-map"] : app.maps.firstMatch
+            map.swipeLeft(velocity: .fast)
+            picker.tap(); reveal(kos, in: app); kos.tap()
+            checkVisible(names)
+            picker.tap(); reveal(app.buttons["all-history-period"], in: app); app.buttons["all-history-period"].tap()
+            checkVisible(names + ["Fixture Amsterdam West", "Fixture Amsterdam East"])
+            let all = XCTAttachment(screenshot: app.screenshot()); all.name = "Amsterdam and Kos with routes \(offline ? "offline" : "Apple")"; all.lifetime = .keepAlways; add(all)
+            picker.tap()
+            XCTAssertTrue(app.staticTexts["To"].exists)
+            let show = app.buttons["show-history-period"]
+            XCTAssertTrue(show.isHittable)
+            let range = XCTAttachment(screenshot: app.screenshot()); range.name = "Separate period action"; range.lifetime = .keepAlways; add(range)
+            show.tap()
+            XCTAssertTrue(picker.label.contains("Selected period"))
+            picker.tap(); reveal(kos, in: app); kos.tap()
+            let regionalPin = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", names[0])).firstMatch
+            XCTAssertTrue(regionalPin.isHittable)
+            regionalPin.tap()
+            XCTAssertTrue(app.buttons["Edit place"].waitForExistence(timeout: 5), "A visible regional pin opens its place")
+            app.terminate()
+        }
+    }
+
     func testUnknownIntervalOffersSamePlaceFromBothSidesAndSavesCorrection() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-gap-suggestions"]
@@ -50,8 +136,7 @@ import XCTest
         app.buttons["tab-places"].tap()
         app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Fixture Hotel")).firstMatch.tap()
         reveal(app.buttons["Edit place"], in: app); app.buttons["Edit place"].tap()
-        let choose = app.buttons["choose-wifi-network"]
-        reveal(choose, in: app); choose.tap()
+        XCTAssertFalse(app.textFields["wifi-name"].exists, "Wi-Fi starts with rows, not a text box")
         reveal(app.buttons["Add Fixture Guest"], in: app)
         XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons.matching(identifier: "Add Fixture Guest").count, 1)
@@ -65,18 +150,19 @@ import XCTest
         app.buttons["Add Fixture Guest"].tap()
         XCTAssertTrue(app.buttons["Add Fixture Guest"].waitForNonExistence(timeout: 5))
         app.buttons["Add Fixture Garden"].tap()
+        app.buttons["add-wifi-network"].tap()
         let name = app.textFields["wifi-name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap(); name.typeText("Fixture Extra")
         app.buttons["add-wifi"].tap()
-        app.buttons["dismiss-keyboard"].tap()
+        if app.buttons["dismiss-keyboard"].exists { app.buttons["dismiss-keyboard"].tap() }
         XCTAssertTrue(app.staticTexts["Fixture Guest"].exists)
         XCTAssertTrue(app.staticTexts["Fixture Garden"].exists)
         XCTAssertFalse(app.buttons["choose-wifi-network"].exists)
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.buttons["Edit place"].waitForExistence(timeout: 5))
         app.buttons["Edit place"].tap()
-        reveal(app.textFields["wifi-name"], in: app)
+        reveal(app.buttons["add-wifi-network"], in: app)
         XCTAssertTrue(app.staticTexts["Fixture Guest"].exists)
         XCTAssertTrue(app.staticTexts["Fixture Garden"].exists)
         XCTAssertTrue(app.staticTexts["Fixture Extra"].exists)
@@ -661,7 +747,8 @@ import XCTest
     func testWiFiNamesHaveRowsAndConfirmedSwipeRemoval() {
         let app = launch(fixture: true)
         app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()
-        reveal(app.textFields["wifi-name"], in: app)
+        reveal(app.buttons["add-wifi-network"], in: app)
+        app.buttons["add-wifi-network"].tap()
         app.textFields["wifi-name"].tap(); app.textFields["wifi-name"].typeText("Fixture Guest")
         app.buttons["add-wifi"].tap()
         if app.buttons["dismiss-keyboard"].exists { app.buttons["dismiss-keyboard"].tap() }

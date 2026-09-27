@@ -38,6 +38,8 @@ final class AppModel {
     private(set) var nerdMode = false
     private(set) var trackingEnabled = true
     private(set) var onboardingComplete = false
+    private var mapSelectionRequest = UUID()
+    private(set) var mapFocusRequest = UUID()
     private(set) var mapPeriod: HistoryPeriod?
     private(set) var mapTimeline: [TimelineItem] = []
     private(set) var mapRoutePoints: [RoutePoint] = []
@@ -92,7 +94,10 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-transport-choices") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-periods") {
+                        try await DemoFixtures.seedMapPeriods(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-transport-choices") {
                         let calendar = Calendar.current
                         let yesterday = calendar.date(byAdding: .day, value: -1, to: Date())!
                         let evening = calendar.date(bySettingHour: 19, minute: 0, second: 0, of: yesterday)!
@@ -151,6 +156,7 @@ final class AppModel {
         guard let store else { return }
         let day = selectedDay
         let period = mapPeriod
+        let selectionRequest = mapSelectionRequest
         let expectedGeneration = generation
         do {
             let newPlaces = try await store.places()
@@ -175,18 +181,23 @@ final class AppModel {
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
-            if day == selectedDay && period == mapPeriod { mapTimeline = mapItems; mapRoutePoints = mapPoints }
+            if day == selectedDay && period == mapPeriod && selectionRequest == mapSelectionRequest {
+                mapTimeline = mapItems; mapRoutePoints = mapPoints
+                // Commit the framing request together with the loaded period, never
+                // while the map still contains the previous selection's places.
+                mapFocusRequest = selectionRequest
+            }
             recentObservations = nerdMode ? newObservations : []
             events = nerdMode ? newEvents : []
             historyRevision += 1
         } catch { fail("Could not read your history. Please try again.") }
     }
     func selectDay(_ day: Date) {
-        selectedDay = min(day, Date()); mapPeriod = nil
+        selectedDay = min(day, Date()); mapPeriod = nil; mapSelectionRequest = UUID()
         Task { await refresh() }
     }
     func selectPeriod(_ period: HistoryPeriod) {
-        mapPeriod = period
+        mapPeriod = period; mapSelectionRequest = UUID()
         Task { await refresh() }
     }
     func shiftDay(_ offset: Int, fromMap: Bool = false) {

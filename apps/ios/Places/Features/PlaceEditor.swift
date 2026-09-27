@@ -18,15 +18,9 @@ struct PlaceEditor: View {
     @State private var symbol: String
     @State private var userChoseIcon: Bool
     @State private var colorIndex: Int
-    @State private var wifiNames: [String]
-    @State private var wifiDraft = ""
-    @State private var wifiError: String?
-    @State private var removingWiFi: String?
-    @State private var choosingWiFi = false
-    @State private var wifiSearch = ""
+    @State private var wifi: PlaceWiFiDraft
+    @FocusState private var wifiFocused: Bool
     @State private var adjacent: [AdjacentPlaceSuggestion] = []
-    @State private var wifiSuggestions: [WiFiSuggestion] = []
-    @State private var wifiSuggestionsUnavailable = false
     @State private var choosingIcon = false
     @State private var choosingCatalog = false
     @State private var catalogReference: PlaceCatalogReference?
@@ -46,7 +40,7 @@ struct PlaceEditor: View {
     @State private var validation: String?
     @State private var saving = false
     @FocusState private var focusedField: Field?
-    private enum Field { case name, address, latitude, longitude, wifi }
+    private enum Field { case name, address, latitude, longitude }
     private var usesCoordinates: Bool { !model.mapsAvailable && (manualCoordinates || model.mapsChoiceMade) }
     private var wifiCoordinate: Coordinate? {
         if usesCoordinates {
@@ -55,11 +49,6 @@ struct PlaceEditor: View {
             return value.isValid ? value : nil
         }
         return coordinate
-    }
-    private var availableWiFi: [WiFiSuggestion] { wifiSuggestions.filter { !wifiNames.contains($0.ssid) } }
-    private var wifiQuery: WiFiSuggestionQuery {
-        WiFiSuggestionQuery(coordinate: wifiCoordinate, radius: radius,
-                            connectionID: model.tracking.currentWiFiObservation?.id, revision: model.historyRevision)
     }
 
     init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil,
@@ -79,7 +68,7 @@ struct PlaceEditor: View {
         _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? PlaceIconMatcher.suggestedSymbol(name: suggestedName) ?? "mappin")
         _userChoseIcon = State(initialValue: place != nil)
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
-        _wifiNames = State(initialValue: place?.expectedSSIDs ?? [])
+        _wifi = State(initialValue: PlaceWiFiDraft(names: place?.expectedSSIDs ?? []))
         _catalogReference = State(initialValue: place?.catalogReference ?? suggestion?.reference)
         _catalogCategory = State(initialValue: suggestion?.category)
         _catalogName = State(initialValue: suggestion?.name)
@@ -213,59 +202,17 @@ struct PlaceEditor: View {
                     }
                 }
             }
-            Section {
-                ForEach(wifiNames, id: \.self) { ssid in
-                    HStack {
-                        Label(ssid, systemImage: "wifi").foregroundStyle(Palette.ink)
-                        Spacer()
-                        Button("Remove Wi-Fi", systemImage: "minus.circle") { removingWiFi = ssid }
-                            .labelStyle(.iconOnly).foregroundStyle(Palette.muted)
-                            .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                    }.swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button("Remove", systemImage: "trash") { removingWiFi = ssid }.tint(.red)
-                    }
-                }
-                HStack {
-                    TextField("Network name", text: $wifiDraft).autocorrectionDisabled().textInputAutocapitalization(.never)
-                        .focused($focusedField, equals: .wifi).submitLabel(.done).onSubmit(addWiFi)
-                        .accessibilityIdentifier("wifi-name")
-                    Button("Add", systemImage: "plus.circle.fill", action: addWiFi)
-                        .labelStyle(.iconOnly).frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                        .accessibilityLabel("Add Wi-Fi name").accessibilityIdentifier("add-wifi")
-                }
-                if let wifiError { Text(wifiError).font(.footnote).foregroundStyle(.red) }
-                if !availableWiFi.isEmpty {
-                    Button("Choose a network", systemImage: "wifi.badge.plus") {
-                        focusedField = nil
-                        if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
-                        choosingWiFi.toggle()
-                    }.accessibilityIdentifier("choose-wifi-network")
-                    if choosingWiFi {
-                        TextField("Find a network", text: $wifiSearch).autocorrectionDisabled().textInputAutocapitalization(.never)
-                            .accessibilityIdentifier("filter-wifi-networks")
-                        ForEach(availableWiFi.filter { wifiSearch.isEmpty || $0.ssid.localizedStandardContains(wifiSearch) }) { suggestion in
-                            WiFiSuggestionRow(suggestion: suggestion) {
-                                wifiNames.append(suggestion.ssid); wifiError = nil
-                            }
-                        }
-                    }
-                }
-            } header: { Text("Wi-Fi networks") } footer: {
-                Text(wifiSuggestionsUnavailable ? "Suggestions couldn’t be loaded. You can enter a network name."
-                     : wifiCoordinate == nil ? "Choose this place’s location to see networks recorded nearby."
-                     : "Add the networks you use here.")
-            }
+            PlaceWiFiEditor(draft: $wifi, coordinate: wifiCoordinate, radius: radius, fieldFocused: $wifiFocused)
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle(original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) { Button(saving ? "Saving…" : "Save", action: save).disabled(saving).accessibilityIdentifier("save-place") }
-                ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil }.accessibilityIdentifier("dismiss-keyboard") }
+                ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focusedField = nil; wifiFocused = false }.accessibilityIdentifier("dismiss-keyboard") }
             }
             .interactiveDismissDisabled(saving)
             .task {
                 if let assigning { adjacent = (try? await model.store?.adjacentPlaces(for: assigning)) ?? [] }
-                if !model.uiTesting { model.tracking.refreshCurrentWiFi() }
                 // Reuse a fresh authorized fix; searching must never start sensors
                 // or silently set the new place's coordinates.
                 if let fix = model.tracking.currentLocation,
@@ -273,17 +220,6 @@ struct PlaceEditor: View {
                    (0...200).contains(fix.horizontalAccuracy) {
                     recentSearchAnchor = Coordinate(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
                 }
-            }
-            .task(id: wifiQuery) {
-                wifiSuggestions = []; wifiSuggestionsUnavailable = false
-                guard let coordinate = wifiCoordinate else { return }
-                do {
-                    let values = try await model.store?.wifiSuggestions(near: coordinate, placeRadius: radius,
-                        connected: model.tracking.currentWiFiObservation) ?? []
-                    try Task.checkCancellation()
-                    wifiSuggestions = values
-                } catch is CancellationError { }
-                catch { if !Task.isCancelled { wifiSuggestionsUnavailable = true } }
             }
             .task(id: searchAnchor) {
                 nearbyPlaces = []; catalogMessage = nil
@@ -310,12 +246,6 @@ struct PlaceEditor: View {
                 Button("Cancel", role: .cancel) { existingSuggestion = nil }
             } message: { Text("Use your saved place instead of creating a duplicate.") }
             .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: Binding(get: { symbol }, set: { symbol = $0; userChoseIcon = true }), colorIndex: colorIndex) } }
-            .confirmationDialog("Remove this Wi-Fi name?", isPresented: Binding(get: { removingWiFi != nil }, set: { if !$0 { removingWiFi = nil } }), titleVisibility: .visible, presenting: removingWiFi) { ssid in
-                Button("Remove Wi-Fi name", role: .destructive) {
-                    wifiNames.removeAll { $0 == ssid }
-                    removingWiFi = nil
-                }
-            } message: { _ in Text("It will be removed from this place when you save. Recorded history stays intact.") }
             .alert("Couldn’t save this place", isPresented: Binding(get: { validation != nil }, set: { if !$0 { validation = nil } })) {
                 Button("OK") { validation = nil }
             } message: { Text(validation ?? "") }
@@ -363,13 +293,6 @@ struct PlaceEditor: View {
             catch { locationError = error.localizedDescription }
         }
     }
-    private func addWiFi() {
-        let value = wifiDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { wifiError = "Enter a Wi-Fi name first."; return }
-        guard !value.contains("\n"), value.utf8.count <= 32 else { wifiError = "This doesn’t look like a Wi-Fi name. Check the name in Wi-Fi settings."; return }
-        guard !wifiNames.contains(value) else { wifiError = "This network is already added."; return }
-        wifiNames.append(value); wifiDraft = ""; wifiError = nil
-    }
     private var savedLocality: PlaceLocality? {
         let city = city.trimmingCharacters(in: .whitespacesAndNewlines)
         let country = country.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -397,14 +320,11 @@ struct PlaceEditor: View {
             validation = usesCoordinates ? "Enter latitude from −90 to 90 and longitude from −180 to 180, or use your current location."
                 : "Choose a location on the map or use your current location."; return
         }
-        if !wifiDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            addWiFi()
-            guard wifiError == nil else { focusedField = .wifi; return }
-        }
+        guard wifi.finish() else { wifiFocused = true; return }
         let place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifiNames, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality)
-        saving = true; focusedField = nil
+            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality)
+        saving = true; focusedField = nil; wifiFocused = false
         Task {
             if await model.save(place, assigning: assigning) {
                 if let onSave { onSave() } else { dismiss() }
