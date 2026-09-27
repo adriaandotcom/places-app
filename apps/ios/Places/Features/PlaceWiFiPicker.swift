@@ -27,7 +27,6 @@ struct PlaceWiFiEditor: View {
     let coordinate: Coordinate?
     let radius: Double
     @FocusState.Binding var fieldFocused: Bool
-    @State private var editing = false
     let chooseNetwork: ([WiFiSuggestion]) -> Void
     @State private var removing: String?
     @State private var suggestions: [WiFiSuggestion] = []
@@ -40,21 +39,12 @@ struct PlaceWiFiEditor: View {
     var body: some View {
         Section {
             ForEach(draft.names, id: \.self) { name in
-                HStack(spacing: Layout.compact) {
-                    WiFiNameLabel(name: name)
-                    Spacer(minLength: 0)
-                    if editing {
-                        Button { removing = name } label: { WiFiActionIcon(symbol: "minus") }
-                            .buttonStyle(.borderless).accessibilityLabel("Remove \(name)")
-                    }
-                }.accessibilityIdentifier("saved-wifi-\(name)")
+                WiFiNameLabel(name: name).accessibilityIdentifier("saved-wifi-\(name)")
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Remove", systemImage: "trash") { removing = name }.tint(.red)
                     }
             }
             HStack(spacing: Layout.compact) {
-                Button { fieldFocused = true } label: { WiFiActionIcon(symbol: "plus") }
-                    .buttonStyle(.borderless).accessibilityLabel("Enter a Wi-Fi name")
                 TextField("Network name", text: $draft.entry)
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
                     .focused($fieldFocused).submitLabel(.done).onSubmit(add)
@@ -67,17 +57,7 @@ struct PlaceWiFiEditor: View {
             }.id("place-wifi-entry")
             if let error = draft.error { Text(error).font(.footnote).foregroundStyle(.red) }
         } header: {
-            HStack {
-                Text("Wi-Fi networks")
-                Spacer()
-                if !draft.names.isEmpty {
-                    Button(editing ? "Done" : "Edit") { editing.toggle() }
-                        .font(.body).foregroundStyle(Palette.green)
-                        .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                        .accessibilityLabel(editing ? "Finish editing Wi-Fi networks" : "Edit Wi-Fi networks")
-                        .accessibilityIdentifier("edit-wifi-networks")
-                }
-            }.textCase(nil)
+            Text("Wi-Fi networks").textCase(nil)
         } footer: {
             VStack(alignment: .leading, spacing: Layout.compact) {
                 if !available.isEmpty {
@@ -115,7 +95,7 @@ struct PlaceWiFiEditor: View {
     }
 }
 
-/// Identical geometry and weight for plus, confirmation and removal controls.
+/// Consistent geometry for the picker add action and inline confirmation.
 private struct WiFiActionIcon: View {
     let symbol: String
     @ScaledMetric(relativeTo: .body) private var diameter = Layout.spacing * 2
