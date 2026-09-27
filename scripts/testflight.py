@@ -65,10 +65,13 @@ def clean_revision():
 
 
 def compilation_cache_summary(log):
-    # Count compiler diagnostics, never publish archive/signing command lines.
-    hits = re.findall(r'remark: cache hit\b', log)
-    misses = re.findall(r'remark: cache miss\b', log)
-    return {'hits': len(hits), 'misses': len(misses)}
+    # Xcode reports all cacheable tasks once, including Swift and Clang. Never
+    # publish archive/signing command lines or double-count individual remarks.
+    metrics = re.findall(r'note: (\d+) hits / (\d+) cacheable tasks', log)
+    if not metrics:
+        return None
+    hits, tasks = map(int, metrics[-1])
+    return {'hits': hits, 'misses': tasks - hits}
 
 
 def execute(args, env=os.environ):
@@ -147,7 +150,10 @@ def execute(args, env=os.environ):
                 if label == 'Archive':
                     cache = compilation_cache_summary(log.read_text(errors='replace'))
                     timings['compilationCache'] = cache
-                    print(f'Compiler cache: {cache["hits"]} hits, {cache["misses"]} misses.', flush=True)
+                    if cache is not None:
+                        print(f'Compiler cache: {cache["hits"]} hits, {cache["misses"]} misses.', flush=True)
+                    else:
+                        print('Compiler cache metrics unavailable in this Xcode log.', flush=True)
             if not args.dry_run:
                 print('Archive ready; nothing uploaded.' if args.archive_only else
                       'Upload accepted. Apple must finish processing before TestFlight can install it.\n'

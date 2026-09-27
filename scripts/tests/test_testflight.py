@@ -16,11 +16,11 @@ spec.loader.exec_module(release)
 
 
 class TestFlightSmokeTests(unittest.TestCase):
-    def test_cache_report_counts_only_compiler_diagnostics(self):
-        log = ('command: cache hit\n'
-               "remark: cache hit for input file 'Places.swift': key 'fixture'\n"
-               "remark: cache miss for input file 'Changed.swift': key 'fixture'\n")
-        self.assertEqual(release.compilation_cache_summary(log), {'hits': 1, 'misses': 1})
+    def test_cache_report_uses_xcode_totals_without_double_counting(self):
+        log = ('note: Replay cache hit\nCache hit\n'
+               'CompilationCacheMetrics\nnote: 285 hits / 290 cacheable tasks (98%)\n')
+        self.assertEqual(release.compilation_cache_summary(log), {'hits': 285, 'misses': 5})
+        self.assertIsNone(release.compilation_cache_summary('No metrics were emitted.'))
 
     def options(self, directory, archive_only=False):
         return argparse.Namespace(team='TESTTEAM01', build_number='2460.10.25',
