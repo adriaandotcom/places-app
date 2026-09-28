@@ -346,6 +346,13 @@ public actor PlacesStore {
     public func exportTestCase() throws -> Data {
         try InferenceTestCase.redacting(historyArchive()).encoded()
     }
+    public func exportGPX() throws -> Data {
+        try queue.read { db in
+            GPXExport.encode(places: try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places"),
+                observations: try StoreSQL.decodeAll(SensorObservation.self, db: db,
+                    sql: "SELECT payload FROM observations WHERE source IN ('location', 'significantChange', 'paused', 'resumed', 'recovery') ORDER BY timestamp"))
+        }
+    }
     private func historyArchive() throws -> HistoryArchive {
         try queue.read { db in
             let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")

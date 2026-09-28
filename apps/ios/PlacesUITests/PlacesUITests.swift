@@ -1243,6 +1243,22 @@ import XCTest
         screenshot.name = "Test case file export"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
+    func testGPXExportOpensSystemFilePicker() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["export-gpx"], in: app)
+        app.buttons["export-gpx"].tap()
+        XCTAssertTrue(app.buttons["Export GPX"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "saved place names")).firstMatch.exists)
+        app.buttons["Export GPX"].tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value == %@", "Places-history")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 15))
+        XCTAssertTrue(filename.isHittable)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "GPX file export"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
     func testTransportChoicesAndManualFerryCorrection() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-transport-choices"]

@@ -49,7 +49,7 @@ struct BatteryActivityView: View {
             Section {
                 Text("Battery percentages describe the whole iPhone. For battery use attributed to Places, open iOS Settings → Battery. Snapshots are taken on existing app and power events; there is no battery polling timer.")
                     .font(.footnote).foregroundStyle(Palette.muted)
-                Button("Export redacted diagnostics…") { Task { await model.export(fullHistory: false) } }
+                Button("Export redacted diagnostics…") { Task { await model.export(.diagnostics) } }
             }
         }.scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle("Battery & activity").navigationBarTitleDisplayMode(.inline)

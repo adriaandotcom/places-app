@@ -59,6 +59,13 @@ def check_css(css, parent, website):
     return errors
 
 
+def has_remote_url(text, gpx_export=False):
+    if gpx_export:
+        # The GPX XML namespace is a format identifier, never a network request.
+        text = text.replace('xmlns="http://www.topografix.com/GPX/1/1"', '')
+    return bool(re.search(r'https?://', text))
+
+
 def audit(root):
     errors = []
     website = root / 'apps/website'
@@ -80,7 +87,7 @@ def audit(root):
             errors.append(f'{source.name}: downloads must stay in the approved map pack adapter')
         if ('import MapKit' in text or 'MKReverseGeocodingRequest(' in text) and source.name != 'AppleMapsView.swift':
             errors.append(f'{source.name}: Maps must stay inside the consent-gated adapter')
-        if re.search(r'https?://', text):
+        if has_remote_url(text, source == root / 'packages/PlacesCore/Sources/PlacesCore/GPXExport.swift'):
             errors.append(f'{source.name}: native runtime must not use remote URLs')
     maps = (native / 'Features/AppleMapsView.swift').read_text()
     if not re.search(r'if model\.mapsEnabled\s*\{\s*AppleMapSurface\(', maps):

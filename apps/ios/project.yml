@@ -63,6 +63,13 @@ targets:
           - BricolageGrotesque-Bold.ttf
           - BricolageGrotesque-ExtraBold.ttf
         ITSAppUsesNonExemptEncryption: false
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.topografix.gpx
+            UTTypeDescription: GPX track
+            UTTypeConformsTo: [public.xml]
+            UTTypeTagSpecification:
+              public.filename-extension: [gpx]
+              public.mime-type: application/gpx+xml
     entitlements:
       path: Places/Places.entitlements
       properties:

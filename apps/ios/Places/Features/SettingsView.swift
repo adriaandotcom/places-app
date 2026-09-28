@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var confirmExport = false
+    @State private var confirmGPXExport = false
     @State private var confirmTestExport = false
     @State private var confirmDelete = false
     @State private var deleting = false
@@ -60,7 +61,9 @@ struct SettingsView: View {
             }
             Section("Your data") {
                 Button("Export full history…", systemImage: "square.and.arrow.up") { confirmExport = true }
-                Button("Export redacted diagnostics…", systemImage: "doc.text") { Task { await model.export(fullHistory: false) } }
+                Button("Export GPX…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") { confirmGPXExport = true }
+                    .accessibilityIdentifier("export-gpx")
+                Button("Export redacted diagnostics…", systemImage: "doc.text") { Task { await model.export(.diagnostics) } }
                 Button("Export a test case…", systemImage: "checkmark.rectangle.stack") { confirmTestExport = true }
                     .accessibilityIdentifier("export-test-case")
                 Button(deleting ? "Starting again…" : "Delete all data and start again…", role: .destructive) { confirmDelete = true }
@@ -78,10 +81,13 @@ struct SettingsView: View {
         }.disabled(deleting).scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .confirmationDialog("Export your private history?", isPresented: $confirmExport, titleVisibility: .visible) {
-                Button("Export full history") { Task { await model.export(fullHistory: true) } }
+                Button("Export full history") { Task { await model.export(.history) } }
             } message: { Text("This file includes exact locations, Wi-Fi identifiers, raw observations, corrections, trips, notes, photos, and people. Anyone with the file can read them. Where you save it may synchronize it to a cloud service.") }
+            .confirmationDialog("Export locations as GPX?", isPresented: $confirmGPXExport, titleVisibility: .visible) {
+                Button("Export GPX") { Task { await model.export(.gpx) } }
+            } message: { Text("Includes recorded coordinates, timestamps and saved place names. Photos, notes, people and Wi-Fi details are excluded. Anyone with the file can read your locations. Where you save it may sync to a cloud service.") }
             .confirmationDialog("Export a test case?", isPresented: $confirmTestExport, titleVisibility: .visible) {
-                Button("Export test case") { Task { await model.exportTestCase() } }
+                Button("Export test case") { Task { await model.export(.testCase) } }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Correct your timeline first: it becomes the expected result alongside the recorded evidence. Names, Wi-Fi identifiers, dates, and locations are replaced. Route shapes and durations remain, so review the JSON before sharing it. Nothing is uploaded automatically.")
@@ -97,7 +103,7 @@ struct SettingsView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { Text("Permanently delete all history, places, trips, notes, photos, people, Wi-Fi, corrections, diagnostics, downloaded maps, and app settings, then return to setup. Recording stays paused until you finish setup. iOS permissions and files you already exported are not removed. This cannot be undone.") }
-            .fileExporter(isPresented: $model.showExporter, document: model.exportDocument, contentType: .json, defaultFilename: model.exportFilename) { result in
+            .fileExporter(isPresented: $model.showExporter, document: model.exportDocument, contentType: model.exportDocument?.contentType ?? .json, defaultFilename: model.exportFilename) { result in
                 model.exportDocument = nil
                 if case .failure = result { model.errorMessage = "The export could not be saved. Your history has not changed." }
             }

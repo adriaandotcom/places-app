@@ -70,7 +70,7 @@ final class AppModel {
     var searchText = ""
     var searchResults: [Place] = []
     var errorMessage: String?
-    var exportDocument: JSONDocument?
+    var exportDocument: HistoryDocument?
     var exportFilename = "Places"
     var showExporter = false
     private var pendingWrite: Task<Void, Never>?
@@ -432,30 +432,24 @@ final class AppModel {
             if query == searchText, !deleting, generation == expectedGeneration { searchResults = found }
         } catch { fail("Local search is temporarily unavailable.") }
     }
-    func export(fullHistory: Bool) async {
+    func export(_ format: HistoryExportFormat) async {
         guard let store else { return }
         let expectedGeneration = generation
         tracking.recordEnergyCheckpoint()
         await pendingWrite?.value
         do {
-            let data = try await (fullHistory ? store.exportHistory() : store.exportDiagnostics())
+            let data: Data
+            switch format {
+            case .history: data = try await store.exportHistory()
+            case .diagnostics: data = try await store.exportDiagnostics()
+            case .testCase: data = try await store.exportTestCase()
+            case .gpx: data = try await store.exportGPX()
+            }
             guard !deleting, generation == expectedGeneration else { return }
-            exportDocument = JSONDocument(data: data)
-            exportFilename = fullHistory ? "Places-history" : "Places-diagnostics"
+            exportDocument = HistoryDocument(data: data, contentType: format.contentType)
+            exportFilename = format.filename
             showExporter = true
         } catch { fail("Could not prepare the export. Your data has not changed.") }
-    }
-    func exportTestCase() async {
-        guard let store else { return }
-        let expectedGeneration = generation
-        await pendingWrite?.value
-        do {
-            let data = try await store.exportTestCase()
-            guard !deleting, generation == expectedGeneration else { return }
-            exportDocument = JSONDocument(data: data)
-            exportFilename = "Places-test-case"
-            showExporter = true
-        } catch { fail("Could not prepare the test case. Your history has not changed.") }
     }
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
@@ -497,11 +491,27 @@ final class AppModel {
     }
 }
 
-struct JSONDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
+enum HistoryExportFormat {
+    case history, diagnostics, testCase, gpx
+    var contentType: UTType { self == .gpx ? HistoryDocument.gpxType : .json }
+    var filename: String {
+        switch self {
+        case .history, .gpx: "Places-history"
+        case .diagnostics: "Places-diagnostics"
+        case .testCase: "Places-test-case"
+        }
+    }
+}
+
+struct HistoryDocument: FileDocument {
+    static let gpxType = UTType(importedAs: "com.topografix.gpx", conformingTo: .xml)
+    static var readableContentTypes: [UTType] { [.json, gpxType] }
     var data: Data
-    init(data: Data) { self.data = data }
-    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    var contentType: UTType
+    init(data: Data, contentType: UTType) { self.data = data; self.contentType = contentType }
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data(); contentType = configuration.contentType
+    }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check_privacy import ResourceParser, check_css, check_resource, check_map_manifest
+from check_privacy import ResourceParser, check_css, check_resource, check_map_manifest, has_remote_url
 import json
 from copy import deepcopy
 
@@ -20,6 +20,13 @@ class PrivacySmokeTests(unittest.TestCase):
 
     def test_local_font_allowed(self):
         self.assertEqual(check_css('src:url("local.woff2")', self.root, self.root), [])
+
+    def test_gpx_namespace_is_not_a_remote_request(self):
+        namespace = 'xmlns="http://www.topografix.com/GPX/1/1"'
+        self.assertFalse(has_remote_url(namespace, gpx_export=True))
+        self.assertTrue(has_remote_url(namespace))
+        self.assertTrue(has_remote_url('URL(string: "http://www.topografix.com/GPX/1/1")', gpx_export=True))
+        self.assertTrue(has_remote_url(namespace + ' https://example.invalid', gpx_export=True))
 
     def test_remote_font_rejected(self):
         self.assertTrue(check_css('src:url(https://example.invalid/font.woff2)', self.root, self.root))
