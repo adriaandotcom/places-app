@@ -4,35 +4,16 @@ import PlacesCore
 struct TripsList: View {
     @Environment(AppModel.self) private var model
     @State private var hidden = false
-    @State private var explanation = false
     var body: some View {
         let trips = model.memories.trips.filter { hidden ? $0.hidden : !$0.hidden }
-        HStack {
-            Button("How trips appear", systemImage: "sparkles") { explanation = true }.font(.subheadline)
-            Spacer()
-            if model.memories.trips.contains(where: \.hidden) {
-                Button(hidden ? "Show trips" : "Hidden") { hidden.toggle() }.font(.subheadline)
-            }
-        }.frame(minHeight: Layout.touchTarget)
+        if model.memories.trips.contains(where: \.hidden) {
+            HStack { Spacer(); Button(hidden ? "Show trips" : "Hidden") { hidden.toggle() }.font(.subheadline) }
+                .frame(minHeight: Layout.touchTarget)
+        }
         if trips.isEmpty {
-            EmptyHistory(symbol: "suitcase.rolling", title: "Your time away", message: "Overnight stays at lodging or away from home become trips. You can also add one yourself.")
+            EmptyHistory(symbol: "suitcase.rolling", title: "Your time away", message: "Your trips will appear here. You can also add one yourself.")
         }
         ForEach(trips) { trip in TripLink(trip: trip) }
-        Color.clear.frame(height: 0).sheet(isPresented: $explanation) {
-            NavigationStack {
-                List {
-                    Section("Made from your history") {
-                        Text("A recorded overnight stay at lodging, or at least 50 km from your saved home, can start a trip. Places looks for at least three hours between 10 pm and 8 am.")
-                        Text("Outings and changes of hotel stay in the trip. Returning home ends it. Long breaks in recorded history may separate trips.")
-                    }
-                    Section("You’re in control") {
-                        Text("Edit a trip’s name, dates, or people whenever you like. Hide a trip that doesn’t belong. Your changes are kept as new history arrives.")
-                        Text("In a place’s editor, use ‘For trips’ to mark Home, Lodging, or a Regular place. Regular places won’t start trips.")
-                    }
-                }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Automatic trips").navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { explanation = false } } }
-            }
-        }
     }
 }
 
@@ -54,7 +35,6 @@ struct TripDetail: View {
     @Environment(AppModel.self) private var model
     let tripID: String
     @State private var editing = false
-    @State private var people = false
     @State private var items: [TimelineItem] = []
     @State private var routes: [RoutePoint] = []
     @State private var loadError = false
@@ -65,14 +45,7 @@ struct TripDetail: View {
                 VStack(alignment: .leading, spacing: Layout.spacing) {
                     Text(trip.title).font(BrandFont.hero)
                     Text(TripDisplay.dates(trip)).font(.subheadline).foregroundStyle(Palette.muted)
-                    HStack {
-                        Label("With", systemImage: "person.2").font(BrandFont.title)
-                        Spacer()
-                        Button(trip.personIDs.isEmpty ? "Add people" : "Edit") { people = true }.frame(minHeight: Layout.touchTarget).foregroundStyle(Palette.green)
-                    }
-                    ForEach(model.memories.people.filter { trip.personIDs.contains($0.id) }) { person in
-                        NavigationLink(person.name) { PersonDetail(personID: person.id) }.frame(minHeight: Layout.touchTarget)
-                    }
+                    PersonAvatarGroup(personIDs: trip.personIDs)
                     MemorySection(context: .trip(trip))
                     if model.mapsAvailable && !items.isEmpty {
                         PrivacyMapView(items: items, routePoints: routes).frame(height: Layout.mapHeight)
@@ -103,7 +76,6 @@ struct TripDetail: View {
                 } catch { loadError = true }
             }
             .sheet(isPresented: $editing) { if let trip { NavigationStack { TripEditor(trip: trip) } } }
-            .sheet(isPresented: $people) { if let trip { NavigationStack { TripPeopleEditor(trip: trip) } } }
     }
 }
 
@@ -152,7 +124,7 @@ struct TripEditor: View {
                 if !ongoing { DatePicker("Until", selection: $end, in: trip.start...max(trip.start, Date()), displayedComponents: [.date, .hourAndMinute]) }
             }
             Section {
-                NavigationLink { PeoplePicker(selection: $trip.personIDs) } label: { LabeledContent("People", value: "\(trip.personIDs.count)") }
+                NavigationLink { PeoplePicker(selection: $trip.personIDs) } label: { LabeledContent("People", value: "\(trip.personIDs.count)") }.accessibilityIdentifier("trip-people")
             }
             if model.memories.trips.contains(where: { $0.id == trip.id }) {
                 Section { Toggle("Hide this trip", isOn: $trip.hidden) } footer: { Text("Hidden trips keep their notes and photos. You can find them under Hidden in Trips.") }
@@ -184,38 +156,5 @@ struct TripEditor: View {
             catch { self.error = error.localizedDescription }
             saving = false
         }
-    }
-}
-
-private struct TripPeopleEditor: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-    let trip: Trip
-    @State private var selected: [String]
-    @State private var saving = false
-    @State private var error: String?
-    @State private var epoch: Int?
-    init(trip: Trip) { self.trip = trip; _selected = State(initialValue: trip.personIDs) }
-    var body: some View {
-        PeoplePicker(selection: $selected)
-            .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        guard let epoch else { return }
-                        var updated = model.memories.trips.first { $0.id == trip.id } ?? trip
-                        updated.personIDs = selected
-                        let saved = updated
-                        saving = true
-                        Task {
-                            do { try await model.changeMemories(epoch: epoch) { try await $0.saveTrip(saved) }; dismiss() }
-                            catch { self.error = error.localizedDescription }
-                            saving = false
-                        }
-                    }.disabled(saving)
-                }
-            }.interactiveDismissDisabled(saving)
-            .alert("Couldn’t save people", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") {} } message: { Text(error ?? "") }
     }
 }

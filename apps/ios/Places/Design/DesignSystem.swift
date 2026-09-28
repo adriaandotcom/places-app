@@ -10,6 +10,10 @@ enum Palette {
     static let warning = adaptive(light: 0x805400, dark: 0xF5C56B)
     static let green = adaptive(light: 0x287D45, dark: 0x6BC58A)
     static let controlGreen = Color(red: 40 / 255, green: 125 / 255, blue: 69 / 255)
+    static let navigation = Color(red: 0.16, green: 0.14, blue: 0.11)
+    static let navigationInk = Color.white.opacity(0.85)
+    static let navigationSelected = Color(red: 0.98, green: 0.96, blue: 0.92)
+    static let navigationSelectedInk = Color(red: 0.19, green: 0.16, blue: 0.12)
     static let accents: [Color] = [controlGreen, Color(red: 0.23, green: 0.50, blue: 0.85),
         Color(red: 0.82, green: 0.48, blue: 0.17), Color(red: 0.79, green: 0.36, blue: 0.24),
         Color(red: 0.58, green: 0.39, blue: 0.76), Color(red: 0.15, green: 0.54, blue: 0.58)]
@@ -42,6 +46,27 @@ enum Layout {
     static let touchTarget: CGFloat = 44
     static let iconTile: CGFloat = 76
     static let mapHeight: CGFloat = 280
+    static let islandInset: CGFloat = 6
+    static let navigationItemHeight: CGFloat = 48
+    static let navigationIslandHeight: CGFloat = 72
+    static let avatarSize: CGFloat = 52
+    static let avatarOverlap: CGFloat = 8
+    static let avatarBorder: CGFloat = 3
+    static let portraitSize: CGFloat = 96
+    static let readingLineSpacing: CGFloat = 8
+    static let noteEditorHeight: CGFloat = 150
+}
+
+struct FloatingIsland: ViewModifier {
+    func body(content: Content) -> some View {
+        content.padding(Layout.islandInset).foregroundStyle(Palette.navigationInk)
+            .background(Palette.navigation, in: Capsule())
+    }
+}
+
+struct MemoryReadingStyle: ViewModifier {
+    @ScaledMetric(relativeTo: .body) private var spacing = Layout.readingLineSpacing
+    func body(content: Content) -> some View { content.font(BrandFont.body).lineSpacing(spacing) }
 }
 
 struct PlaceIcon: View {

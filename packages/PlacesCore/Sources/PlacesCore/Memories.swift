@@ -40,8 +40,14 @@ public struct MemoryPerson: Codable, Identifiable, Hashable, Sendable {
     public var id: String
     public var name: String
     public var detail: String
-    public init(id: String = UUID().uuidString, name: String, detail: String = "") {
-        self.id = id; self.name = name; self.detail = detail
+    public var colorIndex: Int?
+    public var avatarJPEG: Data?
+    public var mentions: [PersonMention]?
+    public var resolvedColorIndex: Int { colorIndex ?? id.utf8.reduce(0) { ($0 + Int($1)) % 6 } }
+    public var initials: String { name.split(whereSeparator: \.isWhitespace).prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
+    public init(id: String = UUID().uuidString, name: String, detail: String = "", colorIndex: Int = Int.random(in: 0..<6), avatarJPEG: Data? = nil, mentions: [PersonMention]? = nil) {
+        self.id = id; self.name = name; self.detail = detail; self.colorIndex = colorIndex
+        self.avatarJPEG = avatarJPEG; self.mentions = mentions
     }
 }
 
@@ -56,10 +62,13 @@ public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
     public var visitStart: Date?
     public var personIDs: [String]
     public var photoIDs: [String]
+    public var mentions: [PersonMention]?
+    public var linkedPersonIDs: [String] { Array(Set(personIDs + (mentions ?? []).map(\.personID))).sorted() }
     public init(id: String = UUID().uuidString, text: String = "", date: Date = Date(), tripID: String? = nil,
-                placeID: String? = nil, visitStart: Date? = nil, personIDs: [String] = [], photoIDs: [String] = []) {
+                placeID: String? = nil, visitStart: Date? = nil, personIDs: [String] = [], photoIDs: [String] = [], mentions: [PersonMention]? = nil) {
         self.id = id; self.text = text; self.date = date; self.tripID = tripID; self.placeID = placeID
         self.visitStart = visitStart; self.personIDs = personIDs; self.photoIDs = photoIDs
+        self.mentions = mentions
     }
     public func belongs(to trip: Trip, now: Date = Date()) -> Bool {
         if let tripID { return tripID == trip.id }
@@ -99,6 +108,14 @@ public struct MemoryLibrary: Sendable {
     public var people: [MemoryPerson] = []
     public var memories: [PlaceMemory] = []
     public init() {}
+    /// Only photos already added to shared trips or explicitly linked memories, newest first.
+    public func avatarPhotoIDs(for personID: String, now: Date = Date()) -> [String] {
+        let shared = trips.filter { !$0.hidden && $0.personIDs.contains(personID) }
+        var seen: Set<String> = []
+        return memories.filter { memory in
+            memory.linkedPersonIDs.contains(personID) || shared.contains { memory.belongs(to: $0, now: now) }
+        }.sorted { $0.date > $1.date }.flatMap(\.photoIDs).filter { seen.insert($0).inserted }
+    }
 }
 public enum MemoryError: Error, LocalizedError {
     case invalidTrip, invalidPerson, invalidMemory, invalidPhoto

@@ -32,15 +32,14 @@ struct MapDateBar: View {
                     }
                     if let period = model.mapPeriod {
                         Text(period.dateLabel)
-                            .font(.caption).foregroundStyle(Palette.muted)
+                            .font(.caption).foregroundStyle(Palette.navigationInk)
                     }
                 }.frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("Choose date or period, \(title)").accessibilityIdentifier("map-period-picker")
             Button { model.shiftDay(1, fromMap: true) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
                 .disabled(!canGoForward).opacity(canGoForward ? 1 : 0.3)
                 .accessibilityLabel("Next day").accessibilityIdentifier("map-next-day")
-        }.padding(.horizontal, Layout.compact).padding(.vertical, Layout.compact)
-            .background(Palette.paper).contentShape(Rectangle())
+        }.modifier(FloatingIsland()).contentShape(Capsule())
             .modifier(DaySwipe { model.shiftDay($0, fromMap: true) })
             .sheet(isPresented: $choosing) { NavigationStack { HistoryDatePicker() } }
     }

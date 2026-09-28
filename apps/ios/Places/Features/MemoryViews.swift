@@ -27,14 +27,25 @@ struct MemorySection: View {
     let context: MemoryContext
     @State private var editing: PlaceMemory?
     var body: some View {
+        let memories = model.memories.memories.filter(context.includes)
         VStack(alignment: .leading, spacing: Layout.spacing) {
+            if memories.isEmpty, case .trip = context {
+                VStack(spacing: Layout.spacing) {
+                    Image(systemName: "photo.on.rectangle.angled").font(.largeTitle).foregroundStyle(Palette.green)
+                    Text("A trip worth remembering").font(BrandFont.heading)
+                    Text("Keep a photo, a little note, or a moment together.").modifier(MemoryReadingStyle()).foregroundStyle(Palette.muted)
+                    Button("Add a memory") { editing = context.draft }.buttonStyle(PrimaryButton()).accessibilityIdentifier("add-memory")
+                }.multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(Layout.cardRadius)
+                    .background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+            } else {
             HStack {
                 Text("Memories").font(BrandFont.heading)
                 Spacer()
                 Button("Add", systemImage: "plus") { editing = context.draft }
                     .frame(minHeight: Layout.touchTarget).foregroundStyle(Palette.green).accessibilityIdentifier("add-memory")
             }
-            ForEach(model.memories.memories.filter(context.includes)) { memory in MemoryCard(memory: memory) }
+            ForEach(memories) { memory in MemoryCard(memory: memory) }
+            }
         }
         .sheet(item: $editing) { memory in NavigationStack { MemoryEditor(memory: memory) } }
     }
@@ -43,7 +54,7 @@ struct MemorySection: View {
 struct MemoryCard: View {
     @Environment(AppModel.self) private var model
     let memory: PlaceMemory
-    @State private var editing = false
+    @State private var editing: MemoryEditRequest?
     @State private var selectedPhoto: PhotoSelection?
     private var context: String {
         let date = memory.date.formatted(date: .abbreviated, time: .omitted)
@@ -63,16 +74,11 @@ struct MemoryCard: View {
                         .frame(minHeight: Layout.touchTarget)
                 } else { Text(context).font(.subheadline).foregroundStyle(Palette.muted) }
                 Spacer()
-                Button("Edit memory", systemImage: "pencil") { editing = true }
+                Button("Edit memory", systemImage: "pencil") { editing = MemoryEditRequest(addPhotos: false) }
                     .labelStyle(.iconOnly).frame(width: Layout.touchTarget, height: Layout.touchTarget).foregroundStyle(Palette.green)
             }
-            if !memory.text.isEmpty { Text(memory.text).font(BrandFont.body).textSelection(.enabled) }
-            if !memory.personIDs.isEmpty {
-                ForEach(model.memories.people.filter { memory.personIDs.contains($0.id) }) { person in
-                    NavigationLink { PersonDetail(personID: person.id) } label: { Label(person.name, systemImage: "person") }
-                        .font(.subheadline).frame(minHeight: Layout.touchTarget)
-                }
-            }
+            PersonAvatarGroup(personIDs: memory.linkedPersonIDs, border: Palette.paper)
+            if !memory.text.isEmpty { PersonMentionText(text: memory.text, mentions: memory.mentions ?? []) }
             if !memory.photoIDs.isEmpty {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], spacing: Layout.compact) {
                     ForEach(Array(memory.photoIDs.enumerated()), id: \.element) { index, id in
@@ -81,10 +87,15 @@ struct MemoryCard: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }.accessibilityLabel("Photo \(index + 1)")
                     }
+                    Button { editing = MemoryEditRequest(addPhotos: true) } label: {
+                        Image(systemName: "plus").font(.title2).foregroundStyle(Palette.green)
+                            .frame(maxWidth: .infinity).frame(height: 96)
+                            .background(Palette.background, in: RoundedRectangle(cornerRadius: 12))
+                    }.accessibilityLabel("Add photos to memory").accessibilityIdentifier("add-photos-to-memory")
                 }
             }
         }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
-            .sheet(isPresented: $editing) { NavigationStack { MemoryEditor(memory: memory) } }
+            .sheet(item: $editing) { request in NavigationStack { MemoryEditor(memory: memory, addPhotos: request.addPhotos) } }
             .sheet(item: $selectedPhoto) { photo in
                 NavigationStack {
                     StoredPhoto(id: photo.id, thumbnail: false).background(Palette.background)
@@ -93,6 +104,7 @@ struct MemoryCard: View {
             }
     }
 }
+private struct MemoryEditRequest: Identifiable { let id = UUID(); let addPhotos: Bool }
 private struct PhotoSelection: Identifiable { let id: String }
 
 struct StoredPhoto: View {
@@ -134,21 +146,20 @@ struct MemoryEditor: View {
     @State private var error: String?
     @State private var confirmDelete = false
     @State private var epoch: Int?
-    init(memory: PlaceMemory) { _draft = State(initialValue: memory) }
+    private let addPhotos: Bool
+    @State private var offeredPhotos = false
+    init(memory: PlaceMemory, addPhotos: Bool = false) { _draft = State(initialValue: memory); self.addPhotos = addPhotos }
     private var exists: Bool { model.memories.memories.contains { $0.id == draft.id } }
     var body: some View {
         Form {
             Section {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $draft.text).frame(minHeight: 135).accessibilityLabel("Note").accessibilityIdentifier("memory-note")
-                    if draft.text.isEmpty { Text("Write a note…").foregroundStyle(Palette.muted).padding(.top, 8).padding(.leading, 4).allowsHitTesting(false) }
-                }
+                PersonMentionEditor(text: $draft.text, mentions: Binding(get: { draft.mentions ?? [] }, set: { draft.mentions = $0 }), label: "Write a note…", identifier: "memory-note")
             }
             Section {
                 NavigationLink {
                     PeoplePicker(selection: $draft.personIDs)
                 } label: {
-                    LabeledContent("With", value: model.memories.people.filter { draft.personIDs.contains($0.id) }.map(\.name).joined(separator: ", ").isEmpty ? "Add people" : model.memories.people.filter { draft.personIDs.contains($0.id) }.map(\.name).joined(separator: ", "))
+                    LabeledContent("People", value: model.memories.people.filter { draft.personIDs.contains($0.id) }.map(\.name).joined(separator: ", ").isEmpty ? "Add people" : model.memories.people.filter { draft.personIDs.contains($0.id) }.map(\.name).joined(separator: ", "))
                 }.accessibilityIdentifier("memory-people")
                 if draft.visitStart == nil { DatePicker("Date", selection: $draft.date, in: ...Date(), displayedComponents: .date) }
             }
@@ -178,6 +189,9 @@ struct MemoryEditor: View {
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle(exists ? "Memory" : "Add a memory").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
+            .task {
+                if addPhotos && !offeredPhotos { offeredPhotos = true; choosingPhotos = true }
+            }
             // A lazy Form row can be recreated by history updates. Keep the presentation
             // on the editor itself so the system picker retains its browsing state.
             .photosPicker(isPresented: $choosingPhotos, selection: $selection, maxSelectionCount: nil,

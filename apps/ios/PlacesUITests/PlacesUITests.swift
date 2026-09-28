@@ -10,10 +10,12 @@ import XCTest
         let trip = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch
         XCTAssertTrue(trip.waitForExistence(timeout: 10)); trip.tap()
         XCTAssertTrue(app.staticTexts["Breakfast by the sea"].waitForExistence(timeout: 5))
-        app.buttons["Add people"].tap()
+        app.buttons["edit-trip"].tap()
+        app.buttons["trip-people"].tap()
         let alex = app.buttons["Alex"].firstMatch
         XCTAssertTrue(alex.waitForExistence(timeout: 5)); alex.tap()
-        app.buttons["Done"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["save-trip"].tap()
         app.buttons["add-memory"].tap()
         let note = app.textViews["memory-note"]
         XCTAssertTrue(note.waitForExistence(timeout: 5)); note.tap(); note.typeText("A lovely week together")
@@ -42,6 +44,15 @@ import XCTest
         title.typeText("Our island trip")
         app.buttons["save-trip"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Our island trip")).firstMatch.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["add-trip"].tap()
+        app.textFields["trip-name"].tap(); app.textFields["trip-name"].typeText("Weekend away")
+        app.buttons["save-trip"].tap()
+        let weekend = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "trip-", "Weekend away")).firstMatch
+        XCTAssertTrue(weekend.waitForExistence(timeout: 5)); weekend.tap()
+        XCTAssertTrue(app.staticTexts["A trip worth remembering"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["add-memory"].isHittable)
+        let empty = XCTAttachment(screenshot: app.screenshot()); empty.name = "A first trip memory"; empty.lifetime = .keepAlways; add(empty)
     }
 
     func testSelectedPhotoSavesDisplaysAndDeletesLocally() {
@@ -130,6 +141,70 @@ import XCTest
         XCTAssertFalse(app.buttons["Photo 4"].exists)
     }
 
+    func testMentionsAvatarCropAndAddingMorePhotos() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch.tap()
+        app.buttons["add-memory"].tap()
+        let note = app.textViews["memory-note"]
+        note.tap(); note.typeText("An afternoon with @Al")
+        let alexSuggestion = app.buttons["mention-memory-friend"]
+        XCTAssertTrue(alexSuggestion.waitForExistence(timeout: 5)); alexSuggestion.tap()
+        note.typeText("and @Robin")
+        let create = app.buttons["create-mentioned-person"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5)); reveal(create, in: app); create.tap()
+        XCTAssertTrue(app.buttons["add-memory-photos"].waitForExistence(timeout: 5))
+        reveal(app.buttons["add-memory-photos"], in: app); app.buttons["add-memory-photos"].tap()
+        let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+        XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.navigationBars["Photos"].buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 15))
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.staticTexts["An afternoon with @Alex and @Robin "].waitForExistence(timeout: 8))
+        let more = app.buttons["add-photos-to-memory"].firstMatch
+        reveal(more, in: app); more.tap()
+        XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.navigationBars["Photos"].buttons["Done"].tap()
+        let photos = app.buttons.matching(identifier: "Remove photo")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in photos.count == 2 }, object: nil)], timeout: 15), .completed)
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons["Photo 2"].waitForExistence(timeout: 8))
+        let memories = XCTAttachment(screenshot: app.screenshot()); memories.name = "Compact avatars and memory photo shortcut"; memories.lifetime = .keepAlways; add(memories)
+        let alex = app.buttons["Alex"].firstMatch
+        reveal(alex, in: app); alex.tap()
+        app.buttons["Edit person"].tap()
+        let description = app.textViews["person-description"]
+        description.tap(); description.typeText("Friend of @Rob")
+        let robin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "mention-", "Robin")).firstMatch
+        XCTAssertTrue(robin.waitForExistence(timeout: 5)); reveal(robin, in: app); robin.tap()
+        let choose = app.buttons["choose-person-avatar"]
+        reveal(choose, in: app); choose.tap()
+        let suggested = app.buttons["Trip photo 1"]
+        XCTAssertTrue(suggested.waitForExistence(timeout: 15)); suggested.tap()
+        XCTAssertTrue(app.buttons["use-avatar-crop"].waitForExistence(timeout: 5))
+        app.sliders["Crop zoom"].adjust(toNormalizedSliderPosition: 0.15)
+        let crop = XCTAttachment(screenshot: app.screenshot()); crop.name = "Private square avatar crop"; crop.lifetime = .keepAlways; add(crop)
+        app.buttons["use-avatar-crop"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 10))
+        app.navigationBars["Person"].buttons["Save"].tap()
+        XCTAssertTrue(app.staticTexts["Friend of @Robin "].waitForExistence(timeout: 8))
+        app.buttons["Edit person"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textViews["person-description"].value as? String, "Friend of @Robin ")
+        app.navigationBars["Person"].buttons["Cancel"].tap()
+        let saved = XCTAttachment(screenshot: app.screenshot()); saved.name = "Person avatar and linked description"; saved.lifetime = .keepAlways; add(saved)
+        app.links["@Robin"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Robin"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.segmentedControls["places-collection"].buttons["People"].tap()
+        let people = XCTAttachment(screenshot: app.screenshot()); people.name = "People with photos and colored initials"; people.lifetime = .keepAlways; add(people)
+    }
+
     func testDayStripFollowsRepeatedSwipesBeyondItsVisibleDates() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-history-navigation"]
@@ -183,7 +258,7 @@ import XCTest
                     XCTAssertGreaterThan(pin.frame.height, 0)
                     XCTAssertGreaterThanOrEqual(pin.frame.minX, app.frame.minX)
                     XCTAssertLessThanOrEqual(pin.frame.maxX, app.frame.maxX)
-                    XCTAssertGreaterThan(pin.frame.minY, app.navigationBars.firstMatch.frame.maxY - 1)
+                    XCTAssertGreaterThan(pin.frame.minY, app.buttons["open-settings"].frame.maxY - 1)
                     XCTAssertLessThan(pin.frame.maxY, picker.frame.minY + 1)
                 }
             }
@@ -839,8 +914,18 @@ import XCTest
     }
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<6 {
-            // Lazy forms can expose a hittable sliver underneath the bottom bar.
-            if element.exists && element.isHittable && element.frame.maxY < app.frame.maxY - 110 { return }
+            // Lazy forms expose slivers under both bars as hittable. Keep the
+            // whole target below the active navigation bar and above the footer.
+            let top = app.navigationBars.allElementsBoundByIndex.map { $0.frame.maxY }.max() ?? app.frame.minY
+            if element.exists {
+                let frame = element.frame
+                if element.isHittable && frame.minY >= top && frame.maxY < app.frame.maxY - 110 { return }
+                if frame.minY < top {
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.3))
+                        .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)), withVelocity: .slow, thenHoldForDuration: 0.2)
+                    continue
+                }
+            }
             app.swipeUp()
         }
     }

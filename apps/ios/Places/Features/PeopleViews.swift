@@ -9,7 +9,7 @@ struct PeopleList: View {
         }
         ForEach(model.memories.people) { person in
             NavigationLink { PersonDetail(personID: person.id) } label: {
-                InfoRow(symbol: "person.fill", title: person.name, subtitle: person.detail, colorIndex: 4)
+                PersonRow(person: person).padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
             }.buttonStyle(.plain)
         }
     }
@@ -32,6 +32,7 @@ struct PeoplePicker: View {
                         else { selection.append(person.id) }
                     } label: {
                         HStack {
+                            PersonAvatar(person: person, size: Layout.touchTarget)
                             Text(person.name).foregroundStyle(Palette.ink)
                             Spacer()
                             if selection.contains(person.id) { Image(systemName: "checkmark").foregroundStyle(Palette.green) }
@@ -71,15 +72,15 @@ struct PersonDetail: View {
         ScrollView {
             if let person {
                 VStack(alignment: .leading, spacing: Layout.spacing) {
-                    PlaceIcon(symbol: "person.fill", colorIndex: 4, size: 64)
+                    Button { editing = true } label: { PersonAvatar(person: person, size: Layout.portraitSize) }.accessibilityLabel("Edit avatar for \(person.name)")
                     Text(person.name).font(BrandFont.hero)
-                    if !person.detail.isEmpty { Text(person.detail).font(BrandFont.body) }
+                    if !person.detail.isEmpty { PersonMentionText(text: person.detail, mentions: person.mentions ?? []) }
                     let trips = model.memories.trips.filter { !$0.hidden && $0.personIDs.contains(personID) }
                     if !trips.isEmpty {
                         Text("Trips together").font(BrandFont.heading)
                         ForEach(trips) { trip in TripLink(trip: trip) }
                     }
-                    let memories = model.memories.memories.filter { $0.personIDs.contains(personID) }
+                    let memories = model.memories.memories.filter { $0.linkedPersonIDs.contains(personID) }
                     if !memories.isEmpty {
                         Text("Shared memories").font(BrandFont.heading)
                         ForEach(memories) { memory in MemoryCard(memory: memory) }
@@ -101,18 +102,28 @@ struct PersonEditor: View {
     @State private var error: String?
     @State private var deleting = false
     @State private var epoch: Int?
+    @State private var choosingAvatar = false
     init(person: MemoryPerson = MemoryPerson(name: "")) { _person = State(initialValue: person) }
     var body: some View {
         Form {
             Section {
+                VStack(spacing: Layout.compact) {
+                    Button { choosingAvatar = true } label: { PersonAvatar(person: person, size: Layout.portraitSize) }
+                        .accessibilityLabel("Choose avatar").accessibilityIdentifier("choose-person-avatar")
+                    Button(person.avatarJPEG == nil ? "Add photo" : "Change photo") { choosingAvatar = true }
+                    if person.avatarJPEG != nil { Button("Remove photo", role: .destructive) { person.avatarJPEG = nil } }
+                }.frame(maxWidth: .infinity).padding(.vertical, Layout.compact)
+            }.listRowBackground(Color.clear)
+            Section {
                 TextField("Name", text: $person.name).textContentType(.name).accessibilityIdentifier("person-name")
-                TextField("A little about them", text: $person.detail, axis: .vertical)
+                PersonMentionEditor(text: $person.detail, mentions: Binding(get: { person.mentions ?? [] }, set: { person.mentions = $0 }), label: "A little about them…", identifier: "person-description", excludingPersonID: person.id)
             }
             if model.memories.people.contains(where: { $0.id == person.id }) {
                 Section { Button("Delete person", role: .destructive) { deleting = true } }
             }
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Person").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
+            .sheet(isPresented: $choosingAvatar) { NavigationStack { AvatarChooser(person: person) { person.avatarJPEG = $0; choosingAvatar = false } } }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(saving || person.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }

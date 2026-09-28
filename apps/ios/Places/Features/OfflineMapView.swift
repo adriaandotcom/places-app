@@ -26,6 +26,7 @@ struct OfflineMapView: View {
     let presentation: MapPresentation
     @Binding var viewport: MapViewport?
     var focusRequest: UUID?
+    var chromeInsets = EdgeInsets()
     var pinChanged: ((Coordinate) -> Void)?
     @State private var selectedPlace: Place?
     @State private var showSettings = false
@@ -34,7 +35,7 @@ struct OfflineMapView: View {
     @State private var settleTask: Task<Void, Never>?
     @State private var mapIssue: String?
     var body: some View {
-        OfflineMapSurface(presentation: presentation, installed: model.mapDownloads.installed, viewport: $viewport, focusRequest: focusRequest,
+        OfflineMapSurface(presentation: presentation, installed: model.mapDownloads.installed, viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets,
             pinChanged: pinChanged,
             selected: { pin in selectedPlace = model.places.first { $0.id == pin.placeID } },
             settled: suggestCountry, failed: { mapIssue = "The downloaded map could not be displayed." })
@@ -44,7 +45,7 @@ struct OfflineMapView: View {
                     Button { showSettings = true } label: {
                         Label(message, systemImage: "arrow.down.circle").font(.subheadline)
                             .padding(12).frame(maxWidth: .infinity).background(Palette.paper)
-                    }.accessibilityIdentifier("map-download-banner")
+                    }.accessibilityIdentifier("map-download-banner").padding(.top, chromeInsets.top)
                 }
             }
             .overlay(alignment: .bottom) {
@@ -59,7 +60,7 @@ struct OfflineMapView: View {
                             model.mapDownloads.dismissSuggestion(pack.id); suggestedPack = nil
                         }.labelStyle(.iconOnly).frame(width: Layout.touchTarget, height: Layout.touchTarget)
                     }.padding(12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal, 12).padding(.bottom, 40)
+                        .padding(.horizontal, 12).padding(.bottom, chromeInsets.bottom + 40)
                 }
             }
             .onChange(of: model.mapDownloads.pending) { _, pending in
@@ -104,6 +105,7 @@ private struct OfflineMapSurface: UIViewRepresentable {
     let installed: [MapPack.ID: URL]
     @Binding var viewport: MapViewport?
     let focusRequest: UUID?
+    let chromeInsets: EdgeInsets
     let pinChanged: ((Coordinate) -> Void)?
     let selected: (MapPin) -> Void
     let settled: (MapViewport, Double) -> Void
@@ -128,6 +130,12 @@ private struct OfflineMapSurface: UIViewRepresentable {
     private var signature: String { installed.keys.sorted { $0.rawValue < $1.rawValue }.map { installed[$0]!.path }.joined() + (colorScheme == .dark ? "dark" : "light") }
     func updateUIView(_ map: MLNMapView, context: Context) {
         context.coordinator.parent = self
+        if chromeInsets != EdgeInsets() {
+            map.automaticallyAdjustsContentInset = false
+            let inset = UIEdgeInsets(top: chromeInsets.top, left: chromeInsets.leading, bottom: chromeInsets.bottom, right: chromeInsets.trailing)
+            if map.contentInset != inset { map.contentInset = inset }
+            map.attributionButtonMargins = CGPoint(x: 12, y: 8)
+        }
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
             context.coordinator.framed = false

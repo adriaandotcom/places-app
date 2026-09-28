@@ -200,3 +200,69 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
     await #expect(throws: MemoryError.self) { try await store.saveMemory(rejected, adding: [oversized]) }
     #expect(try await store.memoryLibrary().memories.count == 1)
 }
+
+@Test func mentionsKeepIdentityAcrossUnicodeEditsAndDuplicateNames() throws {
+    let a = MemoryPerson(id: "person-a", name: "Renée Smith")
+    let b = MemoryPerson(id: "person-b", name: "Renée Smith")
+    let text = "🌴 With @Ren"
+    let query = try #require(PersonMentions.query(in: text, selection: NSRange(location: text.utf16.count, length: 0), mentions: []))
+    let tagged = PersonMentions.inserting(a, in: text, mentions: [], replacing: query.range)
+    #expect(tagged.text == "🌴 With @Renée Smith ")
+    #expect(tagged.mentions.first?.personID == a.id)
+    #expect(tagged.mentions.first?.personID != b.id)
+    let shifted = PersonMentions.adjusted(tagged.mentions, replacing: NSRange(location: 0, length: 0), with: "Hello ")
+    #expect(PersonMentions.valid(shifted, in: "Hello " + tagged.text).count == 1)
+    let mention = try #require(tagged.mentions.first)
+    #expect(PersonMentions.adjusted(tagged.mentions, replacing: NSRange(location: mention.location + 2, length: 1), with: "x").isEmpty)
+    #expect(PersonMentions.query(in: "mail@example.com", selection: NSRange(location: 16, length: 0), mentions: []) == nil)
+    #expect(PersonMentions.query(in: tagged.text, selection: NSRange(location: mention.location + 4, length: 0), mentions: tagged.mentions) == nil)
+}
+
+@Test func avatarsMentionsAndDescriptionsPersistAndDeletionOnlyUnlinksNames() async throws {
+    let store = try PlacesStore(); try await store.savePlace(hotel)
+    let parent = MemoryPerson(id: "parent", name: "Henk", avatarJPEG: Data([7, 8, 9]))
+    try await store.savePerson(parent)
+    let note = "Kid of @Henk"
+    let tag = PersonMention(personID: parent.id, location: 7, length: 5)
+    let child = MemoryPerson(id: "child", name: "Lou", detail: note, mentions: [tag])
+    try await store.savePerson(child)
+    let memory = PlaceMemory(text: note, placeID: hotel.id, mentions: [tag])
+    try await store.saveMemory(memory)
+    #expect(try await store.memoryLibrary().people.first { $0.id == parent.id }?.avatarJPEG == parent.avatarJPEG)
+    #expect(try await store.memoryLibrary().memories.first?.linkedPersonIDs == [parent.id])
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(HistoryArchive.self, from: await store.exportHistory())
+    #expect(archive.memories?.people.first { $0.id == child.id }?.mentions == [tag])
+    var tooLarge = parent; tooLarge.avatarJPEG = Data(repeating: 1, count: 200_001)
+    await #expect(throws: MemoryError.self) { try await store.savePerson(tooLarge) }
+    try await store.deletePerson(id: parent.id)
+    let library = try await store.memoryLibrary()
+    #expect(library.memories.first?.text == note)
+    #expect(library.memories.first?.mentions == [])
+    #expect(library.people.first?.detail == note)
+    #expect(library.people.first?.mentions == [])
+    try await store.eraseHistory(resetSettings: true)
+    #expect(try await store.memoryLibrary().people.isEmpty)
+}
+
+@Test func legacyPeopleAndMemoriesDecodeWithoutAvatarOrMentionFields() throws {
+    let person = try JSONDecoder().decode(MemoryPerson.self, from: Data(#"{"id":"legacy","name":"Alex","detail":"A friend"}"#.utf8))
+    #expect(person.avatarJPEG == nil && person.mentions == nil)
+    #expect(person.initials == "A")
+    #expect(person.resolvedColorIndex == 5)
+    var value = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(PlaceMemory(text: "Old note", placeID: hotel.id))) as? [String: Any])
+    value.removeValue(forKey: "mentions")
+    #expect(try JSONDecoder().decode(PlaceMemory.self, from: JSONSerialization.data(withJSONObject: value)).mentions == nil)
+}
+
+@Test func avatarSuggestionsOnlyUsePhotosFromThatPersonsTripsOrLinkedMemories() {
+    let person = MemoryPerson(id: "friend", name: "Friend")
+    let trip = Trip(title: "Shared", start: date(2, 0), end: date(5, 0), personIDs: [person.id])
+    var library = MemoryLibrary(); library.people = [person]; library.trips = [trip]
+    library.memories = [PlaceMemory(date: date(3, 0), tripID: trip.id, photoIDs: ["trip-photo"]),
+        PlaceMemory(date: date(4, 0), placeID: hotel.id, visitStart: date(4, 0), photoIDs: ["visit-photo"]),
+        PlaceMemory(date: date(4, 0), placeID: hotel.id, photoIDs: ["unrelated-place-photo"]),
+        PlaceMemory(date: date(1, 0), placeID: hotel.id, personIDs: [person.id], photoIDs: ["tagged-photo"])]
+    #expect(library.avatarPhotoIDs(for: person.id, now: date(6, 0)) == ["visit-photo", "trip-photo", "tagged-photo"])
+    #expect(library.avatarPhotoIDs(for: "someone-else", now: date(6, 0)).isEmpty)
+}

@@ -8,15 +8,16 @@ struct PrivacyMapView: View {
     var items: [TimelineItem]?
     var routePoints: [RoutePoint]?
     var focusRequest: UUID?
+    var chromeInsets = EdgeInsets()
     @State private var viewport: MapViewport?
     @State private var showMapSettings = false
     var body: some View {
         Group {
         if model.mapsEnabled {
-            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: $viewport, focusRequest: focusRequest)
+            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
                 .accessibilityIdentifier("apple-map")
         } else if model.mapProvider == .onDevice {
-            OfflineMapView(presentation: MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: $viewport, focusRequest: focusRequest)
+            OfflineMapView(presentation: MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
         } else {
             ScrollView {
             VStack(spacing: 18) {
@@ -42,6 +43,7 @@ private struct AppleMapSurface: View {
     let routePoints: [RoutePoint]
     @Binding var viewport: MapViewport?
     let focusRequest: UUID?
+    let chromeInsets: EdgeInsets
     @State private var selectedPlace: Place?
     @State private var camera: MapCameraPosition = .automatic
     private var presentation: MapPresentation {
@@ -68,6 +70,7 @@ private struct AppleMapSurface: View {
                             style: StrokeStyle(lineWidth: path.dashed ? 3 : 4, dash: path.dashed ? [6, 6] : []))
             }
         }
+        .safeAreaPadding(chromeInsets)
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControls { MapCompass(); MapScaleView() }
         .onMapCameraChange(frequency: .onEnd) { context in
@@ -92,15 +95,36 @@ private struct AppleMapSurface: View {
 
 struct MapScreen: View {
     @Environment(AppModel.self) private var model
+    @State private var settings = false
+    @State private var periodHeight: CGFloat = 60
     var body: some View {
-        VStack(spacing: 0) {
-            if model.selectedTab == .map { PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints, focusRequest: model.mapFocusRequest) }
-            else { Color.clear }
-            if model.mapsAvailable {
-                MapDateBar().id(model.selectedDay)
+        GeometryReader { geometry in
+        ZStack {
+            if model.selectedTab == .map {
+                PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints, focusRequest: model.mapFocusRequest,
+                    chromeInsets: EdgeInsets(top: geometry.safeAreaInsets.top + Layout.touchTarget + Layout.spacing,
+                        leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing, trailing: 0))
+                    .ignoresSafeArea()
             }
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationTitle("Map").navigationBarTitleDisplayMode(.inline)
-            .toolbar { SettingsToolbar() }
+            VStack {
+                HStack {
+                    Spacer()
+                    Button { settings = true } label: {
+                        Image(systemName: "slider.horizontal.3").frame(width: Layout.touchTarget, height: Layout.touchTarget)
+                    }.buttonStyle(.glass).buttonBorderShape(.circle)
+                        .accessibilityLabel("Settings").accessibilityIdentifier("open-settings")
+                }.padding(.horizontal, Layout.gutter).padding(.top, Layout.compact)
+                Spacer()
+                if model.mapsAvailable {
+                    MapDateBar().id(model.selectedDay).padding(.horizontal, Layout.gutter)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { periodHeight = $0 }
+                }
+            }
+            .padding(.bottom, Layout.navigationIslandHeight + Layout.compact)
+        }
+        }.background(Palette.background).foregroundStyle(Palette.ink)
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
     }
 }
 

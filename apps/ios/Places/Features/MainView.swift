@@ -3,10 +3,8 @@ import PlacesCore
 
 struct MainView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         @Bindable var model = model
-        VStack(spacing: 0) {
         TabView(selection: $model.selectedTab) {
             NavigationStack { TimelineView().toolbar(.hidden, for: .tabBar) }
                 .tabItem { Label("Timeline", systemImage: AppTab.timeline.symbol) }.tag(AppTab.timeline)
@@ -18,30 +16,42 @@ struct MainView: View {
                 .tabItem { Label("Search", systemImage: AppTab.search.symbol) }.tag(AppTab.search)
         }
         .toolbar(.hidden, for: .tabBar)
-            HStack(spacing: 4) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
-                    Button { model.selectedTab = tab } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: tab.symbol).font(.system(size: 20, weight: .semibold))
-                            if model.selectedTab == tab && !typeSize.isAccessibilitySize {
-                                Text(tab.title).font(.subheadline.weight(.semibold)).fixedSize()
-                            }
-                        }.frame(maxWidth: model.selectedTab == tab && !typeSize.isAccessibilitySize ? nil : .infinity)
-                            .frame(minWidth: 44, minHeight: 48)
-                            .padding(.horizontal, model.selectedTab == tab ? 10 : 0)
-                            .foregroundStyle(model.selectedTab == tab ? Color(red: 0.19, green: 0.16, blue: 0.12) : .white.opacity(0.85))
-                            .background(model.selectedTab == tab ? Color(red: 0.98, green: 0.96, blue: 0.92) : .clear, in: Capsule())
-                            .contentShape(Rectangle())
-                            .fixedSize(horizontal: model.selectedTab == tab && !typeSize.isAccessibilitySize, vertical: false)
-                    }.buttonStyle(.plain).accessibilityLabel(tab.title)
-                        .layoutPriority(model.selectedTab == tab ? 1 : 0)
-                        .accessibilityAddTraits(model.selectedTab == tab ? .isSelected : [])
-                        .accessibilityIdentifier("tab-\(tab.rawValue)")
-                }
-            }.padding(6).background(Color(red: 0.16, green: 0.14, blue: 0.11), in: Capsule())
-                .padding(.horizontal, Layout.gutter).padding(.top, 8).padding(.bottom, 4)
-                .background(Palette.background)
-        }.background(Palette.background)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if model.selectedTab != .map { MainNavigationIsland().background(Palette.background) }
+        }
+        .overlay(alignment: .bottom) {
+            if model.selectedTab == .map { MainNavigationIsland() }
+        }
+        .background(Palette.background)
+    }
+}
+
+private struct MainNavigationIsland: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AppTab.allCases, id: \.self) { tab in
+                Button { model.selectedTab = tab } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: tab.symbol).font(.system(size: 20, weight: .semibold))
+                        if model.selectedTab == tab && !typeSize.isAccessibilitySize {
+                            Text(tab.title).font(.subheadline.weight(.semibold)).fixedSize()
+                        }
+                    }.frame(maxWidth: model.selectedTab == tab && !typeSize.isAccessibilitySize ? nil : .infinity)
+                        .frame(minWidth: Layout.touchTarget, minHeight: Layout.navigationItemHeight)
+                        .padding(.horizontal, model.selectedTab == tab ? 10 : 0)
+                        .foregroundStyle(model.selectedTab == tab ? Palette.navigationSelectedInk : Palette.navigationInk)
+                        .background(model.selectedTab == tab ? Palette.navigationSelected : .clear, in: Capsule())
+                        .contentShape(Rectangle())
+                        .fixedSize(horizontal: model.selectedTab == tab && !typeSize.isAccessibilitySize, vertical: false)
+                }.buttonStyle(.plain).accessibilityLabel(tab.title)
+                    .layoutPriority(model.selectedTab == tab ? 1 : 0)
+                    .accessibilityAddTraits(model.selectedTab == tab ? .isSelected : [])
+                    .accessibilityIdentifier("tab-\(tab.rawValue)")
+            }
+        }.modifier(FloatingIsland())
+            .padding(.horizontal, Layout.gutter).padding(.top, Layout.compact).padding(.bottom, 4)
     }
 }
 

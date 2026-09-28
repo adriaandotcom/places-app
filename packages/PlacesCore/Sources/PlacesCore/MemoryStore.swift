@@ -60,7 +60,10 @@ extension PlacesStore {
     }
     public func savePerson(_ person: MemoryPerson) throws {
         guard !person.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MemoryError.invalidPerson }
+        guard person.avatarJPEG.map({ !$0.isEmpty && $0.count <= 200_000 }) ?? true else { throw MemoryError.invalidPhoto }
+        guard PersonMentions.valid(person.mentions ?? [], in: person.detail).count == (person.mentions ?? []).count else { throw MemoryError.invalidPerson }
         try queue.write { db in
+            try MemorySQL.checkPeople((person.mentions ?? []).map(\.personID), db: db)
             try db.execute(sql: "INSERT INTO people(id, payload) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload",
                            arguments: [person.id, try StoreSQL.encode(person)])
         }
@@ -70,8 +73,13 @@ extension PlacesStore {
             for var trip in try MemorySQL.trips(db) where trip.personIDs.contains(id) {
                 trip.personIDs.removeAll { $0 == id }; try MemorySQL.saveTrip(trip, db: db)
             }
-            for var memory in try MemorySQL.memories(db) where memory.personIDs.contains(id) {
-                memory.personIDs.removeAll { $0 == id }; try MemorySQL.saveMemory(memory, db: db)
+            for var memory in try MemorySQL.memories(db) where memory.linkedPersonIDs.contains(id) {
+                memory.personIDs.removeAll { $0 == id }; memory.mentions?.removeAll { $0.personID == id }
+                try MemorySQL.saveMemory(memory, db: db)
+            }
+            for var person in try MemorySQL.people(db) where (person.mentions ?? []).contains(where: { $0.personID == id }) {
+                person.mentions?.removeAll { $0.personID == id }
+                try db.execute(sql: "UPDATE people SET payload = ? WHERE id = ?", arguments: [try StoreSQL.encode(person), person.id])
             }
             try db.execute(sql: "DELETE FROM people WHERE id = ?", arguments: [id])
         }
@@ -84,8 +92,9 @@ extension PlacesStore {
         guard Set(memory.photoIDs).count == memory.photoIDs.count,
               Set(addedIDs).count == addedIDs.count, Set(addedIDs).isSubset(of: Set(memory.photoIDs))
         else { throw MemoryError.invalidPhoto }
+        guard PersonMentions.valid(memory.mentions ?? [], in: memory.text).count == (memory.mentions ?? []).count else { throw MemoryError.invalidMemory }
         try queue.write { db in
-            try MemorySQL.checkPeople(memory.personIDs, db: db)
+            try MemorySQL.checkPeople(memory.linkedPersonIDs, db: db)
             if let id = memory.tripID, try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM trips WHERE id = ?)", arguments: [id])! { throw MemoryError.invalidMemory }
             if let id = memory.placeID, try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM places WHERE id = ?)", arguments: [id])! { throw MemoryError.invalidMemory }
             let owned = try String.fetchAll(db, sql: "SELECT id FROM memoryPhotos WHERE memoryID = ?", arguments: [memory.id])
