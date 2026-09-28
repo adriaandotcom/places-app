@@ -33,6 +33,7 @@ enum Palette {
     }
 }
 enum BrandFont {
+    static let rewindNumber = Font.custom("BricolageGrotesque-ExtraBold", size: 88, relativeTo: .largeTitle)
     static let hero = Font.custom("BricolageGrotesque-ExtraBold", size: 34, relativeTo: .largeTitle)
     static let heading = Font.custom("BricolageGrotesque-Bold", size: 23, relativeTo: .title2)
     static let title = Font.custom("BricolageGrotesque-Bold", size: 18, relativeTo: .headline)

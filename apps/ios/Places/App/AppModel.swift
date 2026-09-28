@@ -67,6 +67,19 @@ final class AppModel {
         librarySection = "People"
         openMainTab(.places)
     }
+    let rewindNotifications = RewindNotifications()
+    var rewindRequest: RewindRequest?
+    private(set) var monthlyRewindReminders = false
+    private(set) var weeklyReviewReminders = false
+    var rewindMonths: [Date] {
+        let calendar = Calendar.current
+        let dates = historyDays.map(\.date) + memories.memories.map(\.date) + memories.trips.filter { !$0.hidden }.map(\.start) + [Date()]
+        return Set(dates.filter { $0 <= Date() }.compactMap { calendar.dateInterval(of: .month, for: $0)?.start }).sorted(by: >)
+    }
+    var defaultRewindMonth: Date {
+        let current = Calendar.current.dateInterval(of: .month, for: Date())!.start
+        return rewindMonths.first { $0 < current } ?? current
+    }
     var searchText = ""
     var searchResults: [Place] = []
     var errorMessage: String?
@@ -90,6 +103,7 @@ final class AppModel {
     func start() {
         guard !starting, store == nil else { return }
         starting = true
+        rewindNotifications.onOpen = { [weak self] request in self?.rewindRequest = request }
         do {
             let opened = try uiTesting ? PlacesStore() : ProtectedStorage.open()
             try MemoryPhotoDraft.clearAbandonedImports()
@@ -105,10 +119,15 @@ final class AppModel {
                     mapDownloads.start()
                     mapsChoiceMade = try await opened.setting("mapsChoiceMade") == "true" || mapsAvailable
                     nerdMode = try await opened.setting("nerdMode") == "true"
+                    monthlyRewindReminders = try await opened.setting("monthlyRewindReminders") == "true"
+                    weeklyReviewReminders = try await opened.setting("weeklyReviewReminders") == "true"
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-photo-browser") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-rewind") {
+                        try await DemoFixtures.seedRewind(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-photo-browser") {
                         try await DemoFixtures.seedPhotoBrowser(opened)
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-memories") {
@@ -224,8 +243,52 @@ final class AppModel {
             recentObservations = nerdMode ? newObservations : []
             events = nerdMode ? newEvents : []
             historyRevision += 1
+            await refreshRewindReminders()
         } catch { fail("Could not read your history. Please try again.") }
     }
+    func setRewindReminder(_ kind: RewindReminder.Kind, enabled: Bool) async {
+        guard let store else { return }
+        let epoch = generation
+        do {
+            let key = kind == .monthly ? "monthlyRewindReminders" : "weeklyReviewReminders"
+            try await store.setSetting(key, value: String(enabled))
+            guard !deleting, epoch == generation else { return }
+            if kind == .monthly { monthlyRewindReminders = enabled } else { weeklyReviewReminders = enabled }
+            if enabled && !uiTesting { await tracking.requestNotifications() }
+            await refreshRewindReminders()
+        } catch { fail("Could not save your reminder preference. Please try again.") }
+    }
+
+    private func refreshRewindReminders() async {
+        guard !uiTesting, !deleting, let store else { return }
+        guard monthlyRewindReminders || weeklyReviewReminders else { rewindNotifications.update([]); return }
+        let epoch = generation
+        let revision = historyRevision
+        let now = Date()
+        let calendar = Calendar.current
+        do {
+            let from = calendar.date(byAdding: .day, value: -7, to: now)!
+            let currentMonth = calendar.dateInterval(of: .month, for: now)!.start
+            let earliestMonth = calendar.component(.day, from: now) == 1 ? calendar.date(byAdding: .month, value: -1, to: currentMonth)! : currentMonth
+            let items = try await store.rewindReminderItems(in: DateInterval(start: monthlyRewindReminders ? min(from, earliestMonth) : from, end: now))
+            guard !deleting, epoch == generation, revision == historyRevision else { return }
+            var recordedMonths: Set<Date> = []
+            if monthlyRewindReminders {
+                let current = calendar.dateInterval(of: .month, for: now)!.start
+                var candidates = [current]
+                if calendar.component(.day, from: now) == 1 { candidates.append(calendar.date(byAdding: .month, value: -1, to: current)!) }
+                for month in candidates {
+                    if MonthlyRewind(month: month, items: items, places: places, library: memories, now: now).hasHighlights { recordedMonths.insert(month) }
+                }
+            }
+            guard !deleting, epoch == generation, revision == historyRevision else { return }
+            let recent = InferenceEngine.within(DateInterval(start: from, end: now), items: items)
+            let missing = TimelineReview.items(in: recent, places: places, now: now).filter { $0.kind == .stay }
+            rewindNotifications.update(RewindReminder.plan(now: now, monthly: monthlyRewindReminders,
+                weekly: weeklyReviewReminders, recordedMonths: recordedMonths, missingPlaces: missing))
+        } catch { rewindNotifications.update([]) }
+    }
+
     func selectDay(_ day: Date) {
         selectedDay = min(day, Date()); mapPeriod = nil; mapSelectionRequest = UUID()
         Task { await refresh() }
@@ -454,6 +517,8 @@ final class AppModel {
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
+        rewindNotifications.update([])
+        monthlyRewindReminders = false; weeklyReviewReminders = false; rewindRequest = nil
         mapPreference = UUID(); mapProvider = .off; trackingEnabled = false
         lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
         placeLookupExplained = false; regionLookupIssues = [:]

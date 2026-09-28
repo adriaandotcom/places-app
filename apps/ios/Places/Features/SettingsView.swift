@@ -28,6 +28,20 @@ struct SettingsView: View {
                     Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }
                 }
             }
+            Section {
+                NavigationLink("Monthly rewind") { RewindHome(month: model.defaultRewindMonth) }
+                Toggle("Monthly rewind reminder", isOn: Binding(get: { model.monthlyRewindReminders }, set: { value in
+                    Task { await model.setRewindReminder(.monthly, enabled: value) }
+                })).tint(Palette.controlGreen).accessibilityIdentifier("monthly-rewind-reminder")
+                Toggle("Weekly timeline check", isOn: Binding(get: { model.weeklyReviewReminders }, set: { value in
+                    Task { await model.setRewindReminder(.weekly, enabled: value) }
+                })).tint(Palette.controlGreen).accessibilityIdentifier("weekly-review-reminder")
+                if (model.monthlyRewindReminders || model.weeklyReviewReminders) && model.tracking.notificationAuthorization == .denied {
+                    Button("Allow notifications in Settings") { model.tracking.openSettings() }
+                }
+            } header: { Text("Rewind & reminders") } footer: {
+                Text("A rewind on the first evening of each month. A Sunday check-in only when your recent timeline has unnamed places. Everything is prepared on this iPhone.")
+            }
             Section("Permissions") {
                 PermissionAccessRow(permission: .location)
                 PermissionAccessRow(permission: .motion)

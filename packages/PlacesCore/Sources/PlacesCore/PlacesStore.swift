@@ -142,7 +142,7 @@ public actor PlacesStore {
         return try timeline(in: interval)
     }
 
-    public func timeline(in interval: DateInterval) throws -> [TimelineItem] {
+    public func timeline(in interval: DateInterval, throughLastEvidence: Bool = false) throws -> [TimelineItem] {
         return try queue.read { db in
             var items = try StoreSQL.decodeAll(TimelineItem.self, db: db,
                 sql: "SELECT payload FROM timeline WHERE start < ? AND (end IS NULL OR end > ?) ORDER BY start",
@@ -174,7 +174,12 @@ public actor PlacesStore {
             let separatedAt = try Double.fetchAll(db, sql: "SELECT timestamp FROM timelineSeparations").map(Date.init(timeIntervalSince1970:))
             let presented = TimelinePresentation.make(items: InferenceEngine.applying(edits, to: items),
                 observations: observations, places: places, separatedAt: separatedAt)
-            return InferenceEngine.within(interval, items: presented)
+            let bounded = throughLastEvidence ? presented.map { item in
+                var item = item
+                if item.end == nil && !item.isUserEdited { item.end = max(item.start, item.lastEvidenceAt) }
+                return item
+            } : presented
+            return InferenceEngine.within(interval, items: bounded)
         }
     }
 
@@ -191,6 +196,20 @@ public actor PlacesStore {
                 try db.execute(sql: "INSERT OR IGNORE INTO timelineSeparations(timestamp) VALUES (?)",
                                arguments: [boundary.timeIntervalSince1970])
             }
+        }
+    }
+
+    /// Reminder eligibility needs corrected entries, not GPS samples, map routes,
+    /// or presentation grouping. Keep this cheap enough for recording callbacks.
+    public func rewindReminderItems(in interval: DateInterval) throws -> [TimelineItem] {
+        try queue.read { db in
+            let items = try StoreSQL.decodeAll(TimelineItem.self, db: db,
+                sql: "SELECT payload FROM timeline WHERE start < ? AND (end IS NULL OR end > ?) ORDER BY start",
+                arguments: [interval.end.timeIntervalSince1970, interval.start.timeIntervalSince1970])
+            let edits = try StoreSQL.decodeAll(UserOverride.self, db: db,
+                sql: "SELECT payload FROM overrides WHERE start < ? AND end > ? ORDER BY createdAt",
+                arguments: [interval.end.timeIntervalSince1970, interval.start.timeIntervalSince1970])
+            return InferenceEngine.applying(edits, to: items)
         }
     }
 

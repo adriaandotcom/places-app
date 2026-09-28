@@ -1,6 +1,74 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testMonthlyRewindReviewAndStory() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-rewind"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-rewind"].waitForExistence(timeout: 10))
+        app.buttons["open-rewind"].tap()
+        XCTAssertTrue(app.buttons["rewind-review"].waitForExistence(timeout: 8))
+        let intro = XCTAttachment(screenshot: app.screenshot()); intro.name = "Monthly rewind invitation"; intro.lifetime = .keepAlways; add(intro)
+        app.buttons["rewind-review"].tap()
+        let entries = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "review-entry-"))
+        XCTAssertTrue(entries.firstMatch.waitForExistence(timeout: 8))
+        entries.firstMatch.tap()
+        XCTAssertTrue(app.buttons["assign-place"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["show-rewind"].waitForExistence(timeout: 5))
+        app.buttons["show-rewind"].tap()
+        XCTAssertTrue(app.staticTexts["rewind-place-count"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["rewind-place-count"].label, "2")
+        let card = XCTAttachment(screenshot: app.screenshot()); card.name = "Monthly rewind places card"; card.lifetime = .keepAlways; add(card)
+        app.buttons["rewind-next"].tap()
+        XCTAssertTrue(app.staticTexts["A familiar\nfavourite."].waitForExistence(timeout: 5))
+        app.buttons["Previous"].tap()
+        XCTAssertEqual(app.staticTexts["rewind-progress"].label, "1 of 6")
+        for _ in 0..<5 { app.buttons["rewind-next"].tap() }
+        XCTAssertTrue(app.staticTexts["The little\nthings stay."].waitForExistence(timeout: 5))
+        let end = XCTAttachment(screenshot: app.screenshot()); end.name = "Monthly rewind memories card"; end.lifetime = .keepAlways; add(end)
+        app.buttons["rewind-next"].tap()
+        XCTAssertTrue(app.buttons["show-rewind"].waitForExistence(timeout: 5))
+        app.buttons["rewind-month"].tap()
+        app.buttons[Date().formatted(.dateTime.month(.wide).year())].tap()
+        XCTAssertTrue(app.staticTexts["A fresh page"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["show-rewind"].exists)
+    }
+
+    func testRewindLargeTextKeepsControlsReachable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-rewind", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-rewind"].waitForExistence(timeout: 10))
+        app.buttons["open-rewind"].tap()
+        let start = app.buttons["show-rewind"]
+        reveal(start, in: app); start.tap()
+        XCTAssertTrue(app.buttons["rewind-next"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["rewind-next"].isHittable)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Rewind with accessibility text"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["rewind-next"].tap()
+        XCTAssertEqual(app.staticTexts["rewind-progress"].label, "2 of 6")
+    }
+
+    func testRewindRemindersDefaultOff() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        let monthly = app.switches["monthly-rewind-reminder"]
+        reveal(monthly, in: app)
+        XCTAssertEqual(monthly.value as? String, "0")
+        let weekly = app.switches["weekly-review-reminder"]
+        reveal(weekly, in: app)
+        XCTAssertEqual(weekly.value as? String, "0")
+        weekly.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: weekly)], timeout: 5), .completed)
+        weekly.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(weekly.value as? String, "0")
+    }
+
     func testMainTabReturnsToPeopleAndDeletingPersonLeavesNoBlankPage() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-memories"]

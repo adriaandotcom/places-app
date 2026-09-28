@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @MainActor final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
@@ -10,6 +11,7 @@ import UIKit
     }
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Start from the lifecycle entry point too, including location-triggered background launches.
+        UNUserNotificationCenter.current().delegate = AppModel.shared.rewindNotifications
         AppModel.shared.start()
         return true
     }

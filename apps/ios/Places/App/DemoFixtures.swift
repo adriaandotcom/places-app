@@ -4,6 +4,29 @@ import UIKit
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedRewind(_ store: PlacesStore) async throws {
+        let calendar = Calendar.current
+        let current = calendar.dateInterval(of: .month, for: Date())!.start
+        let start = calendar.date(byAdding: .month, value: -1, to: current)!
+        let home = Place(id: "rewind-home", name: "Little home", coordinate: Coordinate(latitude: 1, longitude: 1), symbol: "house.fill")
+        let cafe = Place(id: "rewind-cafe", name: "Corner café", coordinate: Coordinate(latitude: 1.1, longitude: 1.1), symbol: "cup.and.saucer.fill", colorIndex: 2,
+                         locality: PlaceLocality(city: "Amsterdam", country: "Netherlands"))
+        try await store.savePlace(home); try await store.savePlace(cafe)
+        var evidence: [SensorObservation] = []
+        for day in 1...4 {
+            let date = calendar.date(byAdding: .day, value: day, to: start)!
+            let coordinate = day == 4 ? Coordinate(latitude: 2, longitude: 2) : (day == 1 ? home.coordinate : cafe.coordinate)
+            evidence.append(SensorObservation(timestamp: date.addingTimeInterval(10 * 3600), source: .visitArrival, coordinate: coordinate, horizontalAccuracy: 10))
+            evidence.append(SensorObservation(timestamp: date.addingTimeInterval(12 * 3600), source: .visitDeparture, coordinate: coordinate, horizontalAccuracy: 10))
+        }
+        try await store.append(evidence)
+        try await store.correct(UserOverride(start: start.addingTimeInterval(86400 + 12 * 3600), end: start.addingTimeInterval(86400 + 13 * 3600), kind: .journey, mode: .walking))
+        let friend = MemoryPerson(id: "rewind-friend", name: "Alex", colorIndex: 4)
+        try await store.savePerson(friend)
+        try await store.saveTrip(Trip(id: "rewind-trip", title: "A city break", start: start.addingTimeInterval(86400), end: start.addingTimeInterval(4 * 86400), personIDs: [friend.id]))
+        try await store.saveMemory(PlaceMemory(text: "A slow morning, good coffee, and nowhere to rush.", date: start.addingTimeInterval(2 * 86400), tripID: "rewind-trip", personIDs: [friend.id]))
+    }
+
     @MainActor static func seedPhotoBrowser(_ store: PlacesStore) async throws {
         try await seedMemories(store)
         let start = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-2 * 86400)

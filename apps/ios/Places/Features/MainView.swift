@@ -25,6 +25,12 @@ struct MainView: View {
         }
         .background(Palette.background)
         .environment(\.hasMainNavigation, true)
+        .sheet(item: Binding(get: { model.rewindRequest }, set: { model.rewindRequest = $0 })) { request in
+            NavigationStack {
+                if request.reviewWeek { TimelineReviewView(interval: DateInterval(start: request.month, end: max(request.month, min(Date(), Calendar.current.date(byAdding: .day, value: 7, to: request.month)!))), weekly: true) }
+                else { RewindHome(month: request.month) }
+            }.environment(\.hasMainNavigation, false)
+        }
     }
 }
 
@@ -103,6 +109,9 @@ struct TimelineView: View {
                 HStack {
                     Text(model.selectedDay.formatted(.dateTime.month(.wide).year())).font(.subheadline).foregroundStyle(Palette.muted)
                     Spacer()
+                    Button { model.rewindRequest = RewindRequest(month: model.defaultRewindMonth) } label: {
+                        Label("Rewind", systemImage: "sparkles").font(.subheadline.weight(.semibold)).frame(minHeight: Layout.touchTarget)
+                    }.accessibilityIdentifier("open-rewind")
                     Button { showDate = true } label: { Image(systemName: "calendar").frame(width: 44, height: 44) }
                         .accessibilityLabel("Choose date")
                 }
