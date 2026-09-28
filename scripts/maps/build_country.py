@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import time
 import unicodedata
 import urllib.request
 
@@ -92,6 +93,33 @@ def coverage(countries):
     return result
 
 
+def extract_source(command, source, pmtiles):
+    if source.exists():
+        try:
+            subprocess.run([str(pmtiles), "verify", str(source)], check=True, timeout=120)
+            return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            source.unlink()
+    partial = source.with_suffix(".partial.pmtiles")
+    command = list(command)
+    command[3] = str(partial)
+    for attempt in range(1, 4):
+        partial.unlink(missing_ok=True)
+        print(f"Extracting {source.name}: attempt {attempt}/3", flush=True)
+        try:
+            subprocess.run(command, check=True, timeout=600)
+            subprocess.run([str(pmtiles), "verify", str(partial)], check=True, timeout=120)
+            partial.replace(source)
+            return
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            print(f"Source extraction failed ({type(error).__name__}); discarding partial download", flush=True)
+            if attempt == 3:
+                raise
+            time.sleep(5 * attempt)
+        finally:
+            partial.unlink(missing_ok=True)
+
+
 def build_region(country, work, pmtiles, source_date, version, preview=False):
     source_date = validate_date(source_date); version = validate_version(version)
     work.mkdir(parents=True, exist_ok=True)
@@ -100,17 +128,14 @@ def build_region(country, work, pmtiles, source_date, version, preview=False):
     output = work / identifier / version
     output.mkdir(parents=True, exist_ok=True)
     command = [str(pmtiles), "extract", f"https://build.protomaps.com/{source_date}.pmtiles", str(source),
-               "--minzoom=7", "--maxzoom=15", "--download-threads=4", "-q"]
+               "--minzoom=7", "--maxzoom=15", "--download-threads=4"]
     if preview:
         command.append("--bbox=" + ",".join(map(str, AMSTERDAM_BOUNDS)))
     else:
         outline = work / (identifier + ".geojson")
         outline.write_text(json.dumps(dict(type="FeatureCollection", features=[dict(type="Feature", properties={}, geometry=country["geometry"])])))
         command.append("--region=" + str(outline))
-    if not source.exists():
-        subprocess.run(command, check=True)
-    # A failed extraction must never be mistaken for a completed cached input.
-    subprocess.run([str(pmtiles), "verify", str(source)], check=True)
+    extract_source(command, source, pmtiles)
     updated = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     variants = []
     for detail, zoom in DETAIL_ZOOMS.items():

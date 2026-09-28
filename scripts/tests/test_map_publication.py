@@ -2,11 +2,15 @@ import copy
 import json
 from pathlib import Path
 import sys
+import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'maps'))
 from publish_maps import merge_catalog, validate_entry, Storage
 from build_lite import DETAIL_ZOOMS, keep_feature
+from build_country import extract_source
 
 
 def country(identifier='greece', date='20260925', version='123.1'):
@@ -19,6 +23,39 @@ def country(identifier='greece', date='20260925', version='123.1'):
 
 
 class MapPublicationTests(unittest.TestCase):
+    def test_source_retry_discards_partial_files_and_only_promotes_verified_download(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'greece.pmtiles'
+            partial = source.with_suffix('.partial.pmtiles')
+            attempts = 0
+            def run(command, **options):
+                nonlocal attempts
+                if command[1] == 'extract':
+                    attempts += 1
+                    self.assertFalse(source.exists())
+                    self.assertFalse(partial.exists())
+                    self.assertEqual(options['timeout'], 600)
+                    partial.write_bytes(b'partial' if attempts == 1 else b'verified')
+                    if attempts == 1: raise subprocess.TimeoutExpired(command, 600)
+                else:
+                    self.assertEqual(Path(command[2]).read_bytes(), b'verified')
+            with patch('build_country.subprocess.run', side_effect=run), patch('build_country.time.sleep'):
+                extract_source(['pmtiles', 'extract', 'https://example.invalid/source', str(source)], source, 'pmtiles')
+            self.assertEqual(source.read_bytes(), b'verified')
+            self.assertFalse(partial.exists())
+            self.assertEqual(attempts, 2)
+
+    def test_invalid_extraction_is_never_cached_after_retries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'greece.pmtiles'
+            def run(command, **options):
+                if command[1] == 'extract': Path(command[3]).write_bytes(b'invalid')
+                else: raise subprocess.CalledProcessError(1, command)
+            with patch('build_country.subprocess.run', side_effect=run), patch('build_country.time.sleep'), self.assertRaises(subprocess.CalledProcessError):
+                extract_source(['pmtiles', 'extract', 'https://example.invalid/source', str(source)], source, 'pmtiles')
+            self.assertFalse(source.exists())
+            self.assertFalse(source.with_suffix('.partial.pmtiles').exists())
+
     def test_publication_keeps_other_countries_and_replaces_all_variants_together(self):
         old, other, new = country(), country('netherlands'), country(version='124.1')
         index = dict(schemaVersion=1, countries=[dict(c, variants=[]) for c in (old, other)])
