@@ -42,9 +42,18 @@ public enum PersonMentions {
         let prefix = text[..<caret]
         guard let at = prefix.lastIndex(of: "@"),
               at == text.startIndex || text[text.index(before: at)].isWhitespace || "([{".contains(text[text.index(before: at)]) else { return nil }
+        // The caret sits after the trailing space when a suggestion is accepted.
+        // Never scan backwards into a completed token, even after more words.
+        let location = NSRange(at..<caret, in: text).location
+        guard !valid(mentions, in: text).contains(where: { $0.location == location }) else { return nil }
         let name = String(text[text.index(after: at)..<caret])
         guard name.utf16.count <= 64, !name.contains(where: { $0.isNewline || ",;:!?@".contains($0) }) else { return nil }
         return (NSRange(at..<caret, in: text), name)
+    }
+
+    public static func matchingPerson(named name: String, in people: [MemoryPerson]) -> MemoryPerson? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return people.first { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
     }
 
     public static func inserting(_ person: MemoryPerson, in text: String, mentions: [PersonMention], replacing range: NSRange) -> (text: String, mentions: [PersonMention], caret: Int) {

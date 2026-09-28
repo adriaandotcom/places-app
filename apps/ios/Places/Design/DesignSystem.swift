@@ -146,3 +146,15 @@ struct InlineNotice: View {
             .accessibilityElement(children: .combine)
     }
 }
+
+/// Reserve scrollable space for the floating main controls, including pushed pages.
+extension EnvironmentValues {
+    @Entry var hasMainNavigation = false
+}
+
+struct MainNavigationClearance: ViewModifier {
+    @Environment(\.hasMainNavigation) private var hasMainNavigation
+    func body(content: Content) -> some View {
+        content.contentMargins(.bottom, hasMainNavigation ? Layout.navigationIslandHeight + Layout.spacing : 0, for: .scrollContent)
+    }
+}

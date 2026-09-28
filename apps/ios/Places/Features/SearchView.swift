@@ -26,7 +26,7 @@ struct SearchView: View {
                     }.buttonStyle(.plain)
                 }
             }.padding(Layout.gutter)
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .task(id: model.searchText) { await model.search() }
     }
 }

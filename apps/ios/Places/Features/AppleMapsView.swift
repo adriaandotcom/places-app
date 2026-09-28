@@ -24,16 +24,17 @@ struct PrivacyMapView: View {
     var items: [TimelineItem]?
     var routePoints: [RoutePoint]?
     var focusRequest: UUID?
+    var customPresentation: MapPresentation?
     var chromeInsets = EdgeInsets()
     @State private var viewport: MapViewport?
     @State private var showMapSettings = false
     var body: some View {
         Group {
         if model.mapsEnabled {
-            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
+            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: $viewport, focusRequest: focusRequest, customPresentation: customPresentation, chromeInsets: chromeInsets)
                 .accessibilityIdentifier("apple-map")
         } else if model.mapProvider == .onDevice {
-            OfflineMapView(presentation: MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
+            OfflineMapView(presentation: customPresentation ?? MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
         } else {
             ScrollView {
             VStack(spacing: 18) {
@@ -59,11 +60,12 @@ private struct AppleMapSurface: View {
     let routePoints: [RoutePoint]
     @Binding var viewport: MapViewport?
     let focusRequest: UUID?
+    var customPresentation: MapPresentation?
     let chromeInsets: EdgeInsets
     @State private var selectedPlace: Place?
     @State private var camera: MapCameraPosition = .automatic
     private var presentation: MapPresentation {
-        MapPresentation(items: items, routePoints: routePoints, places: model.places)
+        customPresentation ?? MapPresentation(items: items, routePoints: routePoints, places: model.places)
     }
     var body: some View {
         Map(position: $camera) {
@@ -96,7 +98,7 @@ private struct AppleMapSurface: View {
         .onAppear { frame(restoreViewport: true) }
         .onChange(of: presentation.coordinates) { _, _ in frame(restoreViewport: false) }
         .onChange(of: focusRequest) { _, _ in frame(restoreViewport: false) }
-        .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) } }
+        .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) }.environment(\.hasMainNavigation, false) }
     }
     private func frame(restoreViewport: Bool) {
         if restoreViewport, let viewport {

@@ -85,6 +85,17 @@ extension PlacesStore {
         }
     }
     public func saveMemory(_ memory: PlaceMemory, adding photos: [MemoryPhoto] = [], importing files: [MemoryPhotoFile] = []) throws {
+        var memory = memory
+        for (id, details) in photos.map({ ($0.id, $0.details) }) + files.map({ ($0.id, $0.details) }) {
+            if let details { memory.photoDetails = (memory.photoDetails ?? [:]).merging([id: details]) { old, _ in old } }
+        }
+        memory.photoDetails = memory.photoDetails?.filter { memory.photoIDs.contains($0.key) }
+        guard (memory.photoDetails ?? [:]).values.allSatisfy({ details in
+            details.createdAt?.timeIntervalSince1970.isFinite != false &&
+            details.utcOffsetSeconds.map { (-86400...86400).contains($0) } != false &&
+            details.coordinate.map { $0.latitude.isFinite && $0.longitude.isFinite && (-90...90).contains($0.latitude) && (-180...180).contains($0.longitude) } != false
+        }) else { throw MemoryError.invalidPhoto }
+        memory.photoIDs = memory.orderedPhotoIDs
         guard memory.date.timeIntervalSince1970.isFinite, memory.visitStart?.timeIntervalSince1970.isFinite != false,
               !memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !memory.photoIDs.isEmpty || !memory.personIDs.isEmpty,
               memory.tripID != nil || memory.placeID != nil || memory.visitStart != nil else { throw MemoryError.invalidMemory }
@@ -117,6 +128,16 @@ extension PlacesStore {
     }
     public func deleteMemory(id: String) throws {
         try queue.write { try $0.execute(sql: "DELETE FROM memories WHERE id = ?", arguments: [id]) }
+    }
+    public func updatePhotoCaption(memoryID: String, photoID: String, caption: String) throws {
+        try queue.write { db in
+            guard var memory = try StoreSQL.decodeAll(PlaceMemory.self, db: db, sql: "SELECT payload FROM memories WHERE id = ?", arguments: [memoryID]).first,
+                  memory.photoIDs.contains(photoID) else { throw MemoryError.invalidPhoto }
+            var details = memory.photoDetails?[photoID] ?? MemoryPhotoDetails()
+            details.caption = caption
+            memory.photoDetails = (memory.photoDetails ?? [:]).merging([photoID: details]) { _, new in new }
+            try MemorySQL.saveMemory(memory, db: db)
+        }
     }
     public func photoData(id: String, thumbnail: Bool = false) throws -> Data? {
         try queue.read { try Data.fetchOne($0, sql: thumbnail ? "SELECT thumbnail FROM memoryPhotos WHERE id = ?" : "SELECT jpeg FROM memoryPhotos WHERE id = ?", arguments: [id]) }

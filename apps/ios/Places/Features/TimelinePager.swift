@@ -182,7 +182,7 @@ private struct TimelineDayPage: View {
                     }
                 }
             }.padding(.horizontal, Layout.gutter).padding(.bottom, Layout.gutter)
-        }.background(Palette.background).foregroundStyle(Palette.ink)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink)
             .refreshable { await model.refresh() }
             .task(id: model.historyRevision) {
                 do {

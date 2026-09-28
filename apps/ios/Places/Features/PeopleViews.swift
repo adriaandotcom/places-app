@@ -45,6 +45,10 @@ struct PeoplePicker: View {
                 Button("Add person") {
                     guard let epoch else { return }
                     let person = MemoryPerson(name: name.trimmingCharacters(in: .whitespacesAndNewlines))
+                    if let existing = PersonMentions.matchingPerson(named: person.name, in: model.memories.people) {
+                        if !selection.contains(existing.id) { selection.append(existing.id) }
+                        name = ""; return
+                    }
                     saving = true
                     Task {
                         do {
@@ -65,6 +69,7 @@ struct PeoplePicker: View {
 
 struct PersonDetail: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let personID: String
     @State private var editing = false
     private var person: MemoryPerson? { model.memories.people.first { $0.id == personID } }
@@ -88,9 +93,11 @@ struct PersonDetail: View {
                     if trips.isEmpty && memories.isEmpty { Text("Include \(person.name) in a trip or a memory to see it here.").foregroundStyle(Palette.muted) }
                 }.padding(Layout.gutter)
             }
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit person", systemImage: "pencil") { editing = true } } }
-            .sheet(isPresented: $editing) { if let person { NavigationStack { PersonEditor(person: person) } } }
+            .sheet(isPresented: $editing) {
+                if let person { NavigationStack { PersonEditor(person: person, onDelete: { editing = false; dismiss(); model.showPeople() }) } }
+            }
     }
 }
 
@@ -103,7 +110,10 @@ struct PersonEditor: View {
     @State private var deleting = false
     @State private var epoch: Int?
     @State private var choosingAvatar = false
-    init(person: MemoryPerson = MemoryPerson(name: "")) { _person = State(initialValue: person) }
+    var onDelete: () -> Void
+    init(person: MemoryPerson = MemoryPerson(name: ""), onDelete: @escaping () -> Void = {}) {
+        _person = State(initialValue: person); self.onDelete = onDelete
+    }
     var body: some View {
         Form {
             Section {
@@ -141,6 +151,7 @@ struct PersonEditor: View {
                     if deleting { try await store.deletePerson(id: value.id) } else { try await store.savePerson(value) }
                 }
                 dismiss()
+                if deleting { onDelete() }
             } catch { self.error = error.localizedDescription }
             saving = false
         }

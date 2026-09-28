@@ -17,7 +17,7 @@ final class MemoryPhotoDraft {
         let thumbnail = directory.appendingPathComponent(photo.id + "-thumbnail.jpg")
         try photo.jpeg.write(to: jpeg, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         try photo.thumbnail.write(to: thumbnail, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        return MemoryPhotoFile(id: photo.id, jpegURL: jpeg, thumbnailURL: thumbnail)
+        return MemoryPhotoFile(id: photo.id, jpegURL: jpeg, thumbnailURL: thumbnail, details: photo.details)
     }
     func remove(_ photo: MemoryPhotoFile) {
         try? FileManager.default.removeItem(at: photo.jpegURL)

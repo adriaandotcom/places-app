@@ -7,22 +7,24 @@ struct MainView: View {
         @Bindable var model = model
         TabView(selection: $model.selectedTab) {
             NavigationStack { TimelineView().toolbar(.hidden, for: .tabBar) }
+                .id(model.navigationRoots[.timeline]?.uuidString ?? "timeline")
                 .tabItem { Label("Timeline", systemImage: AppTab.timeline.symbol) }.tag(AppTab.timeline)
             NavigationStack { MapScreen().toolbar(.hidden, for: .tabBar) }
+                .id(model.navigationRoots[.map]?.uuidString ?? "map")
                 .tabItem { Label("Map", systemImage: AppTab.map.symbol) }.tag(AppTab.map)
             NavigationStack { PlacesView().toolbar(.hidden, for: .tabBar) }
+                .id(model.navigationRoots[.places]?.uuidString ?? "places")
                 .tabItem { Label("Places", systemImage: AppTab.places.symbol) }.tag(AppTab.places)
             NavigationStack { SearchView().toolbar(.hidden, for: .tabBar) }
+                .id(model.navigationRoots[.search]?.uuidString ?? "search")
                 .tabItem { Label("Search", systemImage: AppTab.search.symbol) }.tag(AppTab.search)
         }
         .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if model.selectedTab != .map { MainNavigationIsland().background(Palette.background) }
-        }
         .overlay(alignment: .bottom) {
-            if model.selectedTab == .map { MainNavigationIsland() }
+            MainNavigationIsland()
         }
         .background(Palette.background)
+        .environment(\.hasMainNavigation, true)
     }
 }
 
@@ -32,7 +34,7 @@ private struct MainNavigationIsland: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases, id: \.self) { tab in
-                Button { model.selectedTab = tab } label: {
+                Button { model.openMainTab(tab) } label: {
                     HStack(spacing: 7) {
                         Image(systemName: tab.symbol).font(.system(size: 20, weight: .semibold))
                         if model.selectedTab == tab && !typeSize.isAccessibilitySize {
@@ -110,7 +112,7 @@ struct TimelineView: View {
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
-            .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) } }
+            .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) }.environment(\.hasMainNavigation, false) }
             .sheet(isPresented: $addPlace) { NavigationStack { PlaceEditor() } }
             .sheet(isPresented: $showDate) { NavigationStack { HistoryDatePicker(timelineOnly: true) } }
     }

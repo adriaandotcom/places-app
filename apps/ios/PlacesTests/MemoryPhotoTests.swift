@@ -13,12 +13,17 @@ import PlacesCore
         let source = NSMutableData()
         let destination = try XCTUnwrap(CGImageDestinationCreateWithData(source, UTType.jpeg.identifier as CFString, 1, nil))
         CGImageDestinationAddImage(destination, try XCTUnwrap(image.cgImage), [
-            kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 1.0, kCGImagePropertyGPSLongitude: 2.0],
-            kCGImagePropertyExifDictionary: [kCGImagePropertyExifUserComment: "Private fixture metadata"]
+            kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 1.0, kCGImagePropertyGPSLongitude: 2.0,
+                kCGImagePropertyGPSLatitudeRef: "S", kCGImagePropertyGPSLongitudeRef: "W"],
+            kCGImagePropertyExifDictionary: [kCGImagePropertyExifUserComment: "Private fixture metadata",
+                kCGImagePropertyExifDateTimeOriginal: "2026:09:24 10:15:30", kCGImagePropertyExifOffsetTimeOriginal: "+03:00"]
         ] as CFDictionary)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         let photo = try MemoryPhotoImport.make(source as Data)
         XCTAssertLessThanOrEqual(photo.jpeg.count + photo.thumbnail.count, 500_000)
+        XCTAssertEqual(photo.details?.coordinate, Coordinate(latitude: -1, longitude: -2))
+        XCTAssertEqual(photo.details?.utcOffsetSeconds, 10800)
+        XCTAssertEqual(photo.details?.createdAt, ISO8601DateFormatter().date(from: "2026-09-24T07:15:30Z"))
         for (data, maximum) in [(photo.jpeg, 1600), (photo.thumbnail, 320)] {
             let result = try XCTUnwrap(CGImageSourceCreateWithData(data as CFData, nil))
             let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(result, 0, nil) as? [CFString: Any])

@@ -8,22 +8,31 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
     var label: (Int) -> String = { "Photo \($0 + 1)" }
     var open: ((Item) -> Void)?
     var remove: ((Item) -> Void)?
+    var reorder: (() -> Void)?
     var add: (() -> Void)?
     var addLabel = "Add photos"
     var addIdentifier = ""
+    var addingDisabled = false
+    var photoIdentifierPrefix = ""
     var addBackground = Palette.background
     @ViewBuilder let thumbnail: (Item) -> Thumbnail
+    @State private var removing: Item?
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: Layout.portraitSize))], spacing: Layout.compact) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                VStack(spacing: 0) {
+                Group {
                     if let open {
                         Button { open(item) } label: { tile(item) }.buttonStyle(.plain).accessibilityLabel(label(index))
+                            .accessibilityIdentifier(photoIdentifierPrefix.isEmpty ? "" : photoIdentifierPrefix + String(describing: item.id))
                     } else { tile(item).accessibilityLabel(label(index)) }
-                    if let remove {
-                        Button("Remove photo", systemImage: "xmark.circle.fill") { remove(item) }
-                            .buttonStyle(.plain).labelStyle(.iconOnly).frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                    }
+                }
+                .contextMenu {
+                    if let reorder { Button("Reorder photos", systemImage: "arrow.up.arrow.down", action: reorder) }
+                    if remove != nil { Button("Delete photo", systemImage: "trash", role: .destructive) { removing = item } }
+                }
+                .accessibilityActions {
+                    if let reorder { Button("Reorder photos", action: reorder) }
+                    if remove != nil { Button("Delete photo") { removing = item } }
                 }
             }
             if let add {
@@ -31,12 +40,17 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
                     Image(systemName: "plus").font(.title2).foregroundStyle(Palette.green)
                         .frame(maxWidth: .infinity).frame(height: Layout.portraitSize)
                         .background(addBackground, in: RoundedRectangle(cornerRadius: Layout.compact))
-                }.buttonStyle(.plain).accessibilityLabel(addLabel).accessibilityIdentifier(addIdentifier)
+                }.buttonStyle(.plain).accessibilityLabel(addLabel).accessibilityIdentifier(addIdentifier).disabled(addingDisabled)
             }
+        }
+        .confirmationDialog("Delete this photo from the memory?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible, presenting: removing) { item in
+            Button("Delete photo", role: .destructive) { remove?(item); removing = nil }
         }
     }
     private func tile(_ item: Item) -> some View {
-        thumbnail(item).frame(maxWidth: .infinity).frame(height: Layout.portraitSize).clipped()
-            .clipShape(RoundedRectangle(cornerRadius: Layout.compact))
+        GeometryReader { geometry in
+            thumbnail(item).frame(width: geometry.size.width, height: geometry.size.height).clipped()
+        }.frame(height: Layout.portraitSize)
+            .clipShape(RoundedRectangle(cornerRadius: Layout.compact)).contentShape(Rectangle())
     }
 }

@@ -216,6 +216,46 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
     #expect(PersonMentions.adjusted(tagged.mentions, replacing: NSRange(location: mention.location + 2, length: 1), with: "x").isEmpty)
     #expect(PersonMentions.query(in: "mail@example.com", selection: NSRange(location: 16, length: 0), mentions: []) == nil)
     #expect(PersonMentions.query(in: tagged.text, selection: NSRange(location: mention.location + 4, length: 0), mentions: tagged.mentions) == nil)
+    #expect(PersonMentions.query(in: tagged.text, selection: NSRange(location: tagged.caret, length: 0), mentions: tagged.mentions) == nil)
+    let continued = tagged.text + "at the beach "
+    #expect(PersonMentions.query(in: continued, selection: NSRange(location: continued.utf16.count, length: 0), mentions: tagged.mentions) == nil)
+    let another = continued + "@Al"
+    #expect(PersonMentions.query(in: another, selection: NSRange(location: another.utf16.count, length: 0), mentions: tagged.mentions)?.name == "Al")
+    #expect(PersonMentions.matchingPerson(named: "  RENEE SMITH ", in: [a])?.id == a.id)
+}
+
+@Test func photoDetailsPersistWithStableDateAndManualOrderAndDeletion() async throws {
+    let store = try PlacesStore(); try await store.savePlace(hotel)
+    let first = MemoryPhoto(id: "earlier", jpeg: Data([1]), thumbnail: Data([2]), details: MemoryPhotoDetails(createdAt: date(2, 8), coordinate: hotel.coordinate))
+    let second = MemoryPhoto(id: "later", jpeg: Data([3]), thumbnail: Data([4]), details: MemoryPhotoDetails(createdAt: date(3, 8), utcOffsetSeconds: 7200))
+    let unknown = MemoryPhoto(id: "undated", jpeg: Data([5]), thumbnail: Data([6]))
+    let draft = PlaceMemory(placeID: hotel.id, photoIDs: [second.id, unknown.id, first.id])
+    try await store.saveMemory(draft, adding: [first, second, unknown])
+    var memory = try #require(try await store.memoryLibrary().memories.first)
+    #expect(memory.orderedPhotoIDs == [first.id, second.id, unknown.id])
+    #expect(memory.photoDetails?[first.id]?.coordinate == hotel.coordinate)
+    memory.photoIDs = [second.id, first.id, unknown.id]; memory.photosManuallyOrdered = true
+    try await store.saveMemory(memory)
+    try await store.updatePhotoCaption(memoryID: memory.id, photoID: first.id, caption: "Morning walk")
+    memory = try #require(try await store.memoryLibrary().memories.first)
+    #expect(memory.photoDetails?[first.id]?.caption == "Morning walk")
+    #expect(memory.orderedPhotoIDs == [second.id, first.id, unknown.id])
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(HistoryArchive.self, from: await store.exportHistory())
+    #expect(archive.memories?.memories.first?.photoDetails?[first.id]?.coordinate == hotel.coordinate)
+    #expect(archive.memories?.memories.first?.photoDetails?[first.id]?.caption == "Morning walk")
+    let diagnostics = String(decoding: try await store.exportDiagnostics(), as: UTF8.self)
+    #expect(!diagnostics.contains("Morning walk") && !diagnostics.contains("photoDetails"))
+    memory.photosManuallyOrdered = false
+    #expect(memory.orderedPhotoIDs == [first.id, second.id, unknown.id])
+    memory.photoIDs.removeAll { $0 == first.id }
+    try await store.saveMemory(memory)
+    #expect(try await store.photoData(id: first.id) == nil)
+    #expect(try await store.memoryLibrary().memories.first?.photoDetails?[first.id] == nil)
+    await #expect(throws: MemoryError.self) { try await store.updatePhotoCaption(memoryID: memory.id, photoID: first.id, caption: "Deleted") }
+    let legacy = PlaceMemory(placeID: hotel.id, photoIDs: ["a", "b"])
+    let decoded = try JSONDecoder().decode(PlaceMemory.self, from: JSONEncoder().encode(legacy))
+    #expect(decoded.photoDetails == nil && decoded.photosManuallyOrdered == nil && decoded.orderedPhotoIDs == ["a", "b"])
 }
 
 @Test func avatarsMentionsAndDescriptionsPersistAndDeletionOnlyUnlinksNames() async throws {

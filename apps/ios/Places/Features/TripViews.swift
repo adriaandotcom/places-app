@@ -60,7 +60,7 @@ struct TripDetail: View {
                     }
                 }.padding(Layout.gutter)
             }
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit trip", systemImage: "pencil") { editing = true }.accessibilityIdentifier("edit-trip") } }
             .task(id: model.historyRevision) {
                 guard let trip, let store = model.store else { return }
@@ -94,7 +94,7 @@ private struct TripPlaceVisits: View {
                 }
                 ForEach(model.memories.memories.filter { $0.placeID == place.id && $0.belongs(to: trip) }) { memory in MemoryCard(memory: memory) }
             }.padding(Layout.gutter)
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
     }
 }
 

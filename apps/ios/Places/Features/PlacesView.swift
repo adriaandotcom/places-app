@@ -4,14 +4,15 @@ import PlacesCore
 struct PlacesView: View {
     @Environment(AppModel.self) private var model
     @State private var adding = false
-    @State private var section = "Places"
     @State private var addingTrip = false
     @State private var addingPerson = false
     var body: some View {
+        @Bindable var model = model
+        let section = model.librarySection
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Your \(section.lowercased())").font(BrandFont.hero)
-                Picker("Browse", selection: $section) {
+                Picker("Browse", selection: $model.librarySection) {
                     Text("Places").tag("Places")
                     Text("Trips").tag("Trips")
                     Text("People").tag("People")
@@ -29,7 +30,7 @@ struct PlacesView: View {
                 }
                 }
             }.padding(Layout.gutter)
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if section == "Places" { Button("Add place", systemImage: "plus") { adding = true }.accessibilityIdentifier("add-place") }
@@ -106,7 +107,7 @@ struct PlaceDetail: View {
                     Button("Edit place") { editor = .place }.buttonStyle(PrimaryButton())
                 }.padding(Layout.gutter)
             }
-        }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .task(id: model.historyRevision) { tripIDs = (try? await model.store?.tripIDs(visiting: placeID)) ?? [] }
             .sheet(item: $editor) { target in
                 if let place { NavigationStack { PlaceEditor(place: place, wifiOnly: target == .wifi) } }

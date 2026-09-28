@@ -1,8 +1,29 @@
 #if DEBUG
 import Foundation
+import UIKit
 import PlacesCore
 
 enum DemoFixtures {
+    @MainActor static func seedPhotoBrowser(_ store: PlacesStore) async throws {
+        try await seedMemories(store)
+        let start = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-2 * 86400)
+        let trip = Trip(id: "photo-trip", title: "Island week", start: start, personIDs: ["memory-friend"])
+        try await store.saveTrip(trip)
+        var photos: [MemoryPhoto] = []
+        for index in 0..<9 {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600), format: format).image { context in
+                UIColor(hue: CGFloat(index) / 10, saturation: 0.5, brightness: 0.8, alpha: 1).setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+                ("Photo \(index + 1)" as NSString).draw(at: CGPoint(x: 60, y: 250), withAttributes: [.font: UIFont.systemFont(ofSize: 80), .foregroundColor: UIColor.white])
+            }
+            var photo = try MemoryPhotoImport.make(image.jpegData(compressionQuality: 0.8)!)
+            photo.details = MemoryPhotoDetails(createdAt: start.addingTimeInterval(Double(index + 1) * 3600), utcOffsetSeconds: 7200,
+                coordinate: index == 0 ? Coordinate(latitude: 52.37, longitude: 4.9) : nil)
+            photos.append(photo)
+        }
+        try await store.saveMemory(PlaceMemory(text: "A week of small moments together.", tripID: trip.id, personIDs: trip.personIDs, photoIDs: photos.reversed().map(\.id)), adding: photos)
+    }
     static func seedMemories(_ store: PlacesStore) async throws {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())

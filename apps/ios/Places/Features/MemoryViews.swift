@@ -12,7 +12,7 @@ enum MemoryContext {
     }
     var draft: PlaceMemory {
         switch self {
-        case .trip(let trip): PlaceMemory(tripID: trip.id)
+        case .trip(let trip): PlaceMemory(tripID: trip.id, personIDs: trip.personIDs)
         case .place(let place): PlaceMemory(placeID: place.id)
         case .visit(let item): PlaceMemory(date: item.start, placeID: item.placeID, visitStart: item.start)
         }
@@ -80,18 +80,15 @@ struct MemoryCard: View {
             }
             if !memory.text.isEmpty { PersonMentionText(text: memory.text, mentions: memory.mentions ?? []) }
             if !memory.photoIDs.isEmpty {
-                PhotoGrid(items: memory.photoIDs.map { PhotoReference(id: $0) },
+                PhotoGrid(items: memory.orderedPhotoIDs.map { PhotoReference(id: $0) },
                     open: { selectedPhoto = $0 }, add: { editing = MemoryEditRequest(addPhotos: true) }, addLabel: "Add photos to memory", addIdentifier: "add-photos-to-memory") { photo in
                     StoredPhoto(id: photo.id, thumbnail: true)
                 }
             }
         }.modifier(CardSurface())
             .sheet(item: $editing) { request in NavigationStack { MemoryEditor(memory: memory, addPhotos: request.addPhotos) } }
-            .sheet(item: $selectedPhoto) { photo in
-                NavigationStack {
-                    StoredPhoto(id: photo.id, thumbnail: false).background(Palette.background)
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { selectedPhoto = nil } } }
-                }
+            .fullScreenCover(item: $selectedPhoto) { photo in
+                SavedMemoryPhotoBrowser(memoryID: memory.id, initialID: photo.id)
             }
     }
 }
@@ -136,6 +133,8 @@ struct MemoryEditor: View {
     @State private var error: String?
     @State private var confirmDelete = false
     @State private var epoch: Int?
+    @State private var reordering = false
+    @State private var selectedPhoto: PhotoReference?
     private let addPhotos: Bool
     @State private var offeredPhotos = false
     init(memory: PlaceMemory, addPhotos: Bool = false) { _draft = State(initialValue: memory); self.addPhotos = addPhotos }
@@ -150,19 +149,15 @@ struct MemoryEditor: View {
                 if draft.visitStart == nil { DatePicker("Date", selection: $draft.date, in: ...Date(), displayedComponents: .date) }
             }
             Section("Photos") {
-                if !draft.photoIDs.isEmpty {
-                    PhotoGrid(items: draft.photoIDs.map { PhotoReference(id: $0) }, remove: { reference in
+                    PhotoGrid(items: draft.orderedPhotoIDs.map { PhotoReference(id: $0) }, open: { selectedPhoto = $0 }, remove: { reference in
                         if let photo = photos.first(where: { $0.id == reference.id }) { photoDraft.remove(photo) }
                         draft.photoIDs.removeAll { $0 == reference.id }; photos.removeAll { $0.id == reference.id }
-                    }) { reference in
-                        if let photo = photos.first(where: { $0.id == reference.id }), let image = UIImage(contentsOfFile: photo.thumbnailURL.path) {
-                            Image(uiImage: image).resizable().scaledToFill()
-                        } else { StoredPhoto(id: reference.id, thumbnail: true) }
+                        draft.photoDetails?.removeValue(forKey: reference.id)
+                    }, reorder: draft.photoIDs.count > 1 ? { reordering = true } : nil,
+                    add: { choosingPhotos = true }, addIdentifier: "add-memory-photos", addingDisabled: importing, photoIdentifierPrefix: "draft-photo-") { reference in
+                        DraftPhotoThumbnail(id: reference.id, files: photos)
                     }
-                }
                 if importing { ProgressView(importProgress) }
-                Button("Add photos", systemImage: "photo.badge.plus") { choosingPhotos = true }
-                    .disabled(importing).accessibilityIdentifier("add-memory-photos")
             }
             if exists {
                 Section { Button("Delete memory", role: .destructive) { confirmDelete = true } }
@@ -179,6 +174,17 @@ struct MemoryEditor: View {
                           selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current)
             .onChange(of: selection) { importSelectionIfReady() }
             .onChange(of: choosingPhotos) { importSelectionIfReady() }
+            .sheet(isPresented: $reordering) { NavigationStack { MemoryPhotoOrderEditor(memory: $draft, files: photos) } }
+            .fullScreenCover(item: $selectedPhoto) { photo in
+                MemoryPhotoBrowser(photoIDs: draft.orderedPhotoIDs, initialID: photo.id, details: draft.photoDetails ?? [:], load: { id in
+                    if let file = photos.first(where: { $0.id == id }) { return try Data(contentsOf: file.jpegURL) }
+                    return try await model.store?.photoData(id: id)
+                }, saveCaption: { id, caption in
+                    var details = draft.photoDetails?[id] ?? MemoryPhotoDetails()
+                    details.caption = caption
+                    draft.photoDetails = (draft.photoDetails ?? [:]).merging([id: details]) { _, new in new }
+                })
+            }
             .modifier(EditorControls(saving: saving,
                 canSave: !importing && (!draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.photoIDs.isEmpty || !draft.personIDs.isEmpty),
                 dismissalBlocked: importing, error: $error, errorTitle: "Couldn’t save memory", saveIdentifier: "save-memory",
@@ -203,6 +209,7 @@ struct MemoryEditor: View {
                     try Task.checkCancellation()
                     guard model.memoryEpoch == expectedEpoch else { throw CancellationError() }
                     photos.append(try photoDraft.append(photo)); draft.photoIDs.append(photo.id)
+                    if let details = photo.details { draft.photoDetails = (draft.photoDetails ?? [:]).merging([photo.id: details]) { _, new in new } }
                 }
             } catch is CancellationError {} catch { self.error = "Some photos couldn’t be added. Try choosing them again." }
             importing = false; importTask = nil
@@ -225,7 +232,8 @@ struct MemoryEditor: View {
     }
 }
 
-/// Re-encode pixels only: no original EXIF, GPS, camera identifiers or filenames.
+/// Re-encode pixels only. Keep date and coordinates separately in protected storage;
+/// camera identifiers, filenames and other original metadata are discarded.
 /// These bounded copies live in the same protected, backup-excluded SQLite store as history.
 enum MemoryPhotoImport {
     nonisolated static func make(_ data: Data) throws -> MemoryPhoto {
@@ -249,6 +257,42 @@ enum MemoryPhotoImport {
             throw MemoryError.invalidPhoto
         }
         return try MemoryPhoto(jpeg: encoded(maximumSize: 1600, byteLimit: 450_000),
-                               thumbnail: encoded(maximumSize: 320, byteLimit: 50_000))
+                               thumbnail: encoded(maximumSize: 320, byteLimit: 50_000), details: details(from: source))
+    }
+
+    nonisolated static func details(from source: CGImageSource) -> MemoryPhotoDetails {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
+        let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        let gps = properties[kCGImagePropertyGPSDictionary] as? [CFString: Any] ?? [:]
+        var details = MemoryPhotoDetails()
+        if let original = exif[kCGImagePropertyExifDateTimeOriginal] as? String {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.isLenient = false
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            if let offset = exif[kCGImagePropertyExifOffsetTimeOriginal] as? String {
+                formatter.dateFormat = "yyyy:MM:dd HH:mm:ssXXXXX"
+                details.createdAt = formatter.date(from: original + offset)
+                if details.createdAt != nil {
+                    let parts = offset.dropFirst().split(separator: ":").compactMap { Int($0) }
+                    if parts.count == 2 { details.utcOffsetSeconds = (parts[0] * 3600 + parts[1] * 60) * (offset.hasPrefix("-") ? -1 : 1) }
+                }
+            }
+            if details.createdAt == nil {
+                // Without an offset, preserve the camera's wall-clock time, not a guessed zone.
+                formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+                details.createdAt = formatter.date(from: original)
+            }
+        }
+        if let latitude = gps[kCGImagePropertyGPSLatitude] as? Double,
+           let longitude = gps[kCGImagePropertyGPSLongitude] as? Double,
+           let latRef = gps[kCGImagePropertyGPSLatitudeRef] as? String,
+           let lonRef = gps[kCGImagePropertyGPSLongitudeRef] as? String,
+           ["N", "S"].contains(latRef), ["E", "W"].contains(lonRef),
+           latitude.isFinite, longitude.isFinite, (0...90).contains(latitude), (0...180).contains(longitude) {
+            details.coordinate = Coordinate(latitude: latitude * (latRef == "S" ? -1 : 1), longitude: longitude * (lonRef == "W" ? -1 : 1))
+        }
+        return details
     }
 }

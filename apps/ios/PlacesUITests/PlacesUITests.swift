@@ -1,6 +1,88 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testMainTabReturnsToPeopleAndDeletingPersonLeavesNoBlankPage() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["People"].tap()
+        app.buttons["Alex"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Edit person"].waitForExistence(timeout: 5))
+        app.buttons["tab-places"].tap()
+        XCTAssertTrue(app.staticTexts["Your people"].waitForExistence(timeout: 5))
+        app.buttons["Alex"].firstMatch.tap()
+        app.buttons["Edit person"].tap()
+        reveal(app.buttons["Delete person"], in: app); app.buttons["Delete person"].tap()
+        app.sheets.buttons["Delete person"].tap()
+        XCTAssertTrue(app.staticTexts["Your people"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["Alex"].exists)
+        XCTAssertTrue(app.buttons["add-person"].isHittable)
+    }
+
+    func testPhotoBrowserPagingZoomCaptionMapSharingAndReordering() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-browser"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons["trip-photo-trip"].tap()
+        let first = app.buttons["Photo 1"]
+        reveal(first, in: app); first.tap()
+        XCTAssertTrue(app.navigationBars["1 of 9"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["photo-created-at"].exists)
+        let zoom = app.scrollViews["zoomable-memory-photo"]
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5)); zoom.doubleTap()
+        XCTAssertEqual(zoom.value as? String, "Zoomed")
+        zoom.doubleTap()
+        app.collectionViews["memory-photo-pager"].swipeLeft()
+        XCTAssertTrue(app.navigationBars["2 of 9"].waitForExistence(timeout: 5))
+        app.buttons["Previous photo"].tap()
+        app.buttons["photo-caption"].tap()
+        let caption = app.textFields["photo-caption-input"]
+        XCTAssertTrue(caption.waitForExistence(timeout: 5)); caption.tap(); caption.typeText("Morning by the water")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["photo-caption"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["photo-caption"].label, "Morning by the water")
+        app.buttons["photo-location"].tap()
+        XCTAssertTrue(app.buttons["choose-maps"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.otherElements["apple-map"].exists)
+        app.navigationBars["Photo location"].buttons["Done"].tap()
+        app.buttons["export-memory-photo"].tap()
+        app.buttons["Share photo"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
+        app.navigationBars["1 of 9"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForNonExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Paged photo browser with caption and creation date"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["Done"].tap()
+        let edit = app.buttons["Edit memory"].firstMatch
+        reveal(edit, in: app); edit.tap()
+        XCTAssertTrue(app.navigationBars["Memory"].waitForExistence(timeout: 5))
+        let photo = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "draft-photo-", "Photo 1")).firstMatch
+        reveal(photo, in: app); photo.press(forDuration: 1)
+        app.buttons["Reorder photos"].tap()
+        XCTAssertTrue(app.navigationBars["Photo order"].waitForExistence(timeout: 5))
+        let handles = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Reorder"))
+        XCTAssertTrue(handles.element(boundBy: 1).exists)
+        handles.element(boundBy: 0).press(forDuration: 0.5, thenDragTo: handles.element(boundBy: 1))
+        let order = XCTAttachment(screenshot: app.screenshot()); order.name = "Native photo reorder handles"; order.lifetime = .keepAlways; add(order)
+        app.buttons["Date order"].tap()
+        app.navigationBars["Photo order"].buttons["Done"].tap()
+        XCTAssertFalse(app.buttons["Remove photo"].exists)
+        photo.press(forDuration: 1); app.buttons["Delete photo"].tap()
+        XCTAssertTrue(app.sheets.buttons["Delete photo"].waitForExistence(timeout: 5))
+        // Compact native confirmations dismiss by tapping outside the popover.
+        app.navigationBars["Memory"].tap()
+        XCTAssertTrue(app.sheets.buttons["Delete photo"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(photo.exists)
+        app.buttons["save-memory"].tap()
+        let lastPlace = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Seaside stay, View visits")).firstMatch
+        reveal(lastPlace, in: app)
+        XCTAssertTrue(lastPlace.isHittable)
+        XCTAssertLessThan(lastPlace.frame.maxY, app.buttons["tab-places"].frame.minY)
+        let bottom = XCTAttachment(screenshot: app.screenshot()); bottom.name = "Trip final place clear of floating navigation"; bottom.lifetime = .keepAlways; add(bottom)
+    }
+
     func testAutomaticTripMemoryAndPeopleFlow() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-memories"]
@@ -28,11 +110,11 @@ import XCTest
         app.buttons["save-memory"].tap()
         XCTAssertTrue(app.staticTexts["A lovely week together"].waitForExistence(timeout: 8))
         let tripShot = XCTAttachment(screenshot: app.screenshot()); tripShot.name = "Automatic trip and memories"; tripShot.lifetime = .keepAlways; add(tripShot)
-        // A trip companion sees the trip; explicitly tagged memories are separate.
+        // A new trip memory inherits its companions.
         app.buttons["Alex"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Trips together"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Breakfast by the sea"].exists)
-        XCTAssertFalse(app.staticTexts["A lovely week together"].exists)
+        XCTAssertTrue(app.staticTexts["A lovely week together"].exists)
         let personShot = XCTAttachment(screenshot: app.screenshot()); personShot.name = "Private person and shared trips"; personShot.lifetime = .keepAlways; add(personShot)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["edit-trip"].tap()
@@ -128,7 +210,9 @@ import XCTest
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = "Photo selection during history refreshes"; shot.lifetime = .keepAlways; add(shot)
         app.navigationBars["Photos"].buttons["Done"].tap()
-        let photos = app.buttons.matching(identifier: "Remove photo")
+        XCTAssertTrue(app.navigationBars["Photos"].waitForNonExistence(timeout: 8))
+        reveal(app.buttons["add-memory-photos"], in: app)
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "draft-photo-"))
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in photos.count == 3 }, object: nil)], timeout: 20), .completed)
         XCTAssertEqual(note.value as? String, "A photo selection to keep")
         reveal(app.buttons["add-memory-photos"], in: app); app.buttons["add-memory-photos"].tap()
@@ -143,7 +227,9 @@ import XCTest
         XCTAssertEqual(photos.count, 3)
         // Each grid action removes only its own photo, including inside a Form row.
         let removeSecond = photos.element(boundBy: 1)
-        reveal(removeSecond, in: app); removeSecond.tap()
+        reveal(removeSecond, in: app); removeSecond.press(forDuration: 1)
+        app.buttons["Delete photo"].tap()
+        app.sheets.buttons["Delete photo"].tap()
         XCTAssertEqual(photos.count, 2)
         app.buttons["save-memory"].tap()
         XCTAssertTrue(app.buttons["Photo 2"].waitForExistence(timeout: 5))
@@ -162,6 +248,7 @@ import XCTest
         note.tap(); note.typeText("An afternoon with @Al")
         let alexSuggestion = app.buttons["mention-memory-friend"]
         XCTAssertTrue(alexSuggestion.waitForExistence(timeout: 5)); alexSuggestion.tap()
+        XCTAssertFalse(app.buttons["create-mentioned-person"].exists)
         note.typeText("and @Robin")
         let create = app.buttons["create-mentioned-person"]
         XCTAssertTrue(create.waitForExistence(timeout: 5)); reveal(create, in: app); create.tap()
@@ -170,14 +257,16 @@ import XCTest
         let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
         XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.navigationBars["Photos"].buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Photo 1"].waitForExistence(timeout: 15))
         app.buttons["save-memory"].tap()
         XCTAssertTrue(app.staticTexts["An afternoon with @Alex and @Robin "].waitForExistence(timeout: 8))
         let more = app.buttons["add-photos-to-memory"].firstMatch
         reveal(more, in: app); more.tap()
         XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.navigationBars["Photos"].buttons["Done"].tap()
-        let photos = app.buttons.matching(identifier: "Remove photo")
+        XCTAssertTrue(app.navigationBars["Photos"].waitForNonExistence(timeout: 8))
+        reveal(app.buttons["add-memory-photos"], in: app)
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "draft-photo-"))
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in photos.count == 2 }, object: nil)], timeout: 15), .completed)
         app.buttons["save-memory"].tap()
         XCTAssertTrue(app.buttons["Photo 2"].waitForExistence(timeout: 8))

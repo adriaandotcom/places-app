@@ -62,6 +62,16 @@ public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
     public var visitStart: Date?
     public var personIDs: [String]
     public var photoIDs: [String]
+    public var photoDetails: [String: MemoryPhotoDetails]?
+    public var photosManuallyOrdered: Bool?
+    public var orderedPhotoIDs: [String] {
+        guard photosManuallyOrdered != true else { return photoIDs }
+        return photoIDs.enumerated().sorted { left, right in
+            let a = photoDetails?[left.element]?.createdAt ?? .distantFuture
+            let b = photoDetails?[right.element]?.createdAt ?? .distantFuture
+            return a == b ? left.offset < right.offset : a < b
+        }.map(\.element)
+    }
     public var mentions: [PersonMention]?
     public var linkedPersonIDs: [String] { Array(Set(personIDs + (mentions ?? []).map(\.personID))).sorted() }
     public init(id: String = UUID().uuidString, text: String = "", date: Date = Date(), tripID: String? = nil,
@@ -80,12 +90,27 @@ public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// Only selected photos' creation time and coordinates are retained, inside the
+/// protected memory payload. Re-encoded image files contain no embedded metadata.
+public struct MemoryPhotoDetails: Codable, Hashable, Sendable {
+    public var createdAt: Date?
+    public var utcOffsetSeconds: Int?
+    public var coordinate: Coordinate?
+    public var caption: String
+    public init(createdAt: Date? = nil, utcOffsetSeconds: Int? = nil, coordinate: Coordinate? = nil, caption: String = "") {
+        self.createdAt = createdAt; self.utcOffsetSeconds = utcOffsetSeconds
+        self.coordinate = coordinate; self.caption = caption
+    }
+}
+
 public struct MemoryPhoto: Codable, Identifiable, Sendable {
     public var id: String
     public var jpeg: Data
     public var thumbnail: Data
-    public init(id: String = UUID().uuidString, jpeg: Data, thumbnail: Data) {
+    public var details: MemoryPhotoDetails?
+    public init(id: String = UUID().uuidString, jpeg: Data, thumbnail: Data, details: MemoryPhotoDetails? = nil) {
         self.id = id; self.jpeg = jpeg; self.thumbnail = thumbnail
+        self.details = details
     }
 }
 /// Temporary, protected files let a large selection commit without holding every JPEG in RAM.
@@ -93,8 +118,10 @@ public struct MemoryPhotoFile: Identifiable, Sendable {
     public let id: String
     public let jpegURL: URL
     public let thumbnailURL: URL
-    public init(id: String, jpegURL: URL, thumbnailURL: URL) {
+    public let details: MemoryPhotoDetails?
+    public init(id: String, jpegURL: URL, thumbnailURL: URL, details: MemoryPhotoDetails? = nil) {
         self.id = id; self.jpegURL = jpegURL; self.thumbnailURL = thumbnailURL
+        self.details = details
     }
 }
 public struct MemoryArchive: Codable, Sendable {

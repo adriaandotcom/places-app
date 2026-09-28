@@ -57,6 +57,16 @@ final class AppModel {
     private var regionAttempts: Set<String> = []
     var selectedDay = Date()
     var selectedTab = AppTab.timeline
+    var librarySection = "Places"
+    var navigationRoots: [AppTab: UUID] = [:]
+    func openMainTab(_ tab: AppTab) {
+        navigationRoots[tab] = UUID()
+        selectedTab = tab
+    }
+    func showPeople() {
+        librarySection = "People"
+        openMainTab(.places)
+    }
     var searchText = ""
     var searchResults: [Place] = []
     var errorMessage: String?
@@ -98,7 +108,10 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-memories") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-photo-browser") {
+                        try await DemoFixtures.seedPhotoBrowser(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-memories") {
                         try await DemoFixtures.seedMemories(opened)
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-periods") {
@@ -463,7 +476,7 @@ final class AppModel {
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()
             exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil; storageNeedsRetry = false
-            mapsChoiceMade = false; nerdMode = false; selectedDay = Date(); selectedTab = .timeline
+            mapsChoiceMade = false; nerdMode = false; selectedDay = Date(); selectedTab = .timeline; librarySection = "Places"; navigationRoots = [:]
             UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
             UNUserNotificationCenter.current().removeAllDeliveredNotifications()
             onboardingComplete = false

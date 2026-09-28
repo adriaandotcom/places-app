@@ -107,7 +107,7 @@ struct PersonMentionText: View {
                 guard url.scheme == "places-person", let person = model.memories.people.first(where: { $0.id == url.lastPathComponent }) else { return .discarded }
                 selected = person; return .handled
             })
-            .sheet(item: $selected) { person in NavigationStack { PersonDetail(personID: person.id).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { selected = nil } } } } }
+            .sheet(item: $selected) { person in NavigationStack { PersonDetail(personID: person.id).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { selected = nil } } } }.environment(\.hasMainNavigation, false) }
     }
 }
 
@@ -142,6 +142,7 @@ struct PersonMentionEditor: View {
                             PersonRow(person: person).padding(.vertical, Layout.compact).contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityIdentifier("mention-\(person.id)")
                     }
+                    if PersonMentions.matchingPerson(named: query.name, in: model.memories.people) == nil {
                     Button {
                         newName = query.name.trimmingCharacters(in: .whitespacesAndNewlines)
                         if newName.isEmpty { creationRange = query.range; creating = true } else { create(range: query.range) }
@@ -149,6 +150,7 @@ struct PersonMentionEditor: View {
                         Label(query.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Create person…" : "Create “\(query.name.trimmingCharacters(in: .whitespacesAndNewlines))”", systemImage: "person.badge.plus")
                             .frame(maxWidth: .infinity, minHeight: Layout.touchTarget, alignment: .leading)
                     }.accessibilityIdentifier("create-mentioned-person")
+                    }
                 }.disabled(saving)
             }
         }.onAppear { if epoch == nil { epoch = model.memoryEpoch } }
@@ -164,7 +166,10 @@ struct PersonMentionEditor: View {
         text = updated.text; mentions = updated.mentions; selection = NSRange(location: updated.caret, length: 0)
     }
     private func create(range: NSRange) {
-        guard let epoch, !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let epoch, !saving, !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if let existing = PersonMentions.matchingPerson(named: newName, in: model.memories.people) {
+            insert(existing, range: range); return
+        }
         let person = MemoryPerson(name: newName.trimmingCharacters(in: .whitespacesAndNewlines))
         saving = true
         Task {

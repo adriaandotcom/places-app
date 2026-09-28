@@ -70,7 +70,7 @@ struct OfflineMapView: View {
             .sheet(isPresented: $showSettings) {
                 NavigationStack { MapsSettings().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showSettings = false } } } }
             }
-            .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) } }
+            .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) }.environment(\.hasMainNavigation, false) }
     }
     private var banner: String? {
         if let mapIssue { return mapIssue + " Manage maps" }
