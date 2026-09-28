@@ -6,6 +6,10 @@ import PlacesCore
 
 enum MemoryContext {
     case trip(Trip), place(Place), visit(TimelineItem)
+    var tripPersonIDs: [String] {
+        if case .trip(let trip) = self { return trip.personIDs }
+        return []
+    }
     var draft: PlaceMemory {
         switch self {
         case .trip(let trip): PlaceMemory(tripID: trip.id)
@@ -35,7 +39,9 @@ struct MemorySection: View {
                     actionTitle: "Add a memory", actionIdentifier: "add-memory", action: { editing = context.draft })
             } else {
                 SectionHeading(title: "Memories", actionTitle: "Add", actionSymbol: "plus", actionIdentifier: "add-memory", action: { editing = context.draft })
-                ForEach(memories) { memory in MemoryCard(memory: memory) }
+                ForEach(memories) { memory in
+                    MemoryCard(memory: memory, tripPersonIDs: context.tripPersonIDs)
+                }
             }
         }
         .sheet(item: $editing) { memory in NavigationStack { MemoryEditor(memory: memory) } }
@@ -45,6 +51,7 @@ struct MemorySection: View {
 struct MemoryCard: View {
     @Environment(AppModel.self) private var model
     let memory: PlaceMemory
+    var tripPersonIDs: [String] = []
     @State private var editing: MemoryEditRequest?
     @State private var selectedPhoto: PhotoReference?
     private var context: String {
@@ -68,7 +75,9 @@ struct MemoryCard: View {
                 Button("Edit memory", systemImage: "pencil") { editing = MemoryEditRequest(addPhotos: false) }
                     .labelStyle(.iconOnly).frame(width: Layout.touchTarget, height: Layout.touchTarget).foregroundStyle(Palette.green)
             }
-            PersonAvatarGroup(personIDs: memory.linkedPersonIDs, border: Palette.paper)
+            if Set(memory.linkedPersonIDs) != Set(tripPersonIDs) {
+                PersonAvatarGroup(personIDs: memory.linkedPersonIDs, border: Palette.paper)
+            }
             if !memory.text.isEmpty { PersonMentionText(text: memory.text, mentions: memory.mentions ?? []) }
             if !memory.photoIDs.isEmpty {
                 PhotoGrid(items: memory.photoIDs.map { PhotoReference(id: $0) },
