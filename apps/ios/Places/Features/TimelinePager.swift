@@ -172,9 +172,15 @@ private struct TimelineDayPage: View {
                 } else if !loaded {
                     ProgressView().padding()
                 } else if items.isEmpty {
-                    EmptyState(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
-                        message: "Your visits and journeys will appear as you go. Add a familiar place, or enable location in Settings.")
-                    Button("Add a familiar place", action: addPlace).buttonStyle(PrimaryButton())
+                    if model.offersPastVisits(on: day) {
+                        EmptyState(symbol: "clock.arrow.circlepath", title: "Before your recorded history",
+                            message: "Choose past visits from Apple’s suggestions and review them before adding.")
+                        AddPastVisitsButton(day: day)
+                    } else {
+                        EmptyState(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
+                            message: "Your visits and journeys will appear as you go. Add a familiar place, or enable location in Settings.")
+                        Button("Add a familiar place", action: addPlace).buttonStyle(PrimaryButton())
+                    }
                 } else {
                     ForEach(items) { item in
                         Button { select(item) } label: { TimelineRow(item: item, place: model.place(for: item)) }

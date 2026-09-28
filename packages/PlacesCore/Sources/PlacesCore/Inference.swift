@@ -184,10 +184,15 @@ public enum InferenceEngine {
                 changed.placeID = edit.kind == .stay ? edit.placeID : nil
                 changed.mode = edit.kind == .journey ? edit.mode : .unknown
                 changed.isUserEdited = true; changed.reasons = ["You corrected this interval."]
-                updated.append(changed)
+                if edit.importedVisitID == nil { updated.append(changed) }
                 if upper < end {
                     var after = item; after.start = upper; after.id += "-after-\(edit.id)"; updated.append(after)
                 }
+            }
+            if edit.importedVisitID != nil {
+                updated.append(TimelineItem(id: edit.id, kind: .stay, start: edit.start, end: edit.end,
+                    placeID: edit.placeID, reasons: ["Added from Apple Journaling Suggestions. Times confirmed by you."],
+                    isUserEdited: true, lastEvidenceAt: edit.start))
             }
             result = updated
         }

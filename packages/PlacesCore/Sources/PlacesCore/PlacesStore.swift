@@ -92,10 +92,7 @@ public actor PlacesStore {
               place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius) else { throw PlacesError.invalidPlace }
         try queue.write { db in
             if let edit, edit.kind != .stay || edit.placeID != place.id { throw PlacesError.invalidCorrection }
-            try db.execute(sql: "INSERT INTO places(id, name, address, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, address = excluded.address, payload = excluded.payload",
-                           arguments: [place.id, place.name, place.address, try StoreSQL.encode(place)])
-            try db.execute(sql: "DELETE FROM placeSearch WHERE placeID = ?", arguments: [place.id])
-            try db.execute(sql: "INSERT INTO placeSearch(placeID, name, address) VALUES (?, ?, ?)", arguments: [place.id, place.name, place.address])
+            try StoreSQL.savePlace(place, db: db)
             // User-entered SSIDs remain expectations. They are not verified access points.
             for ssid in place.expectedSSIDs where !ssid.isEmpty {
                 let existing: WiFiNetwork? = try StoreSQL.decodeAll(WiFiNetwork.self, db: db,
@@ -230,7 +227,7 @@ public actor PlacesStore {
     }
 
     public func suggestedPeriods(now: Date = Date()) throws -> [HistoryPeriod] {
-        guard let first = try queue.read({ try Double.fetchOne($0, sql: "SELECT MIN(start) FROM timeline") }),
+        guard let first = try queue.read({ try Double.fetchOne($0, sql: "SELECT MIN(start) FROM (SELECT start FROM timeline UNION ALL SELECT start FROM overrides)") }),
               first < now.timeIntervalSince1970 else { return [] }
         let items = try timeline(in: DateInterval(start: Date(timeIntervalSince1970: first), end: now))
         return HistoryPeriod.visits(items: items, places: try places(), now: now)
@@ -414,9 +411,19 @@ public actor PlacesStore {
 }
 
 enum StoreSQL {
+    static func savePlace(_ place: Place, db: Database) throws {
+        guard !place.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius) else { throw PlacesError.invalidPlace }
+        try db.execute(sql: "INSERT INTO places(id, name, address, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, address = excluded.address, payload = excluded.payload",
+                       arguments: [place.id, place.name, place.address, try encode(place)])
+        try db.execute(sql: "DELETE FROM placeSearch WHERE placeID = ?", arguments: [place.id])
+        try db.execute(sql: "INSERT INTO placeSearch(placeID, name, address) VALUES (?, ?, ?)", arguments: [place.id, place.name, place.address])
+    }
+
     static func saveCorrection(_ edit: UserOverride, db: Database) throws {
         guard edit.end > edit.start, edit.end.timeIntervalSince1970.isFinite,
               edit.start.timeIntervalSince1970.isFinite else { throw PlacesError.invalidCorrection }
+        if edit.importedVisitID != nil, edit.kind != .stay || edit.placeID == nil { throw PlacesError.invalidCorrection }
         if let placeID = edit.placeID,
            try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM places WHERE id = ?)", arguments: [placeID])! {
             throw PlacesError.invalidCorrection

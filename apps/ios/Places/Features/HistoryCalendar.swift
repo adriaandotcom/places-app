@@ -20,7 +20,7 @@ struct HistoryCalendar: UIViewRepresentable {
         context.coordinator.parent = self
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let earliest = min(days.first?.date ?? today, calendar.startOfDay(for: selection))
+        let earliest = calendar.date(from: DateComponents(year: 1900, month: 1, day: 1))!
         view.availableDateRange = DateInterval(start: earliest, end: calendar.date(byAdding: .day, value: 1, to: today)!.addingTimeInterval(-1))
         let components = calendar.dateComponents([.year, .month, .day], from: selection)
         let behavior = view.selectionBehavior as? UICalendarSelectionSingleDate
@@ -48,10 +48,11 @@ struct HistoryCalendar: UIViewRepresentable {
             return parent.days.first { Calendar.current.isDate($0.date, inSameDayAs: date) }
         }
         func dateSelection(_ selection: UICalendarSelectionSingleDate, canSelectDate dateComponents: DateComponents?) -> Bool {
-            entry(dateComponents) != nil
+            guard let dateComponents, let date = Calendar.current.date(from: dateComponents) else { return false }
+            return Calendar.current.startOfDay(for: date) <= Calendar.current.startOfDay(for: Date())
         }
         func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
-            if let day = entry(dateComponents) { parent.selection = day.date }
+            if let dateComponents, let date = Calendar.current.date(from: dateComponents) { parent.selection = date }
         }
         func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
             guard let day = entry(dateComponents), day.placeCount > 0 else { return nil }

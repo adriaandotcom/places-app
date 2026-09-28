@@ -128,6 +128,7 @@ struct OnboardingView: View {
         case .places:
             Text("Places you\nalready know").font(BrandFont.hero)
             Text("Start with the places that feel like you.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            AddPastVisitsButton()
             ForEach(model.places) { place in SavedPlaceRow(place: place, subtitle: "Saved", card: true) }
             if !model.places.contains(where: { $0.name.lowercased() == "home" }) {
                 PlacePresetCard(title: "Home", subtitle: "Your own little corner", symbol: "house.fill", colorIndex: 0) { placePreset = .home }

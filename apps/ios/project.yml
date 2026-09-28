@@ -74,6 +74,7 @@ targets:
       path: Places/Places.entitlements
       properties:
         com.apple.developer.networking.wifi-info: true
+        com.apple.developer.journal.allow: [suggestions]
   PlacesTests:
     type: bundle.unit-test
     platform: iOS

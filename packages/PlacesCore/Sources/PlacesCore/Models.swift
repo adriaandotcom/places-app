@@ -209,10 +209,13 @@ public struct UserOverride: Codable, Identifiable, Sendable {
     public var placeID: String?
     public var mode: TransportMode
     public var createdAt: Date
+    /// A user-confirmed addition from Journaling Suggestions, not a sensor observation.
+    public var importedVisitID: String?
     public init(id: String = UUID().uuidString, start: Date, end: Date, kind: TimelineKind,
-                placeID: String? = nil, mode: TransportMode = .unknown, createdAt: Date = Date()) {
+                placeID: String? = nil, mode: TransportMode = .unknown, createdAt: Date = Date(), importedVisitID: String? = nil) {
         self.id = id; self.start = start; self.end = end; self.kind = kind
         self.placeID = placeID; self.mode = mode; self.createdAt = createdAt
+        self.importedVisitID = importedVisitID
     }
 }
 public struct RoutePoint: Codable, Identifiable, Sendable {

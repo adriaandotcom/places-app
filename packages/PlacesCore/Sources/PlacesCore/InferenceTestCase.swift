@@ -112,7 +112,8 @@ public struct InferenceTestCase: Codable, Sendable {
         }
         let corrections = archive.corrections.map { value in
             UserOverride(id: correctionIDs[value.id]!, start: date(value.start), end: date(value.end), kind: value.kind,
-                         placeID: value.placeID.flatMap { placeIDs[$0] }, mode: value.mode, createdAt: date(value.createdAt))
+                         placeID: value.placeID.flatMap { placeIDs[$0] }, mode: value.mode, createdAt: date(value.createdAt),
+                         importedVisitID: value.importedVisitID == nil ? nil : "import-" + correctionIDs[value.id]!)
         }
         let expected = archive.timeline.map { value in
             var copy = value

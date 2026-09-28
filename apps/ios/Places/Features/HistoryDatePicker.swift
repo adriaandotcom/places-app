@@ -73,7 +73,6 @@ struct HistoryDatePicker: View {
             Section {
                 Button(range ? "Show period" : "Show day") { apply() }.buttonStyle(PrimaryButton())
                     .accessibilityIdentifier("show-history-period")
-                    .disabled(!range && !model.historyDays.contains { calendar.isDate($0.date, inSameDayAs: start) })
                     .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
             if !timelineOnly {

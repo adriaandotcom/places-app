@@ -81,6 +81,23 @@ final class AppModel {
         return rewindMonths.first { $0 < current } ?? current
     }
     var searchText = ""
+    func offersPastVisits(on day: Date) -> Bool {
+        let calendar = Calendar.current
+        guard calendar.startOfDay(for: day) < calendar.startOfDay(for: Date()) else { return false }
+        return historyDays.first.map { calendar.startOfDay(for: day) < calendar.startOfDay(for: $0.date) } ?? true
+    }
+    func importPastVisits(_ drafts: [PastVisitDraft], reviewed: PastVisitPlan, at date: Date) async throws {
+        guard let store, !deleting else { throw PastVisitImportError.invalidSelection }
+        let epoch = generation
+        await pendingWrite?.value
+        guard epoch == generation, !deleting else { throw PastVisitImportError.invalidSelection }
+        try await store.importPastVisits(drafts, reviewed: reviewed, now: date)
+        guard epoch == generation, !deleting else { return }
+        if let start = reviewed.visits.flatMap(\.intervals).map(\.start).min() {
+            selectedDay = start; mapPeriod = nil; mapSelectionRequest = UUID()
+        }
+        await refresh()
+    }
     var searchResults: [Place] = []
     var errorMessage: String?
     var exportDocument: HistoryDocument?
@@ -124,7 +141,11 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-rewind") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-past-visits") {
+                        try await DemoFixtures.seed(opened)
+                        selectedDay = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-rewind") {
                         try await DemoFixtures.seedRewind(opened)
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-photo-browser") {

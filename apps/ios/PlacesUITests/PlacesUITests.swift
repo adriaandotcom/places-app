@@ -1,6 +1,46 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testPastVisitsReviewCancellationAndConfirmedAdditionBeforeHistory() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-past-visits"]
+        app.launch()
+        let addPast = app.buttons["add-past-visits"]
+        XCTAssertTrue(addPast.waitForExistence(timeout: 10))
+        let entry = XCTAttachment(screenshot: app.screenshot()); entry.name = "Add past visits before recorded history"; entry.lifetime = .keepAlways; add(entry)
+        addPast.tap()
+        XCTAssertTrue(app.buttons["set-past-visit-departure"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(addPast.waitForExistence(timeout: 5))
+        addPast.tap()
+        app.buttons["confirm-past-visits"].tap()
+        XCTAssertTrue(app.staticTexts["past-visits-error"].waitForExistence(timeout: 5))
+        let departure = app.buttons["set-past-visit-departure"]
+        reveal(departure, in: app); departure.tap()
+        let use = app.buttons["use-past-visit-departure"]
+        reveal(use, in: app); use.tap()
+        let review = XCTAttachment(screenshot: app.screenshot()); review.name = "Review user-selected past visit"; review.lifetime = .keepAlways; add(review)
+        app.buttons["confirm-past-visits"].tap()
+        XCTAssertTrue(app.staticTexts["Fixture Garden"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["add-past-visits"].exists)
+        let added = XCTAttachment(screenshot: app.screenshot()); added.name = "Confirmed past visit on timeline"; added.lifetime = .keepAlways; add(added)
+    }
+
+    func testOnboardingReusesPastVisitsReviewWithoutSavingOnCancel() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing"]
+        app.launch()
+        XCTAssertTrue(app.buttons["onboarding-skip"].waitForExistence(timeout: 10))
+        for _ in 0..<5 { app.buttons["onboarding-skip"].tap() }
+        let addPast = app.buttons["add-past-visits"]
+        XCTAssertTrue(addPast.waitForExistence(timeout: 5))
+        addPast.tap()
+        XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(addPast.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Fixture Garden"].exists)
+    }
+
     func testMonthlyRewindReviewAndStory() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-rewind"]
