@@ -18,6 +18,9 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     typealias WiFiReader = @MainActor (@escaping @MainActor @Sendable (ConnectedWiFi?) -> Void) -> Void
     private let live: CLLocationManager
     private let passive: CLLocationManager
+    private let device: UIDevice
+    private var externallyPowered: Bool { device.batteryState == .charging || device.batteryState == .full }
+    private var appliedExternalPower = false
     private let wifiReader: WiFiReader
     private let recoveryTimeout: Duration
     private var wifiEvidence = WiFiEvidenceGate()
@@ -64,10 +67,10 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     var onObservations: (([SensorObservation]) -> Void)?
     var onEvent: ((TrackingEvent) -> Void)?
 
-    init(live: CLLocationManager = CLLocationManager(), passive: CLLocationManager = CLLocationManager(),
+    init(live: CLLocationManager = CLLocationManager(), passive: CLLocationManager = CLLocationManager(), device: UIDevice = .current,
          wifiTimeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90), monitorSystemChanges: Bool = true,
          wifiReader: @escaping WiFiReader = TrackingController.fetchWiFi) {
-        self.live = live; self.passive = passive; self.wifiReader = wifiReader
+        self.live = live; self.passive = passive; self.device = device; self.wifiReader = wifiReader
         self.recoveryTimeout = recoveryTimeout; self.wifiTimeout = wifiTimeout; self.monitorSystemChanges = monitorSystemChanges
         super.init()
         live.delegate = self; passive.delegate = self
@@ -76,7 +79,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         live.pausesLocationUpdatesAutomatically = true
         live.activityType = .other
         if monitorSystemChanges {
-            UIDevice.current.isBatteryMonitoringEnabled = true
+            device.isBatteryMonitoringEnabled = true
             for name in [Notification.Name.NSProcessInfoPowerStateDidChange, UIDevice.batteryLevelDidChangeNotification,
                      UIDevice.batteryStateDidChangeNotification] {
                 observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
@@ -198,7 +201,11 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             enteredState = Date()
             hasStarted = true
             onObservations?([SensorObservation(timestamp: Date(), source: .recovery)])
+            if externallyPowered { checkLocation(.recovery, reason: "External power enables detailed location recording.") }
             readWiFi(force: true, fallback: .recovery)
+        } else if appliedExternalPower != externallyPowered {
+            // Reapply after suspension, when a charging notification may have been missed.
+            powerChanged()
         }
         startWiFiMonitoring()
     }
@@ -248,13 +255,17 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     private func transition(_ next: TrackingState, reason: String) {
         lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-        let level = UIDevice.current.batteryLevel
-        let critical = level >= 0 && level <= 0.05 && UIDevice.current.batteryState != .charging && UIDevice.current.batteryState != .full
+        let level = device.batteryLevel
+        let externalPower = externallyPowered
+        let critical = level >= 0 && level <= 0.05 && !externalPower
         let resolved: TrackingState = critical && next != .paused ? .lowPowerFallback : next
-        let policy = TrackingPolicy.sensors(state: resolved, motion: recentMotion, lowPower: lowPower)
+        let policy = TrackingPolicy.sensors(state: resolved, motion: recentMotion, lowPower: lowPower, externalPower: externalPower)
+        if externalPower { endRecovery() }
         live.desiredAccuracy = policy.desiredAccuracy
         live.distanceFilter = policy.distanceFilter
-        let changed = resolved != state || policy.standardUpdates != standardActive
+        live.pausesLocationUpdatesAutomatically = policy.pausesAutomatically
+        let changed = resolved != state || policy.standardUpdates != standardActive || appliedExternalPower != externalPower
+        appliedExternalPower = externalPower
         if policy.standardUpdates && !standardActive { live.startUpdatingLocation() }
         if !policy.standardUpdates && standardActive { live.stopUpdatingLocation() }
         standardActive = policy.standardUpdates
@@ -266,9 +277,9 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     func energySnapshot() -> EnergySnapshot {
         var snapshot = energy.snapshot(uptime: ProcessInfo.processInfo.systemUptime)
-        let level = UIDevice.current.batteryLevel
+        let level = device.batteryLevel
         snapshot.batteryLevel = level >= 0 ? Double(level) : nil
-        switch UIDevice.current.batteryState {
+        switch device.batteryState {
         case .charging: snapshot.batteryState = "Charging"
         case .full: snapshot.batteryState = "Full"
         case .unplugged: snapshot.batteryState = "On battery"
@@ -295,23 +306,29 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         onEvent?(event)
     }
 
-    private func powerChanged() {
+    func powerChanged() {
         recordEnergyCheckpoint(reason: "Battery or power state changed.")
         guard hasStarted else { return }
-        if state == .lowPowerFallback { readWiFi(force: true, fallback: .recovery) }
-        else { transition(state, reason: "The power policy changed.") }
+        if state == .lowPowerFallback {
+            if externallyPowered { checkLocation(.recovery, reason: "External power enables detailed location recording.") }
+            readWiFi(force: true, fallback: .recovery)
+        } else {
+            transition(state, reason: "The power policy changed.")
+            if standardActive { beginRecoveryDeadline() }
+        }
     }
     private func endRecovery() {
         recoveryTask?.cancel(); recoveryTask = nil
     }
     private func beginRecoveryDeadline() {
         // Repeated motion/Wi-Fi callbacks must not keep an unsuccessful search alive.
-        guard recoveryTask == nil else { return }
+        guard !externallyPowered, recoveryTask == nil else { return }
         recoveryTask = Task { [weak self, recoveryTimeout] in
             try? await Task.sleep(for: recoveryTimeout)
             guard !Task.isCancelled, let self else { return }
             self.recoveryTask = nil
-            guard self.hasStarted, [.recovery, .unknown, .moving, .stationaryCandidate].contains(self.state) else { return }
+            guard self.hasStarted, !self.externallyPowered,
+                  [.recovery, .unknown, .moving, .stationaryCandidate].contains(self.state) else { return }
             self.transition(.lowPowerFallback, reason: "No recent usable fix; waiting for a low-power location event.")
         }
     }
@@ -361,7 +378,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         if wifiPlaceID != nil && departureNeedsFixAfter == nil {
             // Recheck the actual connection on this event; a cached BSSID cannot
             // indefinitely override passive location or departure signals.
-            readWiFi(force: true, fallback: .recovery)
+            // Charging delivers frequent GPS fixes; retain the normal Wi-Fi read throttle.
+            readWiFi(force: !externallyPowered, fallback: .recovery)
             return
         }
         if TrackingPolicy.matchingPlace(for: observation, places: places) != nil {
@@ -382,6 +400,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
                 settlingTask = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(TrackingPolicy.stationaryDuration))
                     guard !Task.isCancelled, let self, self.state == .stationaryCandidate,
+                          !self.externallyPowered,
                           let latest = self.currentLocation, let anchor = self.candidate,
                           TrackingPolicy.sameStationaryArea(self.makeObservation(anchor, source: .location), self.makeObservation(latest, source: .location)) else { return }
                     // Obtain a fresh sample before treating a quiet sensor as proof of a stop.
@@ -568,6 +587,13 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         // Transient failures are represented by gaps and a bounded recovery window, not raw OS error logs.
     }
     func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
+        if hasStarted, externallyPowered {
+            // An automatic pause from the previous battery policy may arrive after plugging in.
+            standardActive = false
+            energy.setStandardLocation(active: false, uptime: ProcessInfo.processInfo.systemUptime)
+            transition(state, reason: "Resuming detailed location recording on external power.")
+            return
+        }
         guard hasStarted, state != .knownPlace, state != .knownWiFi, let location = currentLocation else { return }
         transition(.stationaryUnknown, reason: "iOS paused location updates while stationary."); monitorStop(location)
     }

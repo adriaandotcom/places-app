@@ -1,5 +1,6 @@
 import XCTest
 import CoreLocation
+import UIKit
 import PlacesCore
 @testable import Places
 
@@ -15,9 +16,10 @@ import PlacesCore
     }
     private var connection: ConnectedWiFi { ConnectedWiFi(ssid: network.ssid, bssid: points[0].bssid) }
 
-    private func makeTracker(timeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90)) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
+    private func makeTracker(timeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90),
+                             device: UIDevice = DeviceSpy()) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
         let live = LocationSpy(), passive = LocationSpy(), reader = WiFiReaderSpy()
-        let tracker = TrackingController(live: live, passive: passive, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, monitorSystemChanges: false,
+        let tracker = TrackingController(live: live, passive: passive, device: device, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, monitorSystemChanges: false,
                                          wifiReader: { reader.callbacks.append($0) })
         tracker.updateWiFiKnowledge(places: [home], networks: [network], accessPoints: points)
         tracker.configure(places: [home], enabled: true)
@@ -240,6 +242,156 @@ import PlacesCore
         XCTAssertNil(tracker.currentBSSID)
         tracker.configure(places: [], enabled: false)
     }
+
+    func testChargingKeepsDetailedGPSAtKnownWiFiAndUnpluggingStopsIt() {
+        let device = DeviceSpy()
+        let (tracker, live, _, reader) = makeTracker(device: device)
+        reader.complete(0, connection)
+        XCTAssertFalse(live.updating)
+        device.mockState = .charging
+        tracker.powerChanged()
+        XCTAssertTrue(live.updating)
+        XCTAssertEqual(live.desiredAccuracy, kCLLocationAccuracyBest)
+        XCTAssertEqual(live.distanceFilter, 5)
+        XCTAssertFalse(live.pausesLocationUpdatesAutomatically)
+        var observations: [SensorObservation] = []
+        tracker.onObservations = { observations += $0 }
+        for _ in 0..<5 {
+            let fix = CLLocation(coordinate: .init(latitude: 1, longitude: 1), altitude: 0,
+                                 horizontalAccuracy: 3, verticalAccuracy: 3, timestamp: Date())
+            tracker.locationManager(live, didUpdateLocations: [fix])
+        }
+        XCTAssertEqual(observations.filter { $0.source == .location }.count, 5)
+        XCTAssertEqual(reader.callbacks.count, 1, "Frequent charging fixes must not flood Wi-Fi reads")
+        XCTAssertTrue(live.updating)
+        device.mockState = .unplugged
+        tracker.powerChanged()
+        XCTAssertEqual(tracker.state, .knownWiFi)
+        XCTAssertFalse(live.updating)
+        XCTAssertTrue(live.pausesLocationUpdatesAutomatically)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testLaunchingOnFullExternalPowerRecordsAtKnownPlace() {
+        let device = DeviceSpy(); device.mockState = .full
+        let (tracker, live, _, reader) = makeTracker(device: device)
+        XCTAssertTrue(live.updating, "Start immediately without waiting for Wi-Fi")
+        reader.complete(0, nil)
+        let fix = CLLocation(coordinate: .init(latitude: 1, longitude: 1), altitude: 0,
+                             horizontalAccuracy: 3, verticalAccuracy: 3, timestamp: Date())
+        tracker.locationManager(live, didUpdateLocations: [fix])
+        XCTAssertEqual(tracker.state, .knownPlace)
+        XCTAssertTrue(live.updating)
+        XCTAssertEqual(live.desiredAccuracy, kCLLocationAccuracyBest)
+        XCTAssertEqual(tracker.energySnapshot().batteryState, "Full")
+        device.mockState = .unplugged
+        tracker.powerChanged()
+        XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testChargingCancelsRecoveryTimeoutAndUnpluggingRestoresIt() async throws {
+        let device = DeviceSpy()
+        let (tracker, live, _, reader) = makeTracker(recoveryTimeout: .milliseconds(80), device: device)
+        reader.complete(0, nil)
+        device.mockState = .charging
+        tracker.powerChanged()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(tracker.state, .recovery)
+        XCTAssertTrue(live.updating)
+        device.mockState = .unplugged
+        tracker.powerChanged()
+        XCTAssertTrue(live.updating)
+        XCTAssertEqual(live.desiredAccuracy, kCLLocationAccuracyNearestTenMeters)
+        XCTAssertEqual(live.distanceFilter, 35)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testChargingResumesCriticalBatteryFallbackWithoutWaitingForWiFi() {
+        let device = DeviceSpy(); device.mockLevel = 0.03
+        let (tracker, live, _, reader) = makeTracker(device: device)
+        reader.complete(0, nil)
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertFalse(live.updating)
+        device.mockState = .charging
+        tracker.powerChanged()
+        XCTAssertEqual(tracker.state, .recovery)
+        XCTAssertTrue(live.updating)
+        XCTAssertEqual(live.desiredAccuracy, kCLLocationAccuracyBest)
+        reader.complete(1, nil)
+        device.mockState = .unplugged
+        tracker.powerChanged()
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testChargingCannotOverrideDisabledRecordingOrRevokedPermission() {
+        let device = DeviceSpy(); device.mockState = .charging
+        let (tracker, live, _, reader) = makeTracker(device: device)
+        tracker.configure(places: [], enabled: false)
+        tracker.powerChanged()
+        reader.complete(0, connection)
+        tracker.locationManagerDidPauseLocationUpdates(live)
+        XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .paused)
+        tracker.configure(places: [home], enabled: true)
+        XCTAssertTrue(live.updating)
+        live.mockAuthorization = .denied
+        tracker.locationManagerDidChangeAuthorization(live)
+        tracker.powerChanged()
+        reader.complete(1, connection)
+        XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .paused)
+    }
+
+    func testChargingHonorsForegroundOnlyAccessAndReappliesMissedPowerChanges() {
+        let device = DeviceSpy()
+        let (tracker, live, _, reader) = makeTracker(device: device)
+        reader.complete(0, connection)
+        tracker.sceneChanged(isForeground: false)
+        device.mockState = .charging
+        tracker.sceneChanged(isForeground: true)
+        XCTAssertTrue(live.updating)
+        reader.complete(1, connection)
+        XCTAssertTrue(live.updating)
+        device.mockState = .unplugged
+        tracker.sceneChanged(isForeground: true)
+        XCTAssertFalse(live.updating)
+        reader.complete(2, connection)
+        device.mockState = .charging
+        tracker.powerChanged()
+        live.mockAuthorization = .authorizedWhenInUse
+        tracker.locationManagerDidChangeAuthorization(live)
+        tracker.sceneChanged(isForeground: false)
+        tracker.powerChanged()
+        XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .paused)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testLateAutomaticPauseRestartsDetailedGPSOnExternalPower() {
+        let device = DeviceSpy(); device.mockState = .charging
+        let (tracker, live, _, reader) = makeTracker(device: device)
+        reader.complete(0, connection)
+        let starts = live.starts
+        tracker.locationManagerDidPauseLocationUpdates(live)
+        XCTAssertEqual(live.starts, starts + 1)
+        XCTAssertTrue(live.updating)
+        XCTAssertFalse(live.pausesLocationUpdatesAutomatically)
+        XCTAssertEqual(tracker.state, .knownWiFi)
+        tracker.configure(places: [], enabled: false)
+    }
+}
+
+@MainActor private final class DeviceSpy: UIDevice {
+    var mockState: UIDevice.BatteryState = .unplugged
+    var mockLevel: Float = 0.5
+    override var batteryState: UIDevice.BatteryState { mockState }
+    override var batteryLevel: Float { mockLevel }
 }
 
 @MainActor private final class WiFiReaderSpy {
@@ -255,6 +407,9 @@ private final class LocationSpy: CLLocationManager {
     var regions: Set<CLRegion> = []
     var mockAuthorization: CLAuthorizationStatus = .authorizedAlways
     var mockAccuracy: CLAccuracyAuthorization = .fullAccuracy
+    // The simulator may force automatic pausing off; record the adapter's requested value.
+    override var pausesLocationUpdatesAutomatically: Bool { get { requestedPausing } set { requestedPausing = newValue } }
+    private var requestedPausing = true
     override var authorizationStatus: CLAuthorizationStatus { mockAuthorization }
     override var accuracyAuthorization: CLAccuracyAuthorization { mockAccuracy }
     override var monitoredRegions: Set<CLRegion> { regions }

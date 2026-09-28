@@ -21,15 +21,22 @@ public struct SensorPolicy: Equatable, Sendable {
     public var standardUpdates: Bool
     public var desiredAccuracy: Double
     public var distanceFilter: Double
+    public var pausesAutomatically = true
 }
 
 public enum TrackingPolicy {
-    public static let version = "1.3"
+    public static let version = "1.4"
     public static let stationaryDuration: TimeInterval = 180
     public static let evidenceGap: TimeInterval = 20 * 60
     public static let stationaryRadius: Double = 60
 
-    public static func sensors(state: TrackingState, motion: MotionKind, lowPower: Bool) -> SensorPolicy {
+    public static func sensors(state: TrackingState, motion: MotionKind, lowPower: Bool,
+                               externalPower: Bool = false) -> SensorPolicy {
+        if externalPower && state != .paused {
+            // Core Location's best-available accuracy is -1; keep platform APIs in the adapter.
+            return SensorPolicy(standardUpdates: true, desiredAccuracy: -1, distanceFilter: 5,
+                                pausesAutomatically: false)
+        }
         let active = [.recovery, .unknown, .moving, .stationaryCandidate].contains(state)
         let distance: Double = switch motion {
         case .cycling: 75
