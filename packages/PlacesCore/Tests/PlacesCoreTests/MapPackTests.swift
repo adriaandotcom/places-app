@@ -2,6 +2,31 @@ import XCTest
 @testable import PlacesCore
 
 final class MapPackTests: XCTestCase {
+    func testRemoteCatalogRequiresCompleteVariantsAndFixedImmutableURLs() throws {
+        func variant(_ detail: MapDetail) -> [String: Any] {
+            ["id": "greece", "name": "Greece", "version": "123.1", "bytes": 12345,
+             "sha256": String(repeating: "a", count: 64), "minZoom": 7, "maxZoom": detail.maxZoom,
+             "url": "https://places-app.b-cdn.net/maps/greece/123.1/" + detail.rawValue + ".pmtiles",
+             "attribution": "OSM", "detail": detail.rawValue, "bounds": [20, 35, 28, 42],
+             "sourceDate": "20260925", "updatedAt": "2026-09-28T10:00:00Z"]
+        }
+        let variants = MapDetail.allCases.map(variant)
+        func catalog(_ variants: [[String: Any]]) throws -> MapCatalog {
+            let object: [String: Any] = ["schemaVersion": 1, "countries": [["id": "greece", "name": "Greece", "bounds": [20, 35, 28, 42], "variants": variants]]]
+            return try JSONDecoder().decode(MapCatalog.self, from: JSONSerialization.data(withJSONObject: object))
+        }
+        XCTAssertTrue(try catalog(variants).isValid)
+        XCTAssertFalse(try catalog(Array(variants.prefix(2))).isValid)
+        XCTAssertFalse(try catalog(variants + [variants[0]]).isValid)
+        for url in ["https://example.invalid/maps", variants[0]["url"] as! String + "?position=1", "http://places-app.b-cdn.net/maps/greece/123.1/tiny.pmtiles"] {
+            var altered = variants; altered[0]["url"] = url
+            XCTAssertFalse(try catalog(altered).isValid)
+        }
+        XCTAssertNil(MapPack.ID(rawValue: "../secret"))
+        XCTAssertFalse(MapCatalog.validBounds([0, 0, 1, Double.nan]))
+        XCTAssertFalse(MapCatalog.validBounds([2, 0, 1, 1]))
+        XCTAssertEqual(try JSONDecoder().decode(MapPack.ID.self, from: Data("\"greece\"".utf8)), .greece)
+    }
     func testMigrationPreservesAppleConsentWithoutStartingDownloads() {
         XCTAssertEqual(MapProvider.migrated(stored: nil, appleEnabled: true), .apple)
         XCTAssertEqual(MapProvider.migrated(stored: nil, appleEnabled: false), .off)

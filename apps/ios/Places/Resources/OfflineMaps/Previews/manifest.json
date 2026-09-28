@@ -1,0 +1,72 @@
+{
+  "id": "amsterdam",
+  "name": "Amsterdam",
+  "bounds": [
+    4.88,
+    52.367,
+    4.919,
+    52.387
+  ],
+  "variants": [
+    {
+      "id": "amsterdam",
+      "name": "Amsterdam",
+      "detail": "tiny",
+      "version": "20260928.1",
+      "bytes": 516132,
+      "sha256": "3cdb9720af75228f75be1b2f31d75ed19ed0e525e47513f8796273dae9d1ff0d",
+      "minZoom": 7,
+      "maxZoom": 12,
+      "url": "https://places-app.b-cdn.net/maps/amsterdam/20260928.1/tiny.pmtiles",
+      "updatedAt": "2026-09-28T16:38:20Z",
+      "sourceDate": "20260925",
+      "bounds": [
+        4.88,
+        52.367,
+        4.919,
+        52.387
+      ],
+      "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Natural Earth \u00b7 Protomaps"
+    },
+    {
+      "id": "amsterdam",
+      "name": "Amsterdam",
+      "detail": "normal",
+      "version": "20260928.1",
+      "bytes": 884686,
+      "sha256": "9f9ebcf41bc0687531eab5ca810baa97022678bb21f0e7bd8a1c861b926b1491",
+      "minZoom": 7,
+      "maxZoom": 14,
+      "url": "https://places-app.b-cdn.net/maps/amsterdam/20260928.1/normal.pmtiles",
+      "updatedAt": "2026-09-28T16:38:20Z",
+      "sourceDate": "20260925",
+      "bounds": [
+        4.88,
+        52.367,
+        4.919,
+        52.387
+      ],
+      "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Natural Earth \u00b7 Protomaps"
+    },
+    {
+      "id": "amsterdam",
+      "name": "Amsterdam",
+      "detail": "extensive",
+      "version": "20260928.1",
+      "bytes": 2733061,
+      "sha256": "e49e9b4910bc3fb94531e26f14ccc822686637162e58bfc24ca1245b2c240d12",
+      "minZoom": 7,
+      "maxZoom": 15,
+      "url": "https://places-app.b-cdn.net/maps/amsterdam/20260928.1/extensive.pmtiles",
+      "updatedAt": "2026-09-28T16:38:20Z",
+      "sourceDate": "20260925",
+      "bounds": [
+        4.88,
+        52.367,
+        4.919,
+        52.387
+      ],
+      "attribution": "\u00a9 OpenStreetMap contributors \u00b7 Natural Earth \u00b7 Protomaps"
+    }
+  ]
+}

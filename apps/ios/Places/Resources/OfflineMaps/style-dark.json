@@ -26,7 +26,15 @@
       "source-layer": "landcover",
       "paint": {
         "fill-color": "#294334"
-      }
+      },
+      "filter": [
+        "==",
+        [
+          "get",
+          "kind"
+        ],
+        "forest"
+      ]
     },
     {
       "id": "parks",
@@ -35,7 +43,28 @@
       "source-layer": "landuse",
       "paint": {
         "fill-color": "#294334"
-      }
+      },
+      "filter": [
+        "in",
+        [
+          "get",
+          "kind"
+        ],
+        [
+          "literal",
+          [
+            "forest",
+            "wood",
+            "park",
+            "national_park",
+            "nature_reserve",
+            "protected_area",
+            "garden",
+            "grass",
+            "recreation_ground"
+          ]
+        ]
+      ]
     },
     {
       "id": "water",
@@ -94,6 +123,17 @@
           3,
           3
         ]
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "buildings",
+      "minzoom": 14,
+      "paint": {
+        "fill-color": "#424740",
+        "fill-outline-color": "#565b52"
       }
     },
     {
@@ -286,6 +326,279 @@
           ]
         ]
       ]
+    },
+    {
+      "id": "paths",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "minzoom": 12,
+      "filter": [
+        "in",
+        [
+          "get",
+          "kind"
+        ],
+        [
+          "literal",
+          [
+            "path"
+          ]
+        ]
+      ],
+      "paint": {
+        "line-color": "#5b6455",
+        "line-width": 1
+      }
+    },
+    {
+      "id": "runways",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "minzoom": 12,
+      "filter": [
+        "in",
+        [
+          "get",
+          "kind"
+        ],
+        [
+          "literal",
+          [
+            "aeroway"
+          ]
+        ]
+      ],
+      "paint": {
+        "line-color": "#74796d",
+        "line-width": [
+          "interpolate",
+          [
+            "linear"
+          ],
+          [
+            "zoom"
+          ],
+          10,
+          2,
+          15,
+          10
+        ]
+      }
+    },
+    {
+      "id": "street-names",
+      "type": "symbol",
+      "source": "base",
+      "source-layer": "roads",
+      "minzoom": 12,
+      "filter": [
+        "all",
+        [
+          "has",
+          "name"
+        ],
+        [
+          "in",
+          [
+            "get",
+            "kind"
+          ],
+          [
+            "literal",
+            [
+              "highway",
+              "major_road",
+              "minor_road",
+              "path"
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": 11,
+        "text-padding": 4,
+        "symbol-sort-key": [
+          "coalesce",
+          [
+            "get",
+            "min_zoom"
+          ],
+          15
+        ],
+        "symbol-placement": "line",
+        "text-max-angle": 35
+      },
+      "paint": {
+        "text-color": "#d4d9cf",
+        "text-halo-color": "#252c27",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "transport-names",
+      "type": "symbol",
+      "source": "base",
+      "source-layer": "pois",
+      "minzoom": 10,
+      "filter": [
+        "all",
+        [
+          "has",
+          "name"
+        ],
+        [
+          "in",
+          [
+            "get",
+            "kind"
+          ],
+          [
+            "literal",
+            [
+              "station",
+              "bus_stop",
+              "bus_station",
+              "aerodrome",
+              "airfield",
+              "airport",
+              "ferry_terminal",
+              "halt",
+              "subway_entrance"
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": 12,
+        "text-padding": 4,
+        "symbol-sort-key": [
+          "coalesce",
+          [
+            "get",
+            "min_zoom"
+          ],
+          15
+        ]
+      },
+      "paint": {
+        "text-color": "#d4d9cf",
+        "text-halo-color": "#252c27",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "place-names",
+      "type": "symbol",
+      "source": "base",
+      "source-layer": "pois",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        [
+          "has",
+          "name"
+        ],
+        [
+          "!",
+          [
+            "in",
+            [
+              "get",
+              "kind"
+            ],
+            [
+              "literal",
+              [
+                "station",
+                "bus_stop",
+                "bus_station",
+                "aerodrome",
+                "airfield",
+                "airport",
+                "ferry_terminal",
+                "halt",
+                "subway_entrance",
+                "address"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "name"
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": 11,
+        "text-padding": 4,
+        "symbol-sort-key": [
+          "coalesce",
+          [
+            "get",
+            "min_zoom"
+          ],
+          15
+        ]
+      },
+      "paint": {
+        "text-color": "#d4d9cf",
+        "text-halo-color": "#252c27",
+        "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "addresses",
+      "type": "symbol",
+      "source": "base",
+      "source-layer": "pois",
+      "minzoom": 17,
+      "filter": [
+        "has",
+        "addr_housenumber"
+      ],
+      "layout": {
+        "text-field": [
+          "get",
+          "addr_housenumber"
+        ],
+        "text-font": [
+          "Noto Sans Regular"
+        ],
+        "text-size": 10,
+        "text-padding": 4,
+        "symbol-sort-key": [
+          "coalesce",
+          [
+            "get",
+            "min_zoom"
+          ],
+          15
+        ]
+      },
+      "paint": {
+        "text-color": "#d4d9cf",
+        "text-halo-color": "#252c27",
+        "text-halo-width": 1.5
+      }
     }
   ]
 }

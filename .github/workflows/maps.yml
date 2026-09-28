@@ -1,0 +1,134 @@
+name: Generate country maps
+
+on:
+  workflow_dispatch:
+    inputs:
+      countries:
+        description: 'Country IDs, comma separated (for example netherlands,greece)'
+        required: true
+        default: netherlands,greece
+      source_date:
+        description: 'Protomaps build date, YYYYMMDD, from maps.protomaps.com/builds'
+        required: true
+        default: '20260925'
+
+permissions:
+  contents: read
+
+# A catalog publication preserves previous countries. Serialize the entire run
+# so two publishers cannot overwrite each other's additions.
+concurrency:
+  group: country-map-publication
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      countries: ${{ steps.plan.outputs.countries }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify Bunny storage access before generating data
+        env:
+          BUNNY_STORAGE_KEY: ${{ secrets.BUNNY_STORAGE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts/maps')
+          from publish_maps import Storage
+          Storage().request('GET', '/maps/metadata.json')
+          print('Bunny storage access verified')
+          PY
+      - name: Validate inputs and prepare country index
+        id: plan
+        env:
+          COUNTRY_IDS: ${{ inputs.countries }}
+          SOURCE_DATE: ${{ inputs.source_date }}
+        run: |
+          python3 -m py_compile scripts/maps/build_country.py scripts/maps/build_lite.py scripts/maps/publish_maps.py
+          python3 scripts/maps/build_country.py --work output --index-only
+          python3 - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, 'scripts/maps')
+          from build_country import validate_date
+          validate_date(os.environ['SOURCE_DATE'])
+          ids = [value.strip() for value in os.environ['COUNTRY_IDS'].split(',')]
+          known = {c['id'] for c in json.load(open('output/country-index.json'))['countries']}
+          if not ids or len(ids) > 20 or len(ids) != len(set(ids)) or not set(ids) <= known:
+              raise ValueError('Choose 1–20 distinct country IDs from the catalog')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('countries=' + json.dumps(ids), file=output)
+              print('version=' + os.environ['GITHUB_RUN_ID'] + '.' + os.environ['GITHUB_RUN_ATTEMPT'], file=output)
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: country-index
+          path: output/country-index.json
+          retention-days: 7
+
+  generate:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        country: ${{ fromJSON(needs.prepare.outputs.countries) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: scripts/maps/requirements.txt
+      - run: python -m pip install -r scripts/maps/requirements.txt
+      - name: Install verified PMTiles extractor
+        run: |
+          curl --fail --location --retry 3 --output /tmp/pmtiles.tar.gz https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_x86_64.tar.gz
+          echo '3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f  /tmp/pmtiles.tar.gz' | sha256sum --check
+          mkdir -p /tmp/pmtiles-bin
+          tar -xzf /tmp/pmtiles.tar.gz -C /tmp/pmtiles-bin pmtiles
+      - name: Generate and measure all three levels
+        env:
+          COUNTRY: ${{ matrix.country }}
+          SOURCE_DATE: ${{ inputs.source_date }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: python scripts/maps/build_country.py --work output --pmtiles /tmp/pmtiles-bin/pmtiles --country "$COUNTRY" --source-date "$SOURCE_DATE" --version "$VERSION"
+      - name: Upload verified packs to Bunny
+        env:
+          BUNNY_STORAGE_KEY: ${{ secrets.BUNNY_STORAGE_KEY }}
+          COUNTRY: ${{ matrix.country }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: python scripts/maps/publish_maps.py upload "output/$COUNTRY/$VERSION"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: map-entry-${{ matrix.country }}
+          path: output/${{ matrix.country }}/${{ needs.prepare.outputs.version }}/entry.json
+          retention-days: 7
+
+  publish:
+    needs: [prepare, generate]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: country-index
+          path: index
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: map-entry-*
+          path: entries
+      - name: Publish catalog last and verify readback
+        env:
+          BUNNY_STORAGE_KEY: ${{ secrets.BUNNY_STORAGE_KEY }}
+        run: python3 scripts/maps/publish_maps.py catalog --index index/country-index.json --entries entries

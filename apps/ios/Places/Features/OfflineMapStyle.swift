@@ -5,10 +5,17 @@ import PlacesCore
     static let resourceRoot = Bundle.main.url(forResource: "OfflineMaps", withExtension: nil)!
     static let empty = ##"{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#c6d9d4"}}]}"##
 
+    private static let countryGeometry: [String: [String: Any]] = {
+        guard let data = try? Data(contentsOf: resourceRoot.appendingPathComponent("country-coverage.json")),
+              let values = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] else { return [:] }
+        return values
+    }()
+    static var countryIDs: [MapPack.ID] { countryGeometry.keys.compactMap(MapPack.ID.init(rawValue:)) }
+
     static func geometry(_ id: MapPack.ID) -> [String: Any]? {
         guard id != .world, let data = try? Data(contentsOf: resourceRoot.appendingPathComponent(id.rawValue + ".geojson")),
               let collection = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let features = collection["features"] as? [[String: Any]] else { return nil }
+              let features = collection["features"] as? [[String: Any]] else { return countryGeometry[id.rawValue] }
         return features.first?["geometry"] as? [String: Any]
     }
 
@@ -18,7 +25,7 @@ import PlacesCore
               let template = style["layers"] as? [[String: Any]] else { return empty }
         var sources: [String: Any] = [:]
         var layers = template.filter { $0["type"] as? String == "background" }
-        for id in MapPack.ID.allCases {
+        for id in installed.keys.sorted(by: { $0 == .world || ($1 != .world && $0.rawValue < $1.rawValue) }) {
             guard let url = installed[id], url.isFileURL else { continue }
             sources[id.rawValue] = ["type": "vector", "url": "pmtiles://" + url.absoluteString,
                 "attribution": "© OpenStreetMap contributors · Natural Earth · Protomaps"]
@@ -35,7 +42,7 @@ import PlacesCore
                         overview["maxzoom"] = 7
                         layers.append(overview)
                         layer["minzoom"] = 7
-                        for country in MapPack.ID.allCases where country != .world && installed[country] != nil {
+                        for country in installed.keys where country != .world {
                             if let polygon = geometry(country) { filters.append(["!", ["within", polygon]]) }
                         }
                     } else if let polygon = geometry(id) { filters.append(["within", polygon]) }
@@ -56,23 +63,23 @@ import PlacesCore
 // Point-in-polygon on bundled country boundaries. Map browsing never calls a
 // geocoder to decide which download to suggest; islands and holes are retained.
 @MainActor enum OfflineMapCoverage {
-    private static let boundaries: [MapPack.ID: [[[[Double]]]]] = Dictionary(uniqueKeysWithValues: MapPack.ID.allCases.filter { $0 != .world }.compactMap { id in
+    private static let boundaries: [MapPack.ID: [[[[Double]]]]] = Dictionary(uniqueKeysWithValues: OfflineMapStyle.countryIDs.filter { $0 != .world }.compactMap { id in
         guard let geometry = OfflineMapStyle.geometry(id), let raw = geometry["coordinates"] else { return nil }
         let polygons = geometry["type"] as? String == "Polygon" ? [(raw as? [[[Double]]]) ?? []] : (raw as? [[[[Double]]]]) ?? []
         return (id, polygons)
     })
 
-    static func countries(in viewport: MapViewport) -> [MapPack.ID] {
+    static func countries(in viewport: MapViewport, available: Set<MapPack.ID> = Set(MapPack.ID.bootstrapIDs)) -> [MapPack.ID] {
         let south = viewport.center.latitude - viewport.latitudeSpan / 2
         let north = viewport.center.latitude + viewport.latitudeSpan / 2
         let west = viewport.center.longitude - viewport.longitudeSpan / 2
         let east = viewport.center.longitude + viewport.longitudeSpan / 2
         let corners = [Coordinate(latitude: south, longitude: west), Coordinate(latitude: south, longitude: east),
                        Coordinate(latitude: north, longitude: west), Coordinate(latitude: north, longitude: east)]
-        let centerCountry = country(at: viewport.center)
-        return MapPack.ID.allCases.filter { id in
+        let centerCountry = country(at: viewport.center, available: available)
+        return available.filter { id in
             guard id != .world else { return false }
-            if id == centerCountry || corners.contains(where: { country(at: $0) == id }) { return true }
+            if id == centerCountry || corners.contains(where: { country(at: $0, available: available) == id }) { return true }
             return boundaries[id, default: []].contains { polygon in
                 guard let ring = polygon.first else { return false }
                 // A country island can be visible even when the camera centre is at sea.
@@ -81,8 +88,8 @@ import PlacesCore
         }.sorted { $0 == centerCountry && $1 != centerCountry }
     }
 
-    static func country(at coordinate: Coordinate) -> MapPack.ID? {
-        for id in MapPack.ID.allCases where id != .world {
+    static func country(at coordinate: Coordinate, available: Set<MapPack.ID> = Set(MapPack.ID.bootstrapIDs)) -> MapPack.ID? {
+        for id in available.sorted(by: { $0.rawValue < $1.rawValue }) where id != .world {
             for polygon in boundaries[id, default: []] {
                 guard let outer = polygon.first, contains(coordinate, ring: outer) else { continue }
                 if !polygon.dropFirst().contains(where: { contains(coordinate, ring: $0) }) { return id }

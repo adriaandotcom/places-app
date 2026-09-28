@@ -85,7 +85,7 @@ struct OfflineMapView: View {
         settleTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.2))
             guard !Task.isCancelled, pinChanged == nil, model.mapDownloads.installed[.world] != nil else { return }
-            let candidates = OfflineMapCoverage.countries(in: viewport)
+            let candidates = OfflineMapCoverage.countries(in: viewport, available: Set(model.mapDownloads.packs.map(\.id)))
             if let current = suggestedPack, (!candidates.contains(current.id) || zoom < 8 || model.mapDownloads.installed[current.id] != nil) {
                 suggestedPack = nil
             }
@@ -99,7 +99,7 @@ struct OfflineMapView: View {
     }
 }
 
-private struct OfflineMapSurface: UIViewRepresentable {
+struct OfflineMapSurface: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
     let presentation: MapPresentation
     let installed: [MapPack.ID: URL]
@@ -110,6 +110,7 @@ private struct OfflineMapSurface: UIViewRepresentable {
     let selected: (MapPin) -> Void
     let settled: (MapViewport, Double) -> Void
     let failed: () -> Void
+    var interactive = true
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MLNMapView {
         _ = OfflineMapNetwork.configure
@@ -119,6 +120,8 @@ private struct OfflineMapSurface: UIViewRepresentable {
         map.delegate = context.coordinator
         map.showsUserLocation = false; map.maximumZoomLevel = 17
         map.logoView.isHidden = true
+        map.isUserInteractionEnabled = interactive
+        if !interactive { map.attributionButton.isHidden = true; map.compassView.isHidden = true }
         map.isPitchEnabled = false; map.isRotateEnabled = false
         if pinChanged != nil {
             let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
@@ -158,7 +161,7 @@ private struct OfflineMapSurface: UIViewRepresentable {
         var focusRequest: UUID?
         var restoreViewport = true
         var routeLayerIDs: [String] = []
-        var annotations: [MapAnnotation] = []
+        private var annotations: [MapAnnotation] = []
         init(_ parent: OfflineMapSurface) { self.parent = parent; focusRequest = parent.focusRequest }
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             rendered = nil; routeLayerIDs = []; render(mapView)

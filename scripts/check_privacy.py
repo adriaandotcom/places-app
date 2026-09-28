@@ -139,8 +139,19 @@ def check_map_resources(directory):
         if not (directory / 'fonts/Noto Sans Regular' / f'{first}-{first + 255}.pbf').is_file():
             errors.append('Missing bundled map font range')
             break
-    if list(directory.rglob('*.pmtiles')):
-        errors.append('Map archives belong in release assets, not the application bundle')
+    # Only the three measured Amsterdam picker samples may be bundled.
+    import hashlib
+    preview = directory / 'Previews'
+    manifest = json.loads((preview / 'manifest.json').read_text())
+    expected = {preview / ('amsterdam-' + level + '.pmtiles') for level in ('tiny', 'normal', 'extensive')}
+    if set(directory.rglob('*.pmtiles')) != expected:
+        errors.append('Only Amsterdam picker previews may be bundled')
+    if sum(p.stat().st_size for p in expected if p.exists()) > 5_000_000:
+        errors.append('Amsterdam previews exceed the bundle budget')
+    for pack in manifest['variants']:
+        path = preview / ('amsterdam-' + pack['detail'] + '.pmtiles')
+        if path not in expected or not path.exists() or path.stat().st_size != pack['bytes'] or hashlib.sha256(path.read_bytes()).hexdigest() != pack['sha256']:
+            errors.append('Amsterdam preview does not match its measured manifest')
     return errors
 
 

@@ -35,6 +35,15 @@ class LiteMapTests(unittest.TestCase):
             source, _ = self.layer(layer, kind)
             self.assertIsNone(lite.strip_layer(source, Counter()))
 
+    def test_tiny_removes_labels_but_keeps_the_same_road_geometry(self):
+        source, geometry = self.layer()
+        result = lite.strip_layer(source, Counter(), 'tiny')
+        fields = list(lite.fields(result))
+        self.assertEqual([v for k, v in fields if k == 3], [b'kind'])
+        feature = dict(lite.fields(next(v for k, v in fields if k == 2)))
+        self.assertEqual(feature[4], geometry)
+        self.assertNotIn('Αθήνα'.encode(), result)
+
     def test_malformed_protobuf_is_rejected(self):
         for data in [b'\x80', b'\x1a\x10\x01', b'\x00', b'\x0f']:
             with self.assertRaises(ValueError):

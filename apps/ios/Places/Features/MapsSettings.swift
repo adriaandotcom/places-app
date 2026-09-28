@@ -27,18 +27,24 @@ struct MapsSettings: View {
             }
             if !downloads.packs.isEmpty {
                 Section {
-                    ForEach(downloads.packs) { pack in
+                    ForEach(countryPacks) { pack in
                         VStack(alignment: .leading, spacing: Layout.compact) {
                             HStack {
                                 Text(pack.name).font(.body.weight(.semibold))
                                 Spacer()
-                                Text(pack.sizeLabel).foregroundStyle(Palette.muted)
+                                Text((downloads.installedPacks[pack.id] ?? pack).sizeLabel).foregroundStyle(Palette.muted)
                             }
                             packState(pack)
                         }.padding(.vertical, 4).buttonStyle(.borderless)
                     }
                 } header: { Text("On-device maps") } footer: {
-                    Text("World gives an overview everywhere. Country maps add roads, towns and landscapes. Downloads come from GitHub, which sees your IP address and the pack you choose. Map browsing stays on this iPhone.")
+                    Text("World gives an overview everywhere. Choose a detail level for each country. Country downloads come from Bunny and World comes from GitHub. They receive your IP address and the file you choose. Map browsing stays on this iPhone.")
+                }
+                Section {
+                    Button { Task { await downloads.refreshCatalog(force: true) } } label: {
+                        HStack { Text("Check for map updates"); Spacer(); if downloads.checkingCatalog { ProgressView() } }
+                    }.disabled(downloads.checkingCatalog)
+                    if let message = downloads.catalogIssue { Text(message).font(.footnote).foregroundStyle(Palette.muted) }
                 }
                 if downloads.totalInstalledBytes > 0 {
                     Section {
@@ -51,6 +57,7 @@ struct MapsSettings: View {
             } else { Text("Map downloads are unavailable in this build.").foregroundStyle(Palette.muted) }
         }.scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle("Maps").navigationBarTitleDisplayMode(.inline)
+            .task(id: model.mapProvider) { if model.mapProvider == .onDevice { await downloads.refreshCatalog() } }
             .confirmationDialog("Use Apple Maps?", isPresented: $confirmApple, titleVisibility: .visible) {
                 if downloads.totalInstalledBytes > 0 || !downloads.transfers.isEmpty {
                     Button("Keep downloaded maps") { switchToApple(deleteDownloads: false) }
@@ -80,32 +87,55 @@ struct MapsSettings: View {
                 Button("OK") { downloads.clearIssue() }
             } message: { Text(downloads.issue ?? "") }
     }
+    private var countryPacks: [MapPack] {
+        Set(downloads.packs.map(\.id)).compactMap { downloads.pack($0) }.sorted {
+            if $0.id == .world || $1.id == .world { return $0.id == .world }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
     @ViewBuilder private func packState(_ pack: MapPack) -> some View {
         let transfer = downloads.transfers[pack.id]
-        if downloads.installed[pack.id] != nil {
+        let target = transfer?.pack ?? pack
+        let installed = downloads.installedPacks[pack.id]
+        if let installed {
             HStack {
-                Label("Downloaded", systemImage: "checkmark.circle").foregroundStyle(Palette.muted)
-                Spacer()
-                Button("Delete", role: .destructive) { deletingPack = pack }
-            }.font(.subheadline).frame(minHeight: Layout.touchTarget)
-        } else if transfer?.phase == .downloading {
-            ProgressView(value: Double(transfer?.received ?? 0), total: Double(pack.bytes))
+                Text(installed.detail?.title ?? "Downloaded")
+                if let date = installed.updatedDate { Text("· Updated " + date.formatted(.relative(presentation: .named))) }
+            }.font(.footnote).foregroundStyle(Palette.muted)
+        }
+        if transfer?.phase == .downloading {
+            ProgressView(value: Double(transfer?.received ?? 0), total: Double(target.bytes))
                 .accessibilityLabel("Downloading \(pack.name)")
             HStack {
-                Text("\(ByteCountFormatter.string(fromByteCount: transfer?.received ?? 0, countStyle: .file)) of \(pack.sizeLabel)")
+                Text("\(ByteCountFormatter.string(fromByteCount: transfer?.received ?? 0, countStyle: .file)) of \(target.sizeLabel)")
                     .font(.footnote).foregroundStyle(Palette.muted)
                 Spacer()
                 Button("Pause") { downloads.pause(pack.id) }
             }.frame(minHeight: Layout.touchTarget)
         } else if transfer?.phase == .verifying || transfer?.phase == .pausing {
             ProgressView(transfer?.phase == .pausing ? "Pausing…" : "Checking download…").frame(minHeight: Layout.touchTarget)
-        } else {
-            if let message = transfer?.message { Text(message).font(.footnote).foregroundStyle(Palette.muted) }
+        } else if let transfer, transfer.phase != .installed {
+            if let message = transfer.message { Text(message).font(.footnote).foregroundStyle(Palette.muted) }
             HStack {
-                MapPackDownloadButton(pack: pack, title: transfer == nil ? "Download" : (transfer?.phase == .failed ? "Retry" : "Resume"))
+                MapPackDownloadButton(pack: target, title: transfer.phase == .failed ? "Retry" : "Resume", chooseDetail: false)
                 Spacer()
-                if transfer != nil { Button("Cancel", role: .destructive) { downloads.delete(pack) } }
+                Button("Cancel") { downloads.cancel(pack.id) }
             }.frame(minHeight: Layout.touchTarget)
+        } else if let installed {
+            if let update = downloads.update(pack.id) {
+                HStack {
+                    if let date = update.updatedDate { Text("New map · " + date.formatted(.relative(presentation: .named))).font(.footnote).foregroundStyle(Palette.muted) }
+                    Spacer()
+                    MapPackDownloadButton(pack: update, title: "Update", chooseDetail: false)
+                }.frame(minHeight: Layout.touchTarget)
+            }
+            HStack {
+                if !downloads.choices(pack.id).isEmpty { MapPackDownloadButton(pack: pack, title: "Change detail") }
+                Spacer()
+                Button("Delete", role: .destructive) { deletingPack = installed }
+            }.frame(minHeight: Layout.touchTarget)
+        } else {
+            MapPackDownloadButton(pack: pack).frame(minHeight: Layout.touchTarget)
         }
     }
     private func choose(_ provider: MapProvider) {
@@ -145,18 +175,35 @@ struct MapPackDownloadButton: View {
     @Environment(AppModel.self) private var model
     let pack: MapPack
     var title = "Download"
+    var chooseDetail = true
+    var accessibilityID: String?
+    @State private var picker = false
     @State private var confirm = false
+    @State private var loadingChoices = false
+    @State private var unavailable = false
     var body: some View {
-        Button(title, systemImage: "arrow.down.circle") {
-            if model.mapDownloads.network == .needsApproval { confirm = true }
+        Button(loadingChoices ? "Loading maps…" : title, systemImage: "arrow.down.circle") {
+            if chooseDetail && pack.id != .world {
+                loadingChoices = true
+                Task {
+                    if model.mapDownloads.choices(pack.id).isEmpty { await model.mapDownloads.refreshCatalog(force: true) }
+                    loadingChoices = false
+                    if model.mapDownloads.choices(pack.id).isEmpty { unavailable = true } else { picker = true }
+                }
+            }
+            else if model.mapDownloads.network == .needsApproval { confirm = true }
             else { model.mapDownloads.download(pack) }
-        }.accessibilityIdentifier("download-map-" + pack.id.rawValue)
-            .disabled(!model.mapDownloads.ready)
+        }.accessibilityIdentifier(accessibilityID ?? ("download-map-" + pack.id.rawValue))
+            .disabled(!model.mapDownloads.ready || loadingChoices)
+            .sheet(isPresented: $picker) { NavigationStack { MapDetailPicker(countryID: pack.id) } }
+            .alert("Country maps unavailable", isPresented: $unavailable) {
+                Button("OK") {}
+            } message: { Text(model.mapDownloads.catalogIssue ?? "The country maps haven’t been published yet. Your downloaded maps still work.") }
             .alert("Download \(pack.name)?", isPresented: $confirm) {
                 Button("Cancel", role: .cancel) {}
                 Button("Download") { model.mapDownloads.download(pack, approvedMetered: true) }
             } message: {
-                Text("This connection may use mobile data or Low Data Mode. The download from GitHub is \(ByteCountFormatter.string(fromByteCount: model.mapDownloads.remaining(pack), countStyle: .file)).")
+                Text("This connection may use mobile data or Low Data Mode. The download is \(ByteCountFormatter.string(fromByteCount: model.mapDownloads.remaining(pack), countStyle: .file)).")
             }
     }
 }

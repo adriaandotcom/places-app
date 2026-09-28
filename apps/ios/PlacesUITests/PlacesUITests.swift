@@ -643,6 +643,34 @@ import XCTest
         screenshot.name = "Map visit period with compact date navigation"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
+    func testCountryDetailPickerUsesLocalPreviewsAndRetainsSelection() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-fixture", "--ui-map-details", "--ui-metered-maps"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["map-settings"], in: app); app.buttons["map-settings"].tap()
+        reveal(app.buttons["download-map-netherlands"], in: app); app.buttons["download-map-netherlands"].tap()
+        let normal = app.buttons["map-detail-normal"]
+        XCTAssertTrue(normal.waitForExistence(timeout: 5)); assertSelected(normal)
+        let tiny = app.buttons["map-detail-tiny"]
+        tiny.tap(); assertSelected(tiny)
+        let extensive = app.buttons["map-detail-extensive"]
+        reveal(extensive, in: app); extensive.tap(); assertSelected(extensive)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Three local Amsterdam map previews"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["download-selected-map"].tap()
+        let confirmation = app.alerts["Download Netherlands?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Low Data Mode")).firstMatch.exists)
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["map-detail-extensive"].isSelected)
+        app.buttons["Cancel"].tap()
+        for _ in 0..<3 where !app.buttons["map-provider-off"].exists { app.swipeDown() }
+        XCTAssertTrue(app.buttons["map-provider-off"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["map-provider-off"].isSelected)
+    }
+
     func testCityLookupAndMapsHaveIndependentConsentAndKeepSavedNames() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))

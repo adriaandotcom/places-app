@@ -31,6 +31,7 @@
 		595DA971976AEDA5373D9931 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE309F70353EBEDB7069F031 /* MainView.swift */; };
 		5C1C341BBB8A1FF870002F69 /* AvatarViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9600EC9BAFA7C29D961C9667 /* AvatarViews.swift */; };
 		5CFD873D521F99D2384FCAD5 /* MapPackFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */; };
+		5D2B4C3A49707483172B47E7 /* MapDetailPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37224AF580926BC83D6140E /* MapDetailPicker.swift */; };
 		5FD9FBF86AD3822E430BE2D0 /* MapsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67E766F77511EDADA6182DA6 /* MapsSettings.swift */; };
 		60E1ED003E6B7C1B9FA108AA /* TimelinePager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB102BB0DB953EC91699D45 /* TimelinePager.swift */; };
 		623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */; };
@@ -125,6 +126,7 @@
 		986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-ExtraBold.ttf"; sourceTree = "<group>"; };
 		9B116AB54E14230415ABC727 /* ProtectedStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectedStorage.swift; sourceTree = "<group>"; };
 		A209ED936BD094A91EF7BC97 /* MapDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDownloads.swift; sourceTree = "<group>"; };
+		A37224AF580926BC83D6140E /* MapDetailPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDetailPicker.swift; sourceTree = "<group>"; };
 		A63BC26235D3DD07B406598B /* Places.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Places.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9F3E9E483AB8609D59EFDEB /* MemoryPhotoDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryPhotoDraft.swift; sourceTree = "<group>"; };
 		B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesUITests.swift; sourceTree = "<group>"; };
@@ -186,6 +188,7 @@
 				738274611DA8F1F53B88808E /* HistoryCalendar.swift */,
 				4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */,
 				DE309F70353EBEDB7069F031 /* MainView.swift */,
+				A37224AF580926BC83D6140E /* MapDetailPicker.swift */,
 				7F1606887387E5B16905FC86 /* MapPresentation.swift */,
 				67E766F77511EDADA6182DA6 /* MapsSettings.swift */,
 				DBC06C622D86AE06DCD94F53 /* MemoryViews.swift */,
@@ -485,6 +488,7 @@
 				8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */,
 				7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */,
 				595DA971976AEDA5373D9931 /* MainView.swift in Sources */,
+				5D2B4C3A49707483172B47E7 /* MapDetailPicker.swift in Sources */,
 				0406B697C7B67839B5EA122A /* MapDownloads.swift in Sources */,
 				5CFD873D521F99D2384FCAD5 /* MapPackFiles.swift in Sources */,
 				0ED2B97434350FC9C53E3D25 /* MapPresentation.swift in Sources */,

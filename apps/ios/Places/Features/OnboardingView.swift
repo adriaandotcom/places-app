@@ -83,7 +83,7 @@ struct OnboardingView: View {
             Text("Here’s what stays here, and what can connect.").font(BrandFont.body).foregroundStyle(Palette.muted)
             InfoRow(symbol: "iphone", title: "On this iPhone", subtitle: "Your observations, places, search, and history are stored and processed locally.")
             InfoRow(symbol: "map.fill", title: "Your choice of maps", subtitle: "Use Apple Maps, or download maps for use on this iPhone. Nothing loads until you choose.", colorIndex: 1)
-            InfoRow(symbol: "lock.shield.fill", title: "No hidden connections", subtitle: "No analytics, advertising, or hosted AI. Map downloads come from GitHub; downloaded maps and your history stay on this iPhone.", colorIndex: 4)
+            InfoRow(symbol: "lock.shield.fill", title: "No hidden connections", subtitle: "No analytics, advertising, or hosted AI. Map downloads come from Bunny and GitHub; downloaded maps and your history stay on this iPhone.", colorIndex: 4)
             Text("Apple’s system location services operate under your device privacy settings. A full history export leaves the app only when you save it somewhere yourself.").font(.footnote).foregroundStyle(Palette.muted)
         case .maps:
             Text("Your map,\non your terms").font(BrandFont.hero)

@@ -20,6 +20,9 @@ PARKS = {"forest", "wood", "park", "national_park", "nature_reserve", "protected
 ROADS = {"highway", "major_road", "minor_road", "rail", "ferry"}
 SMALL_ROADS = {"service", "driveway", "parking_aisle", "alley", "drive-through", "emergency_access", "disused"}
 ATTRIBUTION = "© OpenStreetMap contributors · Natural Earth · Protomaps"
+DETAIL_ZOOMS = {"tiny": 12, "normal": 14, "extensive": 15}
+TRANSPORT_POIS = {"station", "bus_stop", "bus_station", "aerodrome", "airfield", "airport", "ferry_terminal", "halt", "subway_entrance"}
+DETAIL_KEYS = {"kind", "name", "name:en", "min_zoom", "addr_housenumber"}
 
 
 def varint(data, pos):
@@ -77,11 +80,20 @@ def packed(data):
         yield value
 
 
-def keep_feature(layer, attributes):
+def keep_feature(layer, attributes, detail="legacy"):
     kind = attributes.get("kind")
-    detail = attributes.get("kind_detail")
+    kind_detail = attributes.get("kind_detail")
+    if detail == "extensive":
+        return True
+    if detail == "normal":
+        if layer == "pois":
+            return kind in TRANSPORT_POIS
+        if layer == "roads":
+            return True
+        if layer == "landuse":
+            return kind in PARKS | {"aerodrome", "runway", "taxiway", "platform", "railway", "garden", "grass", "beach"}
     if layer == "roads":
-        return kind in ROADS and detail not in SMALL_ROADS
+        return kind in ROADS and kind_detail not in SMALL_ROADS
     if layer == "landuse":
         return kind in PARKS
     if layer == "landcover":
@@ -89,14 +101,15 @@ def keep_feature(layer, attributes):
     if layer == "boundaries":
         return kind in {"country", "region"}
     if layer == "water":
-        return detail not in {"ditch", "drain", "stream", "dock"}
+        return kind_detail not in {"ditch", "drain", "stream", "dock"}
     return True
 
 
-def strip_layer(data, stats):
+def strip_layer(data, stats, detail="legacy"):
     original = list(fields(data))
     name = next(v.decode() for k, v in original if k == 1)
-    if name not in LAYERS:
+    layers = LAYERS if detail == "legacy" else (LAYERS - {"places"} if detail == "tiny" else LAYERS | {"pois"})
+    if detail != "extensive" and name not in layers:
         return None
     keys = [v.decode() for k, v in original if k == 3]
     values = [v for k, v in original if k == 4]
@@ -113,12 +126,13 @@ def strip_layer(data, stats):
         if any(k >= len(keys) or v >= len(values) for k, v in pairs):
             raise ValueError("Out-of-bounds MVT tag")
         attributes = {keys[k]: strings[v] for k, v in pairs}
-        if not keep_feature(name, attributes):
+        if not keep_feature(name, attributes, detail):
             continue
         retained_tags = bytearray()
         for old_key, old_value in pairs:
             key, value = keys[old_key], values[old_value]
-            if key not in KEYS:
+            allowed = KEYS if detail == "legacy" else ({"kind"} if detail == "tiny" else DETAIL_KEYS)
+            if key not in allowed:
                 continue
             new_keys.setdefault(key, len(new_keys)); new_values.setdefault(value, len(new_values))
             retained_tags += integer(new_keys[key]) + integer(new_values[value])
@@ -136,12 +150,12 @@ def strip_layer(data, stats):
             + b"".join(field(n, v) for n, v in original if n in (5, 15)))
 
 
-def strip_tile(data, stats):
-    layers = [strip_layer(v, stats) for k, v in fields(data) if k == 3]
+def strip_tile(data, stats, detail="legacy"):
+    layers = [strip_layer(v, stats, detail) for k, v in fields(data) if k == 3]
     return b"".join(field(3, layer) for layer in layers if layer)
 
 
-def build(source, destination, region):
+def build(source, destination, region, detail="legacy", version=VERSION, source_date="20260925"):
     from pmtiles.reader import Reader, MmapSource, all_tiles
     from pmtiles.writer import Writer
     from pmtiles.tile import Compression, TileType, zxy_to_tileid
@@ -149,17 +163,25 @@ def build(source, destination, region):
     with source.open("rb") as infile, destination.open("wb") as outfile:
         get_bytes = MmapSource(infile)
         reader = Reader(get_bytes); header = reader.header()
+        schema = reader.metadata().get("version", "")
+        if detail != "legacy" and not schema.startswith("4."):
+            raise ValueError("This renderer requires the Protomaps v4 schema")
         if header["tile_type"] != TileType.MVT or header["tile_compression"] != Compression.GZIP:
             raise ValueError("Expected gzip-compressed Protomaps vector tiles")
         writer = Writer(outfile)
         for (z, x, y), tile in all_tiles(get_bytes):
-            stripped = strip_tile(gzip.decompress(tile), stats)
+            if detail in DETAIL_ZOOMS and z > DETAIL_ZOOMS[detail]:
+                continue
+            stripped = strip_tile(gzip.decompress(tile), stats, detail)
             # Keep empty tiles to retain the extract's coverage and zoom limits.
             writer.write_tile(zxy_to_tileid(z, x, y), gzip.compress(stripped, mtime=0))
-        metadata = {"name": "Places Lite " + region, "version": VERSION,
-                    "source": "Protomaps 20260925 (4.15.2)", "attribution": ATTRIBUTION,
-                    "description": "Context map without buildings, POIs, addresses or source IDs.",
-                    "vector_layers": [{"id": name, "fields": {key: "String" for key in sorted(KEYS)}} for name in sorted(stats)]}
+        keys = KEYS if detail == "legacy" else ({"kind"} if detail == "tiny" else DETAIL_KEYS)
+        metadata = {"name": "Places " + detail.title() + " " + region if detail != "legacy" else "Places Lite " + region, "version": version,
+                    "source": f"Protomaps {source_date} ({schema})", "attribution": ATTRIBUTION,
+                    "description": "Context map without buildings, POIs, addresses or source IDs." if detail == "legacy" else f"Places {detail} map. No source IDs or unused attributes.",
+                    "vector_layers": [{"id": name, "fields": {key: "String" for key in sorted(keys)}} for name in sorted(stats)]}
+        if detail in DETAIL_ZOOMS:
+            header["max_zoom"] = DETAIL_ZOOMS[detail]
         # PMTiles' writer timestamps its compressed directories and metadata. Fix
         # that timestamp too so the same inputs produce the same release bytes.
         compress = gzip.compress
@@ -168,7 +190,7 @@ def build(source, destination, region):
     size = destination.stat().st_size
     if region == "world" and size > 100_000_000:
         raise ValueError("World exceeds the 100 MB release ceiling")
-    report = {"version": VERSION, "region": region, "bytes": size, "sourceBytes": source.stat().st_size,
+    report = {"version": version, "region": region, "bytes": size, "sourceBytes": source.stat().st_size,
               "sha256": hashlib.file_digest(destination.open("rb"), "sha256").hexdigest(),
               "features": dict(stats), "sourceSha256": hashlib.file_digest(source.open("rb"), "sha256").hexdigest()}
     destination.with_suffix(".json").write_text(json.dumps(report, indent=2) + "\n")

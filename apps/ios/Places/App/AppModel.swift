@@ -138,6 +138,7 @@ final class AppModel {
                     }
                     #endif
                     #if DEBUG
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-details") { mapDownloads.loadPreviewCatalogForTesting() }
                     if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-on-device-map") {
                         mapProvider = .onDevice; mapsChoiceMade = true
                     }

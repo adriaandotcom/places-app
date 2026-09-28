@@ -77,6 +77,85 @@ import PlacesCore
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
     }
 
+    func testReplacementCancelAndCorruptRestartKeepPreviousMap() async throws {
+        let (directory, old, data) = try archiveFixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent(old.filename)
+        try data.write(to: file)
+        let manager = MapDownloads(testing: true, storage: directory, manifest: [old])
+        manager.start(); try await waitUntilReady(manager)
+        manager.cancel(.world)
+        XCTAssertEqual(manager.installed[.world], file)
+        XCTAssertEqual(manager.totalInstalledBytes, old.bytes)
+        manager.stopForTesting()
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as! [String: Any]
+        object["version"] = "20260929.1"
+        object["url"] = "https://github.com/adriaandotcom/places-app/releases/download/maps-20260929.1/world.pmtiles"
+        let newer = try JSONDecoder().decode(MapPack.self, from: JSONSerialization.data(withJSONObject: object))
+        var broken = data; broken[200] = 1
+        try broken.write(to: directory.appendingPathComponent(newer.filename))
+        let transfer = MapPackTransfer(token: "replacement", phase: .verifying, received: newer.bytes, pack: newer)
+        try JSONEncoder().encode([MapPack.ID.world: transfer]).write(to: directory.appendingPathComponent("transfers.json"))
+        let restored = MapDownloads(testing: true, storage: directory, manifest: [old])
+        restored.start(); try await waitUntilReady(restored)
+        XCTAssertEqual(restored.installed[.world], file)
+        XCTAssertEqual(restored.installedPacks[.world], old)
+        XCTAssertEqual(restored.transfers[.world]?.phase, .failed)
+        XCTAssertEqual(try Data(contentsOf: file), data)
+        // A verified replacement swaps once, cleans up the old version and
+        // remains the installed descriptor across process restarts.
+        let staging = directory.appendingPathComponent("replacement.partial")
+        try data.write(to: staging); try MapPackFiles.validate(staging, pack: newer)
+        try restored.install(staging, pack: newer)
+        XCTAssertEqual(restored.installedPacks[.world], newer)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        restored.stopForTesting()
+        let again = MapDownloads(testing: true, storage: directory, manifest: [old])
+        again.start(); try await waitUntilReady(again)
+        XCTAssertEqual(again.installedPacks[.world], newer)
+        XCTAssertEqual(again.totalInstalledBytes, newer.bytes)
+        again.stopForTesting()
+    }
+
+    func testLegacyPausedDownloadBindsItsOriginalTargetOnUpgrade() async throws {
+        let (directory, pack, _) = try archiveFixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transfer = MapPackTransfer(token: "legacy", phase: .paused, received: 120)
+        try JSONEncoder().encode([MapPack.ID.world: transfer]).write(to: directory.appendingPathComponent("transfers.json"))
+        let manager = MapDownloads(testing: true, storage: directory, manifest: [pack])
+        manager.start(); try await waitUntilReady(manager)
+        XCTAssertEqual(manager.transfers[.world]?.pack, pack)
+        XCTAssertEqual(manager.transfers[.world]?.phase, .paused)
+        manager.stopForTesting()
+    }
+
+    func testNewCatalogOffersUpdateInTheInstalledDetailWithoutChangingStoredMap() async throws {
+        let (directory, _, _) = try archiveFixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manager = MapDownloads(testing: true, storage: directory)
+        manager.loadPreviewCatalogForTesting()
+        manager.start(); try await waitUntilReady(manager)
+        let latest = try XCTUnwrap(manager.choices(.netherlands).first { $0.detail == .normal })
+        var data = Data(repeating: 0, count: 256)
+        data.replaceSubrange(0..<8, with: [80, 77, 84, 105, 108, 101, 115, 3])
+        data[99] = 1; data[100] = 7; data[101] = 14
+        var old = try JSONSerialization.jsonObject(with: JSONEncoder().encode(latest)) as! [String: Any]
+        old["version"] = "20260901.1"; old["bytes"] = data.count
+        old["url"] = latest.url.absoluteString.replacingOccurrences(of: latest.version, with: "20260901.1")
+        old["sha256"] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let installed = try JSONDecoder().decode(MapPack.self, from: JSONSerialization.data(withJSONObject: old))
+        let staging = directory.appendingPathComponent("old-map.partial")
+        try data.write(to: staging); try MapPackFiles.validate(staging, pack: installed)
+        try manager.install(staging, pack: installed)
+        XCTAssertEqual(manager.update(.netherlands), latest)
+        XCTAssertEqual(manager.update(.netherlands)?.detail, .normal)
+        XCTAssertEqual(manager.installedPacks[.netherlands], installed)
+        XCTAssertEqual(manager.totalInstalledBytes, 256)
+        manager.cancel(.netherlands)
+        XCTAssertEqual(manager.installedPacks[.netherlands], installed)
+        manager.stopForTesting()
+    }
+
     private func archiveFixture() throws -> (URL, MapPack, Data) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -107,7 +186,7 @@ import PlacesCore
         XCTAssertTrue(OfflineMapCoverage.countries(in: MapViewport(center: Coordinate(latitude: 0, longitude: 0),
             latitudeSpan: 0.3, longitudeSpan: 0.3)).isEmpty)
         let offered: Set<MapPack.ID> = [.netherlands]
-        for id in MapPack.ID.allCases where id != .world {
+        for id in MapPack.ID.bootstrapIDs where id != .world {
             XCTAssertEqual(MapDownloadPolicy.canSuggest(id: id, zoom: 9, installed: [], pending: [],
                 dismissedAt: nil, now: Date(), offeredThisSession: offered), id != .netherlands)
         }
@@ -115,7 +194,7 @@ import PlacesCore
 
     func testBundledManifestIsCompleteAndLimitedToImmutableReleaseAssets() throws {
         let downloads = MapDownloads(testing: true)
-        XCTAssertEqual(Set(downloads.packs.map(\.id)), Set(MapPack.ID.allCases))
+        XCTAssertEqual(Set(downloads.packs.map(\.id)), Set(MapPack.ID.bootstrapIDs))
         XCTAssertTrue(downloads.packs.allSatisfy(\.isValid))
         XCTAssertLessThanOrEqual(try XCTUnwrap(downloads.pack(.world)).bytes, 100_000_000)
         var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(downloads.packs[0])) as! [String: Any]
@@ -162,6 +241,14 @@ import PlacesCore
         XCTAssertNil(OfflineMapCoverage.country(at: Coordinate(latitude: 50.8503, longitude: 4.3517)))
         XCTAssertNil(OfflineMapCoverage.country(at: Coordinate(latitude: 36.999, longitude: 27.43)))
         XCTAssertNil(OfflineMapCoverage.country(at: Coordinate(latitude: 0, longitude: 0)))
+    }
+
+    func testNewCatalogCountriesCanBeSuggestedWithoutACoordinateRequest() throws {
+        let germany = try XCTUnwrap(MapPack.ID(rawValue: "germany"))
+        let berlin = Coordinate(latitude: 52.52, longitude: 13.405)
+        XCTAssertNil(OfflineMapCoverage.country(at: berlin))
+        XCTAssertEqual(OfflineMapCoverage.country(at: berlin, available: [germany]), germany)
+        XCTAssertEqual(OfflineMapCoverage.countries(in: MapViewport(center: berlin, latitudeSpan: 0.2, longitudeSpan: 0.2), available: [germany]), [germany])
     }
 
     func testEveryStyleResourceIsLocalAndCountryLabelsReplaceWorldLabels() throws {

@@ -20,3 +20,7 @@ https://github.com/adriaandotcom/places-app
 
 MapLibre Native is licensed under the BSD 2-Clause license (see MapLibre-LICENSE).
 Noto Sans map labels are licensed under the SIL Open Font License 1.1 (see Map-fonts).
+
+Amsterdam picker previews: Protomaps build 20260925, same license and attribution as the map packs above. Three filtered extracts, z7–12 (Tiny), z7–14 (Normal), z7–15 (Extensive). Bounds, byte counts, SHA256 and provenance are in Previews/manifest.json. Generated with scripts/maps/build_country.py --preview.
+
+Worldwide country download suggestions: Natural Earth 1:10m admin 0 countries, same pinned source in scripts/maps/source-lock.json. country-coverage.json is reproduced with build_country.py --coverage-only. Outlines are simplified to 0.003 degrees, retaining islands and holes; used only for local map download suggestions and label coverage, never to infer visits.
