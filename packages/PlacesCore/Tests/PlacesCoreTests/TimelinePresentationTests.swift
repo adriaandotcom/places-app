@@ -79,6 +79,105 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
     #expect(TimelinePresentation.make(items: input, observations: [], places: [])[1].connection == nil)
 }
 
+@Test(arguments: [2, 3]) func consecutiveRecoveryGapsJoinTheSamePlaceWithoutLosingOriginals(gapCount: Int) throws {
+    let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
+    let gaps = (0..<gapCount).map { index in
+        entry("gap-\(index)", 100 + Double(index) * 3600, 100 + Double(index + 1) * 3600,
+              kind: .gap, place: nil)
+    }
+    let input = [entry("before", 0, 100)] + gaps + [entry("after", 100 + Double(gapCount) * 3600, nil)]
+    let result = TimelinePresentation.make(items: input, observations: [], places: [home])
+    #expect(result.count == 1)
+    let combined = try #require(result.first)
+    #expect(combined.kind == .stay && combined.placeID == home.id && combined.end == nil)
+    #expect(combined.originalItems == input)
+    #expect(combined.evidenceIDs == input.map(\.id).sorted())
+    #expect(combined.unrecordedDuration == Double(gapCount) * 3600)
+    #expect(TimelinePresentation.make(items: result, observations: [], places: [home]) == result)
+}
+
+@Test func consecutiveGapsRespectEverySplitCorrectionAndContradictoryObservation() {
+    let home = Place(id: "home", name: "Fixture Home", coordinate: origin)
+    let input = [entry("before", 0, 100), entry("gap-a", 100, 200, kind: .gap, place: nil),
+                 entry("gap-b", 200, 300, kind: .gap, place: nil), entry("after", 300, nil)]
+    for boundary in [100.0, 200, 300] {
+        let result = TimelinePresentation.make(items: input, observations: [], places: [home], separatedAt: [at(boundary)])
+        #expect(result.filter { $0.kind == .stay }.count == 2)
+        #expect(result.flatMap { $0.originalItems ?? [$0] }.map(\.id) == input.map(\.id))
+    }
+    for index in [1, 2] {
+        var edited = input; edited[index].isUserEdited = true
+        let result = TimelinePresentation.make(items: edited, observations: [], places: [home])
+        #expect(result.map(\.kind) == [.stay, .gap, .stay])
+        #expect(result[1].originalItems == Array(edited[1...2]))
+    }
+    for time in [150.0, 200, 250] {
+        var movingFix = fix(time); movingFix.speed = 2
+        let conflicts = [SensorObservation(timestamp: at(time), source: .paused),
+                         SensorObservation(timestamp: at(time), source: .regionExit),
+                         SensorObservation(timestamp: at(time), source: .visitDeparture),
+                         SensorObservation(timestamp: at(time), source: .motion, motion: .walking),
+                         fix(time, coordinate: .init(latitude: 0, longitude: 0.01)), movingFix]
+        for observation in conflicts {
+            #expect(TimelinePresentation.make(items: input, observations: [observation], places: [home]).map(\.kind)
+                    == [.stay, .gap, .stay])
+        }
+    }
+}
+
+@Test func consecutiveGapsRequireMatchingStaysAndContinuousBoundedCoverage() {
+    let input = [entry("before", 0, 100), entry("gap-a", 100, 200, kind: .gap, place: nil),
+                 entry("gap-b", 200, 300, kind: .gap, place: nil), entry("after", 300, nil)]
+    var otherPlace = input; otherPlace[3].placeID = "work"
+    var trip = input; trip[2].kind = .journey
+    var discontinuous = input; discontinuous[2].start = at(201)
+    var openGap = input; openGap[2].end = nil
+    for items in [otherPlace, trip, discontinuous, openGap, Array(input.dropLast())] {
+        let result = TimelinePresentation.make(items: items, observations: [], places: [])
+        #expect(result.first?.originalItems == nil)
+        #expect(result.first?.end == at(100))
+    }
+    var unnamed = input.map { item in var copy = item; copy.placeID = nil; return copy }
+    unnamed[1].end = at(400); unnamed[2].start = at(400)
+    unnamed[2].end = at(700); unnamed[3].start = at(700)
+    #expect(TimelinePresentation.make(items: unnamed, observations: [], places: []).count == 1)
+    // The ten-minute limit applies to the whole gap sequence, not each fragment.
+    unnamed[2].end = at(701); unnamed[3].start = at(701)
+    #expect(TimelinePresentation.make(items: unnamed, observations: [], places: []).count == 3)
+}
+
+@Test func repeatedRestartsAcrossAnOvernightStayKeepBothGapsAvailableForSplitting() async throws {
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 3 * 3600)!
+    let midnight = calendar.startOfDay(for: day)
+    let store = try PlacesStore()
+    try await store.savePlace(Place(id: "home", name: "Fixture Home", coordinate: origin))
+    func location(_ seconds: Double) -> SensorObservation {
+        SensorObservation(timestamp: midnight.addingTimeInterval(seconds), source: .location,
+                          coordinate: origin, horizontalAccuracy: 10)
+    }
+    let observations = [location(-1800), location(3100),
+        SensorObservation(timestamp: midnight.addingTimeInterval(3108), source: .recovery), location(3109),
+        SensorObservation(timestamp: midnight.addingTimeInterval(30000), source: .recovery), location(30001)]
+    try await store.append(observations)
+    let fixture = try InferenceTestCase.decode(await store.exportTestCase())
+    let inferred = InferenceEngine.infer(observations: observations, places: fixture.input.places)
+    #expect(inferred.map(\.kind) == [.stay, .gap, .gap, .stay])
+    let today = try await store.timeline(on: midnight, calendar: calendar)
+    #expect(today.count == 1)
+    let combined = try #require(today.first)
+    #expect(combined.start == midnight && combined.placeID == "home")
+    #expect(combined.end == calendar.dateInterval(of: .day, for: midnight)?.end)
+    #expect(combined.originalItems?.last?.end == nil)
+    #expect(combined.originalItems?.map(\.kind) == [.stay, .gap, .gap, .stay])
+    #expect(combined.unrecordedDuration == 26901)
+    #expect(fixture.replay() == fixture.expectedTimeline)
+    try await store.split(combined)
+    let split = try await store.timeline(on: midnight, calendar: calendar)
+    #expect(split.map(\.kind) == [.stay, .gap, .gap, .stay])
+    #expect(split.filter { $0.kind == .gap }.allSatisfy { $0.connection == nil })
+    #expect(try await store.observations() == observations.reversed())
+}
+
 @Test func wifiRecoveryAcrossMidnightGroupsStoredHistoryAndPreservesSplit() async throws {
     var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
     let midnight = calendar.startOfDay(for: day)

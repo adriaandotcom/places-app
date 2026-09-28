@@ -17,12 +17,21 @@ public enum TimelinePresentation {
                 guard touches(last, next), !boundaries.contains(next.start) else { break }
                 if compatible(members[0], next) {
                     members.append(next); index += 1
-                } else if next.kind == .gap, !next.isUserEdited, let end = next.end,
-                          (members[0].placeID != nil || end.timeIntervalSince(next.start) <= 600), index + 1 < originals.count,
-                          touches(next, originals[index + 1]), !boundaries.contains(originals[index + 1].start),
-                          members[0].kind == .stay, compatible(members[0], originals[index + 1]),
-                          supportsContinuity(members[0], gap: next, observations: observations, places: places) {
-                    members.append(contentsOf: [next, originals[index + 1]]); index += 2
+                } else if members[0].kind == .stay, next.kind == .gap {
+                    // Repeated recoveries can leave consecutive gaps without an intervening stay.
+                    // Check the entire run before joining, and retain every original for splitting.
+                    var following = index
+                    while following < originals.count, originals[following].kind == .gap {
+                        guard !originals[following].isUserEdited, following + 1 < originals.count,
+                              touches(originals[following], originals[following + 1]),
+                              !boundaries.contains(originals[following + 1].start) else { break }
+                        following += 1
+                    }
+                    guard following < originals.count, compatible(members[0], originals[following]),
+                          (members[0].placeID != nil || originals[following].start.timeIntervalSince(next.start) <= 600),
+                          supportsContinuity(members[0], during: next.start...originals[following].start,
+                                             observations: observations, places: places) else { break }
+                    members.append(contentsOf: originals[index...following]); index = following + 1
                 } else { break }
             }
             var combined = members[0]
@@ -61,7 +70,7 @@ public enum TimelinePresentation {
         }
     }
 
-    private static func supportsContinuity(_ stay: TimelineItem, gap: TimelineItem,
+    private static func supportsContinuity(_ stay: TimelineItem, during interval: ClosedRange<Date>,
                                            observations: [SensorObservation], places: [Place]) -> Bool {
         let place = places.first { $0.id == stay.placeID }
         guard let anchor = place?.coordinate ?? stay.coordinate else { return false }
@@ -70,7 +79,7 @@ public enum TimelinePresentation {
         // Recovery duration alone is not proof that someone left a saved place.
         // The missing coverage remains in originalItems even when the cards join.
         return !observations.contains { observation in
-            guard observation.timestamp >= gap.start, observation.timestamp <= (gap.end ?? gap.start) else { return false }
+            guard interval.contains(observation.timestamp) else { return false }
             if [.paused, .regionExit, .visitDeparture].contains(observation.source) { return true }
             if let motion = observation.motion, [.walking, .running, .cycling, .automotive].contains(motion) { return true }
             if let coordinate = observation.usableCoordinate {
