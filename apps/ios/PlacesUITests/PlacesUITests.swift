@@ -1,6 +1,97 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testAutomaticTripMemoryAndPeopleFlow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        let trip = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch
+        XCTAssertTrue(trip.waitForExistence(timeout: 10)); trip.tap()
+        XCTAssertTrue(app.staticTexts["Breakfast by the sea"].waitForExistence(timeout: 5))
+        app.buttons["Add people"].tap()
+        let alex = app.buttons["Alex"].firstMatch
+        XCTAssertTrue(alex.waitForExistence(timeout: 5)); alex.tap()
+        app.buttons["Done"].tap()
+        app.buttons["add-memory"].tap()
+        let note = app.textViews["memory-note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 5)); note.tap(); note.typeText("A lovely week together")
+        app.buttons["memory-people"].tap()
+        let name = app.textFields["new-person-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText("Sam")
+        app.buttons["create-memory-person"].tap()
+        XCTAssertTrue(app.buttons["Sam"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.staticTexts["A lovely week together"].waitForExistence(timeout: 8))
+        let tripShot = XCTAttachment(screenshot: app.screenshot()); tripShot.name = "Automatic trip and memories"; tripShot.lifetime = .keepAlways; add(tripShot)
+        // A trip companion sees the trip; explicitly tagged memories are separate.
+        app.buttons["Alex"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Trips together"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Breakfast by the sea"].exists)
+        XCTAssertFalse(app.staticTexts["A lovely week together"].exists)
+        let personShot = XCTAttachment(screenshot: app.screenshot()); personShot.name = "Private person and shared trips"; personShot.lifetime = .keepAlways; add(personShot)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["edit-trip"].tap()
+        let title = app.textFields["trip-name"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap(); title.press(forDuration: 1)
+        if app.menuItems["Select All"].exists { app.menuItems["Select All"].tap() }
+        else { title.tap(withNumberOfTaps: 3, numberOfTouches: 1) }
+        title.typeText("Our island trip")
+        app.buttons["save-trip"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Our island trip")).firstMatch.waitForExistence(timeout: 5))
+    }
+
+    func testSelectedPhotoSavesDisplaysAndDeletesLocally() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch.tap()
+        app.buttons["add-memory"].tap()
+        app.buttons["add-memory-photos"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].firstMatch.waitForExistence(timeout: 10))
+        let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+        XCTAssertTrue(photo.waitForExistence(timeout: 10))
+        photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let addPhoto = app.navigationBars["Photos"].buttons["Done"]
+        XCTAssertTrue(addPhoto.waitForExistence(timeout: 5)); addPhoto.tap()
+        let save = app.buttons["save-memory"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: save)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 15), .completed)
+        save.tap()
+        let saved = app.buttons["Photo 1"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 10)); saved.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Locally saved photo"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["Done"].tap()
+        app.buttons["Edit memory"].firstMatch.tap()
+        let delete = app.buttons["Delete memory"]
+        reveal(delete, in: app); delete.tap()
+        app.sheets.buttons["Delete memory"].tap()
+        XCTAssertTrue(app.buttons["add-memory"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Photo 1"].exists)
+    }
+
+    func testNativePhotoPickerCanBeCancelledWithoutSavingAMemory() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch.tap()
+        app.buttons["add-memory"].tap()
+        app.buttons["add-memory-photos"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].firstMatch.waitForExistence(timeout: 10))
+        let picker = XCTAttachment(screenshot: app.screenshot()); picker.name = "System selected photos picker"; picker.lifetime = .keepAlways; add(picker)
+        app.buttons["Cancel"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["save-memory"].exists)
+        XCTAssertFalse(app.buttons["save-memory"].isEnabled)
+    }
+
     func testDayStripFollowsRepeatedSwipesBeyondItsVisibleDates() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-history-navigation"]
@@ -710,7 +801,8 @@ import XCTest
     }
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<6 {
-            if element.isHittable { return }
+            // Lazy forms can expose a hittable sliver underneath the bottom bar.
+            if element.exists && element.isHittable && element.frame.maxY < app.frame.maxY - 110 { return }
             app.swipeUp()
         }
     }
@@ -797,7 +889,7 @@ import XCTest
         // Scroll the form's outer margin without panning the map itself.
         func revealBelowMap(_ element: XCUIElement) {
             for _ in 0..<6 {
-                if element.exists && element.isHittable { return }
+                if element.exists && element.isHittable && element.frame.maxY < app.frame.maxY - 110 { return }
                 app.coordinate(withNormalizedOffset: CGVector(dx: 0.025, dy: 0.8))
                     .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.025, dy: 0.25)))
             }
@@ -812,6 +904,49 @@ import XCTest
         XCTAssertNotEqual(app.staticTexts["recognition-radius-value"].label, "100 m")
         app.buttons["save-place"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Pin"].waitForExistence(timeout: 5))
+    }
+
+    func testRestartOnboardingPreservesMemoriesAndPausedRecording() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        let recording = app.switches["tracking-toggle"]
+        XCTAssertTrue(recording.waitForExistence(timeout: 5))
+        if recording.value as? String == "1" {
+            recording.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: recording)], timeout: 5), .completed)
+        reveal(app.buttons["restart-onboarding"], in: app)
+        app.buttons["restart-onboarding"].tap()
+        XCTAssertTrue(app.staticTexts["Your location history, for you."].waitForExistence(timeout: 5))
+        app.buttons["skip-setup"].tap()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 5))
+        app.buttons["open-settings"].tap()
+        XCTAssertEqual(recording.value as? String, "0")
+        reveal(app.buttons["restart-onboarding"], in: app)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Restart onboarding in Settings"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["restart-onboarding"].tap()
+        XCTAssertTrue(app.buttons["onboarding-skip"].waitForExistence(timeout: 5))
+        // Review every step without requesting new permissions or changing settings.
+        for _ in 0..<9 {
+            if !app.buttons["onboarding-skip"].exists { break }
+            app.buttons["onboarding-skip"].tap()
+        }
+        XCTAssertEqual(app.buttons["onboarding-primary"].label, "Done")
+        app.buttons["onboarding-primary"].tap()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 5))
+        app.buttons["open-settings"].tap()
+        XCTAssertEqual(recording.value as? String, "0")
+        app.buttons["Done"].tap()
+        app.buttons["tab-places"].tap()
+        XCTAssertTrue(app.staticTexts["Seaside stay"].exists)
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        let trip = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch
+        XCTAssertTrue(trip.waitForExistence(timeout: 5)); trip.tap()
+        XCTAssertTrue(app.staticTexts["Breakfast by the sea"].waitForExistence(timeout: 5))
     }
 
     func testResetRequiresConfirmationAndReturnsToEmptyOnboarding() {
@@ -834,6 +969,7 @@ import XCTest
         app.buttons["tab-places"].tap()
         XCTAssertFalse(app.staticTexts["Home"].exists)
         app.buttons["add-place"].tap()
+        reveal(app.buttons["editor-enable-maps"], in: app)
         XCTAssertTrue(app.buttons["editor-enable-maps"].exists)
         XCTAssertFalse(app.textFields["place-latitude"].exists)
         app.buttons["Cancel"].tap()

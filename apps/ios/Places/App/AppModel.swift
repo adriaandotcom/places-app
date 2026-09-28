@@ -14,6 +14,8 @@ final class AppModel {
     private(set) var waitingForUnlock = false
     private(set) var storageNeedsRetry = false
     private(set) var places: [Place] = []
+    private(set) var memories = MemoryLibrary()
+    var memoryEpoch: Int { generation }
     private(set) var timeline: [TimelineItem] = []
     private(set) var historyRevision = 0
     private(set) var historyDays: [HistoryDay] = []
@@ -38,6 +40,7 @@ final class AppModel {
     private(set) var nerdMode = false
     private(set) var trackingEnabled = true
     private(set) var onboardingComplete = false
+    private(set) var replayingOnboarding = false
     private var mapSelectionRequest = UUID()
     private(set) var mapFocusRequest = UUID()
     private(set) var mapPeriod: HistoryPeriod?
@@ -79,6 +82,7 @@ final class AppModel {
         starting = true
         do {
             let opened = try uiTesting ? PlacesStore() : ProtectedStorage.open()
+            try MemoryPhotoDraft.clearAbandonedImports()
             store = opened; waitingForUnlock = false
             tracking.onObservations = { [weak self] values in self?.enqueue(values) }
             tracking.onEvent = { [weak self] event in self?.enqueue(event) }
@@ -94,7 +98,10 @@ final class AppModel {
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
                     onboardingComplete = try await opened.setting("onboardingComplete") == "true"
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-periods") {
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-memories") {
+                        try await DemoFixtures.seedMemories(opened)
+                        onboardingComplete = true
+                    } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-periods") {
                         try await DemoFixtures.seedMapPeriods(opened)
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-transport-choices") {
@@ -160,6 +167,7 @@ final class AppModel {
         let expectedGeneration = generation
         do {
             let newPlaces = try await store.places()
+            let newMemories = try await store.memoryLibrary()
             let newTimeline = try await store.timeline(on: day)
             let newDays = try await store.historyDays()
             let calendar = Calendar.current
@@ -178,6 +186,7 @@ final class AppModel {
             let newEvents = nerdMode ? try await store.trackingEvents(limit: 60) : []
             guard !deleting, generation == expectedGeneration else { return }
             historyDays = newDays
+            memories = newMemories
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
@@ -262,7 +271,15 @@ final class AppModel {
             storageNeedsRetry = false; errorMessage = nil; await refresh()
         } catch { fail("Storage is still unavailable. Your history has not been deleted.") }
     }
+    func restartOnboarding() {
+        replayingOnboarding = true
+    }
+
     func finishOnboarding() async {
+        if replayingOnboarding {
+            replayingOnboarding = false
+            return
+        }
         guard let store else { return }
         do {
             try await store.setSetting("onboardingComplete", value: "true")
@@ -427,8 +444,10 @@ final class AppModel {
         await pendingWrite?.value
         do {
             try mapDownloads.deleteAll()
+            try MemoryPhotoDraft.clearAbandonedImports()
             try await store.eraseHistory(resetSettings: true)
             retryObservations = []; timeline = []; historyDays = []; places = []; networks = []; accessPoints = []
+            memories = MemoryLibrary()
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()
             exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil; storageNeedsRetry = false
@@ -444,6 +463,13 @@ final class AppModel {
         }
     }
     private func fail(_ message: String) { errorMessage = message }
+
+    func changeMemories(epoch: Int, _ operation: @Sendable (PlacesStore) async throws -> Void) async throws {
+        guard let store, !deleting, generation == epoch else { throw CancellationError() }
+        try await operation(store)
+        guard !deleting, generation == epoch else { throw CancellationError() }
+        await refresh()
+    }
 }
 
 struct JSONDocument: FileDocument {

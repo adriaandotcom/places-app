@@ -29,7 +29,7 @@ import UIKit
                         if model.waitingForUnlock { Text("Recording will resume after your first unlock.").foregroundStyle(.secondary) }
                         else { ProgressView() }
                     }.padding().frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.background)
-                } else if !model.onboardingComplete { OnboardingView() }
+                } else if !model.onboardingComplete || model.replayingOnboarding { OnboardingView() }
                 else { MainView() }
             }
             .environment(model)

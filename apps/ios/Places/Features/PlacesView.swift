@@ -4,11 +4,21 @@ import PlacesCore
 struct PlacesView: View {
     @Environment(AppModel.self) private var model
     @State private var adding = false
+    @State private var section = "Places"
+    @State private var addingTrip = false
+    @State private var addingPerson = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Your places").font(BrandFont.hero)
-                Text("Familiar corners of your world.").font(BrandFont.body).foregroundStyle(Palette.muted)
+                Text("Your \(section.lowercased())").font(BrandFont.hero)
+                Picker("Browse", selection: $section) {
+                    Text("Places").tag("Places")
+                    Text("Trips").tag("Trips")
+                    Text("People").tag("People")
+                }.pickerStyle(.segmented).accessibilityIdentifier("places-collection")
+                if section == "Trips" { TripsList() }
+                else if section == "People" { PeopleList() }
+                else {
                 if model.places.isEmpty {
                     EmptyHistory(symbol: "mappin.and.ellipse", title: "Start with somewhere familiar", message: "Add home, work, or a favourite stop. A name and a location are all you need.")
                     Button("Add a place") { adding = true }.buttonStyle(PrimaryButton())
@@ -18,12 +28,19 @@ struct PlacesView: View {
                         InfoRow(symbol: place.symbol, title: place.name, subtitle: place.address.isEmpty ? "Saved place" : place.address, colorIndex: place.colorIndex)
                     }.buttonStyle(.plain)
                 }
+                }
             }.padding(Layout.gutter)
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Add place", systemImage: "plus") { adding = true }.accessibilityIdentifier("add-place") }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if section == "Places" { Button("Add place", systemImage: "plus") { adding = true }.accessibilityIdentifier("add-place") }
+                    else if section == "Trips" { Button("Add trip", systemImage: "plus") { addingTrip = true }.accessibilityIdentifier("add-trip") }
+                    else { Button("Add person", systemImage: "plus") { addingPerson = true }.accessibilityIdentifier("add-person") }
+                }
             }
             .sheet(isPresented: $adding) { NavigationStack { PlaceEditor() } }
+            .sheet(isPresented: $addingTrip) { NavigationStack { TripEditor() } }
+            .sheet(isPresented: $addingPerson) { NavigationStack { PersonEditor() } }
     }
 }
 
@@ -35,6 +52,7 @@ struct PlaceDetail: View {
         var id: String { rawValue }
     }
     @State private var editor: Editor?
+    @State private var tripIDs: [String] = []
     private var place: Place? { model.places.first { $0.id == placeID } }
     var body: some View {
         ScrollView {
@@ -59,6 +77,11 @@ struct PlaceDetail: View {
                             }
                         }
                     }
+                    if !tripIDs.isEmpty {
+                        Text("Trips here").font(BrandFont.heading)
+                        ForEach(model.memories.trips.filter { tripIDs.contains($0.id) }) { trip in TripLink(trip: trip) }
+                    }
+                    MemorySection(context: .place(place))
                     InfoRow(symbol: "scope", title: "Recognition area", subtitle: "Within \(Int(place.radius)) metres, when the evidence is clear.", colorIndex: place.colorIndex)
                     let points = model.accessPoints.filter { $0.placeID == placeID }
                     let networks = model.networks.filter { network in points.contains { $0.networkID == network.id } || place.expectedSSIDs.contains(network.ssid) }
@@ -92,6 +115,7 @@ struct PlaceDetail: View {
                 }.padding(Layout.gutter)
             }
         }.background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+            .task(id: model.historyRevision) { tripIDs = (try? await model.store?.tripIDs(visiting: placeID)) ?? [] }
             .sheet(item: $editor) { target in
                 if let place { NavigationStack { PlaceEditor(place: place, wifiOnly: target == .wifi) } }
             }

@@ -71,6 +71,10 @@ struct SettingsView: View {
                     .accessibilityIdentifier("reset-all-data")
             }
             Section {
+                Button("Restart onboarding", systemImage: "arrow.counterclockwise") { model.restartOnboarding() }
+                    .accessibilityIdentifier("restart-onboarding")
+            }
+            Section {
                 NavigationLink("About Places") { AboutPlacesView() }
                     .font(.footnote).frame(minHeight: Layout.touchTarget)
                     .listRowBackground(Color.clear).accessibilityIdentifier("about-places")
@@ -79,7 +83,7 @@ struct SettingsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .confirmationDialog("Export your private history?", isPresented: $confirmExport, titleVisibility: .visible) {
                 Button("Export full history") { Task { await model.export(fullHistory: true) } }
-            } message: { Text("This file includes exact locations, Wi-Fi identifiers, raw observations, and corrections. Anyone with the file can read them. Where you save it may synchronize it to a cloud service.") }
+            } message: { Text("This file includes exact locations, Wi-Fi identifiers, raw observations, corrections, trips, notes, photos, and people. Anyone with the file can read them. Where you save it may synchronize it to a cloud service.") }
             .confirmationDialog("Export a test case?", isPresented: $confirmTestExport, titleVisibility: .visible) {
                 Button("Export test case") { Task { await model.exportTestCase() } }
                 Button("Cancel", role: .cancel) {}
@@ -96,7 +100,7 @@ struct SettingsView: View {
                     }
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: { Text("Permanently delete all history, places, Wi-Fi, corrections, diagnostics, downloaded maps, and app settings, then return to setup. Recording stays paused until you finish setup. iOS permissions and files you already exported are not removed. This cannot be undone.") }
+            } message: { Text("Permanently delete all history, places, trips, notes, photos, people, Wi-Fi, corrections, diagnostics, downloaded maps, and app settings, then return to setup. Recording stays paused until you finish setup. iOS permissions and files you already exported are not removed. This cannot be undone.") }
             .fileExporter(isPresented: $model.showExporter, document: model.exportDocument, contentType: .json, defaultFilename: model.exportFilename) { result in
                 model.exportDocument = nil
                 if case .failure = result { model.errorMessage = "The export could not be saved. Your history has not changed." }

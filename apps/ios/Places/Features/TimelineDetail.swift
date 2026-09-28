@@ -89,6 +89,8 @@ struct TimelineDetail: View {
                 if let place {
                     NavigationLink { PlaceDetail(placeID: place.id) } label: { InfoRow(symbol: place.symbol, title: "About this place", subtitle: place.name, colorIndex: place.colorIndex) }.buttonStyle(.plain)
                 }
+                if let trip = model.memories.trips.first(where: { !$0.hidden && $0.contains(item.start) }) { TripLink(trip: trip) }
+                MemorySection(context: .visit(item))
                 if item.isUserEdited { Text("Your correction").font(.caption).foregroundStyle(Palette.muted) }
                 NavigationLink { VisitEvidenceView(item: item) } label: {
                     HStack {

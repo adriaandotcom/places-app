@@ -55,6 +55,7 @@ struct HistoryDatePicker: View {
     @State private var end = Date()
     @State private var periods: [HistoryPeriod] = []
     @State private var loadError = false
+    @State private var tripDraft: Trip?
     private let calendar = Calendar.current
     var body: some View {
         Form {
@@ -78,6 +79,26 @@ struct HistoryDatePicker: View {
                     .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
             if !timelineOnly {
+                if range {
+                    Section {
+                        Button("Save as a trip") {
+                            tripDraft = Trip(title: "", start: calendar.startOfDay(for: start),
+                                end: min(Date(), calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end))!))
+                        }
+                    }
+                }
+                if model.memories.trips.contains(where: { !$0.hidden }) {
+                    Section("Trips") {
+                        ForEach(model.memories.trips.filter { !$0.hidden }) { trip in
+                            Button { model.selectPeriod(HistoryPeriod(title: trip.title, interval: trip.interval())); dismiss() } label: {
+                                VStack(alignment: .leading) {
+                                    Text(trip.title)
+                                    Text(TripDisplay.dates(trip)).font(.caption).foregroundStyle(Palette.muted)
+                                }
+                            }
+                        }
+                    }
+                }
                 Section("Quick dates") {
                     Button("Today") { model.selectDay(Date()); dismiss() }
                     Button("Last 7 days") {
@@ -113,6 +134,7 @@ struct HistoryDatePicker: View {
         }.scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle(timelineOnly ? "Your history" : "Dates & visits").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .sheet(item: $tripDraft) { trip in NavigationStack { TripEditor(trip: trip) } }
             .onChange(of: start) { _, value in if end < value { end = value } }
             .task {
                 range = !timelineOnly && model.mapPeriod != nil

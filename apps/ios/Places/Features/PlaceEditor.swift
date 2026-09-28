@@ -17,6 +17,7 @@ struct PlaceEditor: View {
     @State private var coordinate: Coordinate?
     @State private var radius: Double
     @State private var symbol: String
+    @State private var tripRole: PlaceTripRole
     @State private var userChoseIcon: Bool
     @State private var colorIndex: Int
     @State private var wifi: PlaceWiFiDraft
@@ -72,6 +73,7 @@ struct PlaceEditor: View {
         _radius = State(initialValue: place?.radius ?? 100)
         _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? PlaceIconMatcher.suggestedSymbol(name: suggestedName) ?? "mappin")
         _userChoseIcon = State(initialValue: place != nil)
+        _tripRole = State(initialValue: place?.tripRole ?? .automatic)
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
         _wifi = State(initialValue: PlaceWiFiDraft(names: place?.expectedSSIDs ?? []))
         _catalogReference = State(initialValue: place?.catalogReference ?? suggestion?.reference)
@@ -121,6 +123,9 @@ struct PlaceEditor: View {
                 Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions")
             }
             Section("Details") {
+                Picker("For trips", selection: $tripRole) {
+                    ForEach(PlaceTripRole.allCases, id: \.self) { role in Text(role.title).tag(role) }
+                }
                 TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
                 Button { choosingIcon = true } label: {
                     HStack(spacing: Layout.spacing) {
@@ -359,7 +364,7 @@ struct PlaceEditor: View {
         guard wifi.finish() else { wifiFocused = true; return }
         let place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality)
+            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole)
         saving = true; focusedField = nil; wifiFocused = false
         Task {
             if await model.save(place, assigning: assigning) {

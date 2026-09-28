@@ -3,6 +3,23 @@ import Foundation
 import PlacesCore
 
 enum DemoFixtures {
+    static func seedMemories(_ store: PlacesStore) async throws {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let start = calendar.date(byAdding: .day, value: -2, to: today)!
+        let home = Place(id: "memory-home", name: "Fixture Home", coordinate: Coordinate(latitude: 52.36, longitude: 4.9), symbol: "house.fill")
+        let hotel = Place(id: "memory-hotel", name: "Seaside stay", coordinate: Coordinate(latitude: 36.87, longitude: 27.18), symbol: "bed.double.fill", colorIndex: 2,
+                          locality: PlaceLocality(city: "Kos", country: "Greece"))
+        try await store.savePlace(home); try await store.savePlace(hotel)
+        try await store.append([SensorObservation(timestamp: start, source: .location, coordinate: home.coordinate, horizontalAccuracy: 10)])
+        try await store.correct(UserOverride(start: start, end: start.addingTimeInterval(8 * 3600), kind: .stay, placeID: home.id))
+        try await store.correct(UserOverride(start: start.addingTimeInterval(18 * 3600), end: today, kind: .stay, placeID: hotel.id))
+        let person = MemoryPerson(id: "memory-friend", name: "Alex")
+        try await store.savePerson(person)
+        let memory = PlaceMemory(text: "Breakfast by the sea", date: start.addingTimeInterval(30 * 3600), placeID: hotel.id, visitStart: start.addingTimeInterval(30 * 3600), personIDs: [person.id])
+        try await store.saveMemory(memory)
+    }
+
     static func seedMapPeriods(_ store: PlacesStore) async throws {
         let start = Calendar.current.date(byAdding: .day, value: -3, to: Calendar.current.startOfDay(for: Date()))!
         let places = [

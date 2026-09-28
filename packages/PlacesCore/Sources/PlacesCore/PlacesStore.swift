@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 public actor PlacesStore {
-    private let queue: DatabaseQueue
+    let queue: DatabaseQueue
 
     /// A support code only: never expose SQLite statements, arguments, or paths.
     public nonisolated static func failureCode(_ error: any Error) -> String {
@@ -72,6 +72,7 @@ public actor PlacesStore {
             try StoreSQL.rebuild(db: db, since: nil)
         }
         migrator.registerMigration("v5-nearby-wifi-suggestions", migrate: WiFiSuggestionIndex.migrate)
+        migrator.registerMigration("v6-private-memories", migrate: MemorySQL.migrate)
         try migrator.migrate(queue)
     }
 
@@ -338,7 +339,9 @@ public actor PlacesStore {
     }
 
     public func exportHistory() throws -> Data {
-        try StoreSQL.exportEncoder.encode(historyArchive())
+        var archive = try historyArchive()
+        archive.memories = try memoryArchive()
+        return try StoreSQL.exportEncoder.encode(archive)
     }
     public func exportTestCase() throws -> Data {
         try InferenceTestCase.redacting(historyArchive()).encoded()
@@ -366,6 +369,7 @@ public actor PlacesStore {
     public func eraseHistory(resetSettings: Bool = false) throws {
         try queue.write { db in
             try db.execute(sql: """
+                DELETE FROM memoryPhotos; DELETE FROM memories; DELETE FROM trips; DELETE FROM people;
                 DELETE FROM evidenceLinks; DELETE FROM routePoints; DELETE FROM timeline; DELETE FROM overrides; DELETE FROM timelineSeparations;
                 DELETE FROM observations; DELETE FROM placeWifiLinks; DELETE FROM wifiAccessPoints;
                 DELETE FROM wifiNetworks; DELETE FROM placeSearch; DELETE FROM places; DELETE FROM trackingEvents;
@@ -383,7 +387,7 @@ public actor PlacesStore {
     }
 }
 
-private enum StoreSQL {
+enum StoreSQL {
     static func saveCorrection(_ edit: UserOverride, db: Database) throws {
         guard edit.end > edit.start, edit.end.timeIntervalSince1970.isFinite,
               edit.start.timeIntervalSince1970.isFinite else { throw PlacesError.invalidCorrection }

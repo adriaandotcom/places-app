@@ -21,7 +21,7 @@ struct OnboardingView: View {
         switch step {
         case .motion where model.tracking.motionAuthorization == .notDetermined: "Allow Motion & Fitness"
         case .notifications where model.tracking.notificationAuthorization == .notDetermined: "Enable notifications"
-        case .ready: "Start my history"
+        case .ready: model.replayingOnboarding ? "Done" : "Start my history"
         default: "Continue"
         }
     }
