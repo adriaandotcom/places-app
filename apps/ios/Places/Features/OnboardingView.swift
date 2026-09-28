@@ -15,6 +15,7 @@ struct OnboardingView: View {
     @State private var placePreset: PlacePreset?
     @State private var locationValidation: String?
     @State private var requestedBackground = false
+    @State private var pastVisits = false
     private var steps: [OnboardingStep] { OnboardingStep.allCases.filter { $0 != .wifi || model.tracking.currentSSID != nil } }
     private var index: Int { steps.firstIndex(of: step) ?? 0 }
     private var primaryTitle: String {
@@ -58,6 +59,7 @@ struct OnboardingView: View {
                     if step != .ready { Button("Skip setup") { Task { await model.finishOnboarding() } }.accessibilityIdentifier("skip-setup") }
                 }
             }
+            .sheet(isPresented: $pastVisits) { AppleSuggestionsFlow() }
             .sheet(item: $placePreset) { preset in NavigationStack { PlaceEditor(suggestedName: preset.rawValue) } }
             .onChange(of: model.tracking.locationSetupReady) { _, complete in
                 if complete { locationValidation = nil }
@@ -128,7 +130,7 @@ struct OnboardingView: View {
         case .places:
             Text("Places you\nalready know").font(BrandFont.hero)
             Text("Start with the places that feel like you.").font(BrandFont.body).foregroundStyle(Palette.muted)
-            AddPastVisitsButton()
+            AddPastVisitsButton { pastVisits = true }
             ForEach(model.places) { place in SavedPlaceRow(place: place, subtitle: "Saved", card: true) }
             if !model.places.contains(where: { $0.name.lowercased() == "home" }) {
                 PlacePresetCard(title: "Home", subtitle: "Your own little corner", symbol: "house.fill", colorIndex: 0) { placePreset = .home }

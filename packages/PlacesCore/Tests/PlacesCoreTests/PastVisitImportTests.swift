@@ -101,9 +101,9 @@ private func existing(_ kind: TimelineKind = .stay, start: TimeInterval = 600, e
     let place = Place(id: "saved", name: "My garden", coordinate: Coordinate(latitude: 1, longitude: 1))
     var visit = PastVisitDraft(candidate: draft().candidate, places: [place])
     #expect(visit.placeID == "saved")
-    #expect(visit.departure == nil, "Apple's point timestamp does not establish a duration")
+    #expect(visit.departure == importDay.addingTimeInterval(3600), "Missing departure starts with an editable one-hour review default")
     let context = PastVisitContext(places: [place], items: [])
-    #expect(!PastVisitPlan.make(drafts: [visit], context: context, now: importNow).canImport)
+    #expect(PastVisitPlan.make(drafts: [visit], context: context, now: importNow).canImport)
     visit.departure = importDay.addingTimeInterval(600)
     #expect(PastVisitPlan.make(drafts: [visit], context: context, now: importNow).visits[0].place?.name == "My garden")
     visit.candidate.coordinate = nil; visit.placeID = nil
@@ -125,4 +125,62 @@ private func existing(_ kind: TimelineKind = .stay, start: TimeInterval = 600, e
     let items = try await store.timeline(in: DateInterval(start: importDay, duration: 3600))
     #expect(items.map(\.kind) == [.stay, .gap, .stay])
     #expect(items.allSatisfy { $0.isUserEdited })
+}
+
+@Test func pastVisitTimeDefaultsAreImmediatelyReviewable() {
+    let candidate = draft().candidate
+    let event = DateInterval(start: importDay.addingTimeInterval(-600), end: importDay.addingTimeInterval(1800))
+    let suppliedEnd = PastVisitDraft(candidate: candidate, places: [], eventDate: event, now: importNow)
+    #expect(suppliedEnd.arrival == importDay && suppliedEnd.departure == event.end)
+    let earlierEvent = DateInterval(start: importDay.addingTimeInterval(-3600), duration: 1800)
+    #expect(PastVisitDraft(candidate: candidate, places: [], eventDate: earlierEvent, now: importNow).departure == importDay.addingTimeInterval(3600))
+    let recent = PastVisitDraft(candidate: candidate, places: [], now: importDay.addingTimeInterval(600))
+    #expect(recent.departure == importDay.addingTimeInterval(600))
+    let undated = PastVisitCandidate(id: "undated", name: "Garden", coordinate: candidate.coordinate)
+    let fallback = PastVisitDraft(candidate: undated, places: [], fallbackDate: importDay, now: importNow)
+    #expect(fallback.arrival == importDay && fallback.departure == importDay.addingTimeInterval(3600))
+}
+
+@Test func pastVisitAndPhotoMemoryCommitTogetherAndSurviveExport() async throws {
+    let store = try PlacesStore()
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let jpeg = folder.appendingPathComponent("photo.jpg"), thumbnail = folder.appendingPathComponent("thumbnail.jpg")
+    try Data([1, 2, 3]).write(to: jpeg); try Data([4, 5]).write(to: thumbnail)
+    let file = MemoryPhotoFile(id: "selected-photo", jpegURL: jpeg, thumbnailURL: thumbnail, details: MemoryPhotoDetails(createdAt: importDay))
+    let memory = PastVisitMemory(visitID: "visit", suggestionID: "selected-event", photos: [file])
+    let drafts = [draft()]
+    let plan = PastVisitPlan.make(drafts: drafts, context: try await store.pastVisitContext(), now: importNow)
+    try await store.importPastVisits(drafts, reviewed: plan, now: importNow, memory: memory)
+    let saved = try #require(try await store.memoryLibrary(now: importNow).memories.first)
+    #expect(saved.placeID == plan.visits[0].place?.id && saved.visitStart == importDay)
+    #expect(saved.photoIDs == [file.id] && saved.photoDetails?[file.id]?.createdAt == importDay)
+    #expect(try await store.photoData(id: file.id) == Data([1, 2, 3]))
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(HistoryArchive.self, from: await store.exportHistory())
+    #expect(archive.memories?.memories.count == 1 && archive.memories?.photos.count == 1)
+    await #expect(throws: PastVisitImportError.timelineChanged) {
+        try await store.importPastVisits(drafts, reviewed: plan, now: importNow, memory: memory)
+    }
+    #expect(try await store.memoryLibrary(now: importNow).memories.count == 1)
+    try await store.eraseHistory()
+    #expect(try await store.memoryLibrary().memories.isEmpty)
+    #expect(try await store.photoData(id: file.id) == nil)
+}
+
+@Test func invalidSuggestionPhotoRollsBackVisitPlaceAndMemory() async throws {
+    let store = try PlacesStore()
+    let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let file = MemoryPhotoFile(id: "unreadable", jpegURL: missing, thumbnailURL: missing)
+    let drafts = [draft()]
+    let plan = PastVisitPlan.make(drafts: drafts, context: try await store.pastVisitContext(), now: importNow)
+    do {
+        try await store.importPastVisits(drafts, reviewed: plan, now: importNow,
+            memory: PastVisitMemory(visitID: "visit", suggestionID: "event", photos: [file]))
+        Issue.record("An unreadable photo must fail the whole import")
+    } catch { }
+    #expect(try await store.pastVisitContext().importedIDs.isEmpty)
+    #expect(try await store.places().isEmpty)
+    #expect(try await store.memoryLibrary().memories.isEmpty)
 }

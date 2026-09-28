@@ -21,8 +21,16 @@ public struct PastVisitDraft: Identifiable, Equatable, Sendable {
     public var arrival: Date?
     public var departure: Date?
     public var replaceExisting = false
-    public init(candidate: PastVisitCandidate, places: [Place]) {
-        self.candidate = candidate; name = candidate.name; arrival = candidate.date
+    public init(candidate: PastVisitCandidate, places: [Place], eventDate: DateInterval? = nil,
+                fallbackDate: Date? = nil, now: Date = Date()) {
+        self.candidate = candidate; name = candidate.name
+        arrival = candidate.date ?? eventDate?.start ?? fallbackDate
+        if let arrival {
+            // An editable default, confirmed by the user before becoming a correction.
+            // A suggestion's event end is useful only when it follows this arrival.
+            departure = min(eventDate.map { $0.end > arrival ? $0.end : arrival.addingTimeInterval(3600) }
+                ?? arrival.addingTimeInterval(3600), now)
+        }
         // Suggest a saved place only when the location is unambiguous. The user can change it.
         if let coordinate = candidate.coordinate {
             let nearby = places.filter { $0.coordinate.distance(to: coordinate) <= min(50, $0.radius) }
@@ -113,6 +121,15 @@ public struct PastVisitPlan: Equatable, Sendable {
     }
 }
 
+public struct PastVisitMemory: Sendable {
+    public let visitID: String
+    public let suggestionID: String
+    public let photos: [MemoryPhotoFile]
+    public init(visitID: String, suggestionID: String, photos: [MemoryPhotoFile]) {
+        self.visitID = visitID; self.suggestionID = suggestionID; self.photos = photos
+    }
+}
+
 public enum PastVisitImportError: Error { case invalidSelection, timelineChanged }
 
 extension PlacesStore {
@@ -121,12 +138,17 @@ extension PlacesStore {
     }
 
     /// Check overlaps again and commit the entire reviewed batch in one transaction.
-    public func importPastVisits(_ drafts: [PastVisitDraft], reviewed: PastVisitPlan, now: Date) throws {
+    public func importPastVisits(_ drafts: [PastVisitDraft], reviewed: PastVisitPlan, now: Date, memory: PastVisitMemory? = nil) throws {
         try queue.write { db in
             let context = try StoreSQL.pastVisitContext(db: db)
             let current = PastVisitPlan.make(drafts: drafts, context: context, now: now)
             guard current == reviewed else { throw PastVisitImportError.timelineChanged }
             guard current.canImport else { throw PastVisitImportError.invalidSelection }
+            if let memory {
+                guard !memory.photos.isEmpty,
+                      current.visits.contains(where: { $0.id == memory.visitID && !$0.intervals.isEmpty })
+                else { throw PastVisitImportError.invalidSelection }
+            }
             var saved = Set(context.places.map(\.id))
             for visit in current.visits where !visit.intervals.isEmpty {
                 guard let place = visit.place else { throw PastVisitImportError.invalidSelection }
@@ -135,6 +157,14 @@ extension PlacesStore {
                     try StoreSQL.saveCorrection(UserOverride(id: "journaling-\(visit.id)-\(index)",
                         start: interval.start, end: interval.end, kind: .stay, placeID: place.id,
                         importedVisitID: visit.id), db: db)
+                }
+                if let memory, memory.visitID == visit.id, let start = visit.intervals.first?.start {
+                    let imported = PlaceMemory(id: PlaceMemory.suggestionID(memory.suggestionID, placeID: place.id),
+                        date: start, placeID: place.id, visitStart: start, photoIDs: memory.photos.map(\.id))
+                    // Reopening a suggestion must never overwrite an already edited memory.
+                    if try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?)", arguments: [imported.id])! {
+                        try MemorySQL.saveMemoryWithPhotos(imported, importing: memory.photos, db: db)
+                    }
                 }
             }
         }

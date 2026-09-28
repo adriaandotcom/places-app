@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0213AF2ABA82D81BA79D313E /* AppleSuggestionsFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC561C16FC292C3569B4C390 /* AppleSuggestionsFlow.swift */; };
 		033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = F135F35535FF26FED0627E38 /* DesignSystem.swift */; };
 		0406B697C7B67839B5EA122A /* MapDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = A209ED936BD094A91EF7BC97 /* MapDownloads.swift */; };
 		062FAD2DD478B78AF78A976B /* AdjacentPlaceRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = E86809254C240D475CD2D44A /* AdjacentPlaceRows.swift */; };
@@ -139,6 +140,7 @@
 		A63BC26235D3DD07B406598B /* Places.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Places.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9F3E9E483AB8609D59EFDEB /* MemoryPhotoDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryPhotoDraft.swift; sourceTree = "<group>"; };
 		B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesUITests.swift; sourceTree = "<group>"; };
+		BC561C16FC292C3569B4C390 /* AppleSuggestionsFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSuggestionsFlow.swift; sourceTree = "<group>"; };
 		BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityView.swift; sourceTree = "<group>"; };
 		CA197721E63F4B0F2F74FC75 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				8683E4F2F033E292992D7CAC /* AddPastVisits.swift */,
 				E86809254C240D475CD2D44A /* AdjacentPlaceRows.swift */,
 				82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */,
+				BC561C16FC292C3569B4C390 /* AppleSuggestionsFlow.swift */,
 				9600EC9BAFA7C29D961C9667 /* AvatarViews.swift */,
 				C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */,
 				738274611DA8F1F53B88808E /* HistoryCalendar.swift */,
@@ -497,6 +500,7 @@
 				062FAD2DD478B78AF78A976B /* AdjacentPlaceRows.swift in Sources */,
 				4BB09FFB84861510F74BD203 /* AppModel.swift in Sources */,
 				9612B46A325D2254206D4715 /* AppleMapsView.swift in Sources */,
+				0213AF2ABA82D81BA79D313E /* AppleSuggestionsFlow.swift in Sources */,
 				5C1C341BBB8A1FF870002F69 /* AvatarViews.swift in Sources */,
 				4B3E927FE010B0E4E99E50CF /* BatteryActivityView.swift in Sources */,
 				623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */,

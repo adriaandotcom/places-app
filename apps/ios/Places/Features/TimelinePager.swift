@@ -10,6 +10,7 @@ struct TimelinePager: UIViewControllerRepresentable {
     @Binding var progress: CGFloat
     let select: (TimelineItem) -> Void
     let addPlace: () -> Void
+    let addPastVisits: (Date) -> Void
 
     func makeUIViewController(context: Context) -> TimelinePagerController {
         TimelinePagerController()
@@ -21,7 +22,7 @@ struct TimelinePager: UIViewControllerRepresentable {
             Task { @MainActor in if progress != value { progress = value } }
         }
         controller.makePage = { day in
-            AnyView(TimelineDayPage(day: day, select: select, addPlace: addPlace).environment(model))
+            AnyView(TimelineDayPage(day: day, select: select, addPlace: addPlace, addPastVisits: addPastVisits).environment(model))
         }
         controller.scroll.bounces = !reduceMotion
         controller.show(model.selectedDay)
@@ -161,6 +162,7 @@ private struct TimelineDayPage: View {
     let day: Date
     let select: (TimelineItem) -> Void
     let addPlace: () -> Void
+    let addPastVisits: (Date) -> Void
     @State private var items: [TimelineItem] = []
     @State private var loaded = false
     @State private var failed = false
@@ -175,7 +177,7 @@ private struct TimelineDayPage: View {
                     if model.offersPastVisits(on: day) {
                         EmptyState(symbol: "clock.arrow.circlepath", title: "Before your recorded history",
                             message: "Choose past visits from Apple’s suggestions and review them before adding.")
-                        AddPastVisitsButton(day: day)
+                        AddPastVisitsButton { addPastVisits(day) }
                     } else {
                         EmptyState(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
                             message: "Your visits and journeys will appear as you go. Add a familiar place, or enable location in Settings.")

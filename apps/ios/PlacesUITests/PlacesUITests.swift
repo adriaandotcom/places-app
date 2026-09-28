@@ -9,21 +9,53 @@ import XCTest
         XCTAssertTrue(addPast.waitForExistence(timeout: 10))
         let entry = XCTAttachment(screenshot: app.screenshot()); entry.name = "Add past visits before recorded history"; entry.lifetime = .keepAlways; add(entry)
         addPast.tap()
-        XCTAssertTrue(app.buttons["set-past-visit-departure"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.datePickers["past-visit-departure"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Set departure"].exists)
+        XCTAssertFalse(app.buttons["Use departure time"].exists)
         app.buttons["Cancel"].tap()
         XCTAssertTrue(addPast.waitForExistence(timeout: 5))
         addPast.tap()
+        XCTAssertTrue(app.datePickers["past-visit-departure"].waitForExistence(timeout: 5))
+        let review = XCTAttachment(screenshot: app.screenshot()); review.name = "Editable arrival and departure"; review.lifetime = .keepAlways; add(review)
         app.buttons["confirm-past-visits"].tap()
-        XCTAssertTrue(app.staticTexts["past-visits-error"].waitForExistence(timeout: 5))
-        let departure = app.buttons["set-past-visit-departure"]
-        reveal(departure, in: app); departure.tap()
-        let use = app.buttons["use-past-visit-departure"]
-        reveal(use, in: app); use.tap()
-        let review = XCTAttachment(screenshot: app.screenshot()); review.name = "Review user-selected past visit"; review.lifetime = .keepAlways; add(review)
+        XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["suggestion-saved"].label, "Visits and memory added")
+        let saved = XCTAttachment(screenshot: app.screenshot()); saved.name = "Add another suggestion after saving"; saved.lifetime = .keepAlways; add(saved)
+        app.buttons["next-suggestion"].tap()
+        XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
         app.buttons["confirm-past-visits"].tap()
+        XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
+        app.buttons["Done"].tap()
         XCTAssertTrue(app.staticTexts["Fixture Garden"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Fixture Café"].exists)
         XCTAssertFalse(app.buttons["add-past-visits"].exists)
-        let added = XCTAttachment(screenshot: app.screenshot()); added.name = "Confirmed past visit on timeline"; added.lifetime = .keepAlways; add(added)
+        let added = XCTAttachment(screenshot: app.screenshot()); added.name = "Both confirmed visits on timeline"; added.lifetime = .keepAlways; add(added)
+        app.buttons["tab-places"].tap()
+        app.staticTexts["Fixture Garden"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Photo 1"].waitForExistence(timeout: 5))
+        let suggestions = app.buttons["apple-memory-suggestions"]
+        reveal(suggestions, in: app); suggestions.tap()
+        XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["suggestion-saved"].label, "This memory is already added")
+    }
+
+    func testPlaceMemorySuggestionsReuseEditorAndCanContinue() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-fixture"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.staticTexts["Home"].firstMatch.tap()
+        let suggestions = app.buttons["apple-memory-suggestions"]
+        reveal(suggestions, in: app); suggestions.tap()
+        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 5))
+        let editor = XCTAttachment(screenshot: app.screenshot()); editor.name = "Apple photos in the shared memory editor"; editor.lifetime = .keepAlways; add(editor)
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
+        app.buttons["next-suggestion"].tap()
+        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["Photo 1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(identifier: "Edit memory").count, 1)
     }
 
     func testOnboardingReusesPastVisitsReviewWithoutSavingOnCancel() {

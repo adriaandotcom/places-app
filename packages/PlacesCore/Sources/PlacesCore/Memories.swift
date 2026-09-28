@@ -54,6 +54,10 @@ public struct MemoryPerson: Codable, Identifiable, Hashable, Sendable {
 /// A visit uses a time anchor, never a derived timeline ID that can change after re-inference.
 /// General place notes have no visitStart and do not leak into unrelated trips.
 public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
+    public static func suggestionID(_ suggestionID: String, placeID: String) -> String {
+        "suggestion-\(suggestionID)-\(placeID)"
+    }
+
     public var id: String
     public var text: String
     public var date: Date

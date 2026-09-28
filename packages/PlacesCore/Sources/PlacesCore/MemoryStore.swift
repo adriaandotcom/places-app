@@ -85,45 +85,8 @@ extension PlacesStore {
         }
     }
     public func saveMemory(_ memory: PlaceMemory, adding photos: [MemoryPhoto] = [], importing files: [MemoryPhotoFile] = []) throws {
-        var memory = memory
-        for (id, details) in photos.map({ ($0.id, $0.details) }) + files.map({ ($0.id, $0.details) }) {
-            if let details { memory.photoDetails = (memory.photoDetails ?? [:]).merging([id: details]) { old, _ in old } }
-        }
-        memory.photoDetails = memory.photoDetails?.filter { memory.photoIDs.contains($0.key) }
-        guard (memory.photoDetails ?? [:]).values.allSatisfy({ details in
-            details.createdAt?.timeIntervalSince1970.isFinite != false &&
-            details.utcOffsetSeconds.map { (-86400...86400).contains($0) } != false &&
-            details.coordinate.map { $0.latitude.isFinite && $0.longitude.isFinite && (-90...90).contains($0.latitude) && (-180...180).contains($0.longitude) } != false
-        }) else { throw MemoryError.invalidPhoto }
-        memory.photoIDs = memory.orderedPhotoIDs
-        guard memory.date.timeIntervalSince1970.isFinite, memory.visitStart?.timeIntervalSince1970.isFinite != false,
-              !memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !memory.photoIDs.isEmpty || !memory.personIDs.isEmpty,
-              memory.tripID != nil || memory.placeID != nil || memory.visitStart != nil else { throw MemoryError.invalidMemory }
-        let addedIDs = photos.map(\.id) + files.map(\.id)
-        guard Set(memory.photoIDs).count == memory.photoIDs.count,
-              Set(addedIDs).count == addedIDs.count, Set(addedIDs).isSubset(of: Set(memory.photoIDs))
-        else { throw MemoryError.invalidPhoto }
-        guard PersonMentions.valid(memory.mentions ?? [], in: memory.text).count == (memory.mentions ?? []).count else { throw MemoryError.invalidMemory }
         try queue.write { db in
-            try MemorySQL.checkPeople(memory.linkedPersonIDs, db: db)
-            if let id = memory.tripID, try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM trips WHERE id = ?)", arguments: [id])! { throw MemoryError.invalidMemory }
-            if let id = memory.placeID, try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM places WHERE id = ?)", arguments: [id])! { throw MemoryError.invalidMemory }
-            let owned = try String.fetchAll(db, sql: "SELECT id FROM memoryPhotos WHERE memoryID = ?", arguments: [memory.id])
-            guard Set(memory.photoIDs).isSubset(of: Set(owned + addedIDs)) else { throw MemoryError.invalidPhoto }
-            try MemorySQL.saveMemory(memory, db: db)
-            for id in owned where !memory.photoIDs.contains(id) {
-                try db.execute(sql: "DELETE FROM memoryPhotos WHERE id = ?", arguments: [id])
-            }
-            // INSERT, not REPLACE: a caller cannot move another memory's photo by reusing its ID.
-            for photo in photos {
-                try MemorySQL.insertPhoto(photo, memoryID: memory.id, db: db)
-            }
-            for file in files {
-                guard try file.jpegURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max <= 450_000,
-                      try file.thumbnailURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max <= 50_000 else { throw MemoryError.invalidPhoto }
-                let photo = try MemoryPhoto(id: file.id, jpeg: Data(contentsOf: file.jpegURL), thumbnail: Data(contentsOf: file.thumbnailURL))
-                try MemorySQL.insertPhoto(photo, memoryID: memory.id, db: db)
-            }
+            try MemorySQL.saveMemoryWithPhotos(memory, adding: photos, importing: files, db: db)
         }
     }
     public func deleteMemory(id: String) throws {
@@ -153,6 +116,48 @@ extension PlacesStore {
 }
 
 enum MemorySQL {
+    /// Shared by the memory editor and the atomic past-visit import.
+    static func saveMemoryWithPhotos(_ memory: PlaceMemory, adding photos: [MemoryPhoto] = [],
+                                    importing files: [MemoryPhotoFile] = [], db: Database) throws {
+        var memory = memory
+        for (id, details) in photos.map({ ($0.id, $0.details) }) + files.map({ ($0.id, $0.details) }) {
+            if let details { memory.photoDetails = (memory.photoDetails ?? [:]).merging([id: details]) { old, _ in old } }
+        }
+        memory.photoDetails = memory.photoDetails?.filter { memory.photoIDs.contains($0.key) }
+        guard (memory.photoDetails ?? [:]).values.allSatisfy({ details in
+            details.createdAt?.timeIntervalSince1970.isFinite != false &&
+            details.utcOffsetSeconds.map { (-86400...86400).contains($0) } != false &&
+            details.coordinate.map { $0.latitude.isFinite && $0.longitude.isFinite && (-90...90).contains($0.latitude) && (-180...180).contains($0.longitude) } != false
+        }) else { throw MemoryError.invalidPhoto }
+        memory.photoIDs = memory.orderedPhotoIDs
+        guard memory.date.timeIntervalSince1970.isFinite, memory.visitStart?.timeIntervalSince1970.isFinite != false,
+              !memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !memory.photoIDs.isEmpty || !memory.personIDs.isEmpty,
+              memory.tripID != nil || memory.placeID != nil || memory.visitStart != nil else { throw MemoryError.invalidMemory }
+        let addedIDs = photos.map(\.id) + files.map(\.id)
+        guard Set(memory.photoIDs).count == memory.photoIDs.count,
+              Set(addedIDs).count == addedIDs.count, Set(addedIDs).isSubset(of: Set(memory.photoIDs))
+        else { throw MemoryError.invalidPhoto }
+        guard PersonMentions.valid(memory.mentions ?? [], in: memory.text).count == (memory.mentions ?? []).count else { throw MemoryError.invalidMemory }
+        try MemorySQL.checkPeople(memory.linkedPersonIDs, db: db)
+        if let id = memory.tripID, try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM trips WHERE id = ?)", arguments: [id])! { throw MemoryError.invalidMemory }
+        if let id = memory.placeID, try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM places WHERE id = ?)", arguments: [id])! { throw MemoryError.invalidMemory }
+        let owned = try String.fetchAll(db, sql: "SELECT id FROM memoryPhotos WHERE memoryID = ?", arguments: [memory.id])
+        guard Set(memory.photoIDs).isSubset(of: Set(owned + addedIDs)) else { throw MemoryError.invalidPhoto }
+        try MemorySQL.saveMemory(memory, db: db)
+        for id in owned where !memory.photoIDs.contains(id) {
+            try db.execute(sql: "DELETE FROM memoryPhotos WHERE id = ?", arguments: [id])
+        }
+        // INSERT, not REPLACE: a caller cannot move another memory's photo by reusing its ID.
+        for photo in photos {
+            try MemorySQL.insertPhoto(photo, memoryID: memory.id, db: db)
+        }
+        for file in files {
+            guard try file.jpegURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max <= 450_000,
+                  try file.thumbnailURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max <= 50_000 else { throw MemoryError.invalidPhoto }
+            let photo = try MemoryPhoto(id: file.id, jpeg: Data(contentsOf: file.jpegURL), thumbnail: Data(contentsOf: file.thumbnailURL))
+            try MemorySQL.insertPhoto(photo, memoryID: memory.id, db: db)
+        }
+    }
     static func insertPhoto(_ photo: MemoryPhoto, memoryID: String, db: Database) throws {
         guard !photo.jpeg.isEmpty, photo.jpeg.count <= 450_000, !photo.thumbnail.isEmpty, photo.thumbnail.count <= 50_000 else { throw MemoryError.invalidPhoto }
         try db.execute(sql: "INSERT INTO memoryPhotos(id, memoryID, jpeg, thumbnail) VALUES (?, ?, ?, ?)",

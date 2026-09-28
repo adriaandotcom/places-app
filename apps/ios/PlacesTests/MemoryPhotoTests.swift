@@ -118,6 +118,21 @@ import PlacesCore
         }
     }
 
+    func testSuggestionPhotoURLReusesBoundedImportAndSuppliedDate() throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 2400, height: 1600)).image { context in
+            UIColor.systemTeal.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2400, height: 1600))
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".jpg")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try XCTUnwrap(image.jpegData(compressionQuality: 1)).write(to: url)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let photo = try MemoryPhotoImport.make(url: url, date: date)
+        XCTAssertLessThanOrEqual(photo.jpeg.count, 450_000)
+        XCTAssertLessThanOrEqual(photo.thumbnail.count, 50_000)
+        XCTAssertEqual(photo.details?.createdAt, date)
+        XCTAssertThrowsError(try MemoryPhotoImport.make(url: URL(string: "https://example.com/photo.jpg")!))
+    }
+
     func testUnreadablePhotoIsRejected() {
         XCTAssertThrowsError(try MemoryPhotoImport.make(Data("not a photo".utf8)))
     }

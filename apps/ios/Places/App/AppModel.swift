@@ -86,13 +86,13 @@ final class AppModel {
         guard calendar.startOfDay(for: day) < calendar.startOfDay(for: Date()) else { return false }
         return historyDays.first.map { calendar.startOfDay(for: day) < calendar.startOfDay(for: $0.date) } ?? true
     }
-    func importPastVisits(_ drafts: [PastVisitDraft], reviewed: PastVisitPlan, at date: Date) async throws {
-        guard let store, !deleting else { throw PastVisitImportError.invalidSelection }
-        let epoch = generation
+    func importPastVisits(_ drafts: [PastVisitDraft], reviewed: PastVisitPlan, at date: Date,
+                          memory: PastVisitMemory?, epoch: Int) async throws {
+        guard let store, !deleting, epoch == generation else { throw CancellationError() }
         await pendingWrite?.value
         guard epoch == generation, !deleting else { throw PastVisitImportError.invalidSelection }
-        try await store.importPastVisits(drafts, reviewed: reviewed, now: date)
-        guard epoch == generation, !deleting else { return }
+        try await store.importPastVisits(drafts, reviewed: reviewed, now: date, memory: memory)
+        guard epoch == generation, !deleting else { throw CancellationError() }
         if let start = reviewed.visits.flatMap(\.intervals).map(\.start).min() {
             selectedDay = start; mapPeriod = nil; mapSelectionRequest = UUID()
         }

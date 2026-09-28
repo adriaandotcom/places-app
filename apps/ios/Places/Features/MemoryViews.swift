@@ -30,6 +30,7 @@ struct MemorySection: View {
     @Environment(AppModel.self) private var model
     let context: MemoryContext
     @State private var editing: PlaceMemory?
+    @State private var suggestions = false
     var body: some View {
         let memories = model.memories.memories.filter(context.includes)
         VStack(alignment: .leading, spacing: Layout.spacing) {
@@ -39,12 +40,20 @@ struct MemorySection: View {
                     actionTitle: "Add a memory", actionIdentifier: "add-memory", action: { editing = context.draft })
             } else {
                 SectionHeading(title: "Memories", actionTitle: "Add", actionSymbol: "plus", actionIdentifier: "add-memory", action: { editing = context.draft })
+                if case .place = context {
+                    Button { suggestions = true } label: {
+                        Label("Apple memory suggestions", systemImage: "sparkles").frame(minHeight: Layout.touchTarget)
+                    }.foregroundStyle(Palette.green).accessibilityIdentifier("apple-memory-suggestions")
+                }
                 ForEach(memories) { memory in
                     MemoryCard(memory: memory, tripPersonIDs: context.tripPersonIDs)
                 }
             }
         }
         .sheet(item: $editing) { memory in NavigationStack { MemoryEditor(memory: memory) } }
+        .sheet(isPresented: $suggestions) {
+            if case .place(let place) = context { AppleSuggestionsFlow(place: place) }
+        }
     }
 }
 
@@ -136,8 +145,12 @@ struct MemoryEditor: View {
     @State private var reordering = false
     @State private var selectedPhoto: PhotoReference?
     private let addPhotos: Bool
+    private let onSaved: (() -> Void)?
     @State private var offeredPhotos = false
-    init(memory: PlaceMemory, addPhotos: Bool = false) { _draft = State(initialValue: memory); self.addPhotos = addPhotos }
+    init(memory: PlaceMemory, addPhotos: Bool = false, importing photos: [MemoryPhotoFile] = [], onSaved: (() -> Void)? = nil) {
+        _draft = State(initialValue: memory); self.addPhotos = addPhotos
+        _photos = State(initialValue: photos); self.onSaved = onSaved
+    }
     private var exists: Bool { model.memories.memories.contains { $0.id == draft.id } }
     var body: some View {
         Form {
@@ -225,7 +238,8 @@ struct MemoryEditor: View {
                     if deleting { try await store.deleteMemory(id: memory.id) }
                     else { try await store.saveMemory(memory, importing: added) }
                 }
-                photoDraft.discard(); dismiss()
+                photoDraft.discard()
+                if let onSaved { onSaved() } else { dismiss() }
             } catch { self.error = error.localizedDescription }
             saving = false
         }
@@ -238,6 +252,17 @@ struct MemoryEditor: View {
 enum MemoryPhotoImport {
     nonisolated static func make(_ data: Data) throws -> MemoryPhoto {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { throw MemoryError.invalidPhoto }
+        return try make(source)
+    }
+
+    nonisolated static func make(url: URL, date: Date? = nil) throws -> MemoryPhoto {
+        guard url.isFileURL, let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw MemoryError.invalidPhoto }
+        var photo = try make(source)
+        if photo.details?.createdAt == nil { photo.details?.createdAt = date }
+        return photo
+    }
+
+    nonisolated private static func make(_ source: CGImageSource) throws -> MemoryPhoto {
         func encoded(maximumSize: Int, byteLimit: Int) throws -> Data {
             var size = maximumSize
             while size >= 160 {

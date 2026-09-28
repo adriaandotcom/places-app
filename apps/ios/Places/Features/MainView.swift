@@ -79,6 +79,7 @@ struct TimelineView: View {
     @State private var selected: TimelineItem?
     @State private var showDate = false
     @State private var addPlace = false
+    @State private var pastVisits: PastVisitsRequest?
     private var title: String {
         if Calendar.current.isDateInToday(model.selectedDay) { return "Today" }
         if Calendar.current.isDateInYesterday(model.selectedDay) { return "Yesterday" }
@@ -117,12 +118,14 @@ struct TimelineView: View {
                 }
                 TimelineDayStrip(progress: dayProgress)
             }.padding(.horizontal, Layout.gutter).padding(.top, Layout.compact)
-            TimelinePager(progress: $dayProgress, select: { selected = $0 }, addPlace: { addPlace = true })
+            TimelinePager(progress: $dayProgress, select: { selected = $0 }, addPlace: { addPlace = true },
+                addPastVisits: { day in pastVisits = PastVisitsRequest(day: day) })
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
             .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) }.environment(\.hasMainNavigation, false) }
             .sheet(isPresented: $addPlace) { NavigationStack { PlaceEditor() } }
+            .sheet(item: $pastVisits) { request in AppleSuggestionsFlow(day: request.day) }
             .sheet(isPresented: $showDate) { NavigationStack { HistoryDatePicker(timelineOnly: true) } }
     }
 }
