@@ -92,6 +92,44 @@ import XCTest
         XCTAssertFalse(app.buttons["save-memory"].isEnabled)
     }
 
+    func testPhotoSelectionSurvivesHistoryRefreshesAndReopening() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-memories", "--ui-memory-refresh"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trip-")).firstMatch.tap()
+        app.buttons["add-memory"].tap()
+        let note = app.textViews["memory-note"]
+        note.tap(); note.typeText("A photo selection to keep")
+        app.buttons["add-memory-photos"].tap()
+        let thumbnails = app.images.matching(identifier: "PXGGridLayout-Info")
+        XCTAssertTrue(thumbnails.element(boundBy: 2).waitForExistence(timeout: 10))
+        let opened = XCTAttachment(screenshot: app.screenshot())
+        opened.name = "Picker before selection with active history updates"; opened.lifetime = .keepAlways; add(opened)
+        for index in 0..<3 {
+            thumbnails.element(boundBy: index).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let until = Date().addingTimeInterval(3)
+            let elapsed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= until }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [elapsed], timeout: 5), .completed)
+            XCTAssertTrue(app.navigationBars["Photos"].exists)
+        }
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Photo selection during history refreshes"; shot.lifetime = .keepAlways; add(shot)
+        app.navigationBars["Photos"].buttons["Done"].tap()
+        let photos = app.buttons.matching(identifier: "Remove photo")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in photos.count == 3 }, object: nil)], timeout: 20), .completed)
+        XCTAssertEqual(note.value as? String, "A photo selection to keep")
+        reveal(app.buttons["add-memory-photos"], in: app); app.buttons["add-memory-photos"].tap()
+        let cancelPicker = app.navigationBars["Photos"].buttons["Cancel"]
+        XCTAssertTrue(cancelPicker.waitForExistence(timeout: 10)); cancelPicker.tap()
+        XCTAssertTrue(app.navigationBars["Photos"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(photos.count, 3)
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons["Photo 3"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Photo 4"].exists)
+    }
+
     func testDayStripFollowsRepeatedSwipesBeyondItsVisibleDates() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-history-navigation"]

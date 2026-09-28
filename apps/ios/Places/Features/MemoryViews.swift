@@ -126,6 +126,7 @@ struct MemoryEditor: View {
     @State private var photos: [MemoryPhotoFile] = []
     @State private var photoDraft = MemoryPhotoDraft()
     @State private var selection: [PhotosPickerItem] = []
+    @State private var choosingPhotos = false
     @State private var importing = false
     @State private var importProgress = ""
     @State private var importTask: Task<Void, Never>?
@@ -168,9 +169,8 @@ struct MemoryEditor: View {
                     }
                 }
                 if importing { ProgressView(importProgress) }
-                PhotosPicker(selection: $selection, matching: .images) {
-                        Label("Add photos", systemImage: "photo.badge.plus")
-                }.disabled(importing).accessibilityIdentifier("add-memory-photos")
+                Button("Add photos", systemImage: "photo.badge.plus") { choosingPhotos = true }
+                    .disabled(importing).accessibilityIdentifier("add-memory-photos")
             }
             if exists {
                 Section { Button("Delete memory", role: .destructive) { confirmDelete = true } }
@@ -178,24 +178,12 @@ struct MemoryEditor: View {
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle(exists ? "Memory" : "Add a memory").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
-            .onChange(of: selection) { _, selected in
-                guard !selected.isEmpty else { return }
-                importing = true
-                let expectedEpoch = model.memoryEpoch
-                importTask = Task {
-                    do {
-                        for (index, item) in selected.enumerated() {
-                            importProgress = "Adding photo \(index + 1) of \(selected.count)…"
-                            guard let data = try await item.loadTransferable(type: Data.self) else { throw MemoryError.invalidPhoto }
-                            let photo = try await Task.detached(priority: .userInitiated) { try MemoryPhotoImport.make(data) }.value
-                            try Task.checkCancellation()
-                            guard model.memoryEpoch == expectedEpoch else { throw CancellationError() }
-                            photos.append(try photoDraft.append(photo)); draft.photoIDs.append(photo.id)
-                        }
-                    } catch is CancellationError {} catch { self.error = "Some photos couldn’t be added. Try choosing them again." }
-                    selection = []; importing = false; importTask = nil
-                }
-            }
+            // A lazy Form row can be recreated by history updates. Keep the presentation
+            // on the editor itself so the system picker retains its browsing state.
+            .photosPicker(isPresented: $choosingPhotos, selection: $selection, maxSelectionCount: nil,
+                          selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current)
+            .onChange(of: selection) { importSelectionIfReady() }
+            .onChange(of: choosingPhotos) { importSelectionIfReady() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importTask?.cancel(); photoDraft.discard(); dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) {
@@ -208,6 +196,27 @@ struct MemoryEditor: View {
             .confirmationDialog("Delete this memory and its photos?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete memory", role: .destructive) { save(deleting: true) }
             }
+    }
+    private func importSelectionIfReady() {
+        // Selection and dismissal bindings may arrive in either order. Consume the
+        // confirmed batch once, only after the picker has closed.
+        guard !choosingPhotos, !importing, !selection.isEmpty else { return }
+        let selected = selection
+        selection = []; importing = true
+        let expectedEpoch = model.memoryEpoch
+        importTask = Task {
+            do {
+                for (index, item) in selected.enumerated() {
+                    importProgress = "Adding photo \(index + 1) of \(selected.count)…"
+                    guard let data = try await item.loadTransferable(type: Data.self) else { throw MemoryError.invalidPhoto }
+                    let photo = try await Task.detached(priority: .userInitiated) { try MemoryPhotoImport.make(data) }.value
+                    try Task.checkCancellation()
+                    guard model.memoryEpoch == expectedEpoch else { throw CancellationError() }
+                    photos.append(try photoDraft.append(photo)); draft.photoIDs.append(photo.id)
+                }
+            } catch is CancellationError {} catch { self.error = "Some photos couldn’t be added. Try choosing them again." }
+            importing = false; importTask = nil
+        }
     }
     private func save(deleting: Bool = false) {
         guard let epoch else { return }

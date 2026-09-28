@@ -152,6 +152,17 @@ final class AppModel {
                     ready = true; starting = false
                     if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
                     await tracking.refreshNotifications()
+                    #if DEBUG
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-memory-refresh") {
+                        // Exercise picker presentation while real history refreshes update the UI.
+                        Task {
+                            for _ in 0..<90 {
+                                try await Task.sleep(for: .seconds(1))
+                                await refresh()
+                            }
+                        }
+                    }
+                    #endif
                 } catch { store = nil; starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
             }
         } catch is ProtectedStorage.Locked {
