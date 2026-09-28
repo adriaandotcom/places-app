@@ -2,6 +2,22 @@ import SwiftUI
 import MapKit
 import PlacesCore
 
+struct MapPreviewCard: View {
+    @Environment(AppModel.self) private var model
+    let items: [TimelineItem]
+    var routePoints: [RoutePoint]?
+    var caption: String?
+    var body: some View {
+        if model.mapsAvailable && items.contains(where: { $0.kind != .gap || $0.connection != nil }) {
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                PrivacyMapView(items: items, routePoints: routePoints).frame(height: Layout.mapHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
+                if let caption { Text(caption).font(.caption).foregroundStyle(Palette.muted) }
+            }
+        }
+    }
+}
+
 // All MapKit construction lives here behind the appropriate live consent gate.
 struct PrivacyMapView: View {
     @Environment(AppModel.self) private var model

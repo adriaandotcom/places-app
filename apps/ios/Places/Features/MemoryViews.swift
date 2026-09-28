@@ -30,21 +30,12 @@ struct MemorySection: View {
         let memories = model.memories.memories.filter(context.includes)
         VStack(alignment: .leading, spacing: Layout.spacing) {
             if memories.isEmpty, case .trip = context {
-                VStack(spacing: Layout.spacing) {
-                    Image(systemName: "photo.on.rectangle.angled").font(.largeTitle).foregroundStyle(Palette.green)
-                    Text("A trip worth remembering").font(BrandFont.heading)
-                    Text("Keep a photo, a little note, or a moment together.").modifier(MemoryReadingStyle()).foregroundStyle(Palette.muted)
-                    Button("Add a memory") { editing = context.draft }.buttonStyle(PrimaryButton()).accessibilityIdentifier("add-memory")
-                }.multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(Layout.cardRadius)
-                    .background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                EmptyState(symbol: "photo.on.rectangle.angled", title: "A trip worth remembering",
+                    message: "Keep a photo, a little note, or a moment together.", style: .card,
+                    actionTitle: "Add a memory", actionIdentifier: "add-memory", action: { editing = context.draft })
             } else {
-            HStack {
-                Text("Memories").font(BrandFont.heading)
-                Spacer()
-                Button("Add", systemImage: "plus") { editing = context.draft }
-                    .frame(minHeight: Layout.touchTarget).foregroundStyle(Palette.green).accessibilityIdentifier("add-memory")
-            }
-            ForEach(memories) { memory in MemoryCard(memory: memory) }
+                SectionHeading(title: "Memories", actionTitle: "Add", actionSymbol: "plus", actionIdentifier: "add-memory", action: { editing = context.draft })
+                ForEach(memories) { memory in MemoryCard(memory: memory) }
             }
         }
         .sheet(item: $editing) { memory in NavigationStack { MemoryEditor(memory: memory) } }
@@ -55,7 +46,7 @@ struct MemoryCard: View {
     @Environment(AppModel.self) private var model
     let memory: PlaceMemory
     @State private var editing: MemoryEditRequest?
-    @State private var selectedPhoto: PhotoSelection?
+    @State private var selectedPhoto: PhotoReference?
     private var context: String {
         let date = memory.date.formatted(date: .abbreviated, time: .omitted)
         if let place = model.places.first(where: { $0.id == memory.placeID }) {
@@ -80,21 +71,12 @@ struct MemoryCard: View {
             PersonAvatarGroup(personIDs: memory.linkedPersonIDs, border: Palette.paper)
             if !memory.text.isEmpty { PersonMentionText(text: memory.text, mentions: memory.mentions ?? []) }
             if !memory.photoIDs.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], spacing: Layout.compact) {
-                    ForEach(Array(memory.photoIDs.enumerated()), id: \.element) { index, id in
-                        Button { selectedPhoto = PhotoSelection(id: id) } label: {
-                            StoredPhoto(id: id, thumbnail: true).frame(height: 96).clipped()
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }.accessibilityLabel("Photo \(index + 1)")
-                    }
-                    Button { editing = MemoryEditRequest(addPhotos: true) } label: {
-                        Image(systemName: "plus").font(.title2).foregroundStyle(Palette.green)
-                            .frame(maxWidth: .infinity).frame(height: 96)
-                            .background(Palette.background, in: RoundedRectangle(cornerRadius: 12))
-                    }.accessibilityLabel("Add photos to memory").accessibilityIdentifier("add-photos-to-memory")
+                PhotoGrid(items: memory.photoIDs.map { PhotoReference(id: $0) },
+                    open: { selectedPhoto = $0 }, add: { editing = MemoryEditRequest(addPhotos: true) }, addLabel: "Add photos to memory", addIdentifier: "add-photos-to-memory") { photo in
+                    StoredPhoto(id: photo.id, thumbnail: true)
                 }
             }
-        }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+        }.modifier(CardSurface())
             .sheet(item: $editing) { request in NavigationStack { MemoryEditor(memory: memory, addPhotos: request.addPhotos) } }
             .sheet(item: $selectedPhoto) { photo in
                 NavigationStack {
@@ -105,7 +87,6 @@ struct MemoryCard: View {
     }
 }
 private struct MemoryEditRequest: Identifiable { let id = UUID(); let addPhotos: Bool }
-private struct PhotoSelection: Identifiable { let id: String }
 
 struct StoredPhoto: View {
     @Environment(AppModel.self) private var model
@@ -156,27 +137,18 @@ struct MemoryEditor: View {
                 PersonMentionEditor(text: $draft.text, mentions: Binding(get: { draft.mentions ?? [] }, set: { draft.mentions = $0 }), label: "Write a note…", identifier: "memory-note")
             }
             Section {
-                NavigationLink {
-                    PeoplePicker(selection: $draft.personIDs)
-                } label: {
-                    LabeledContent("People", value: model.memories.people.filter { draft.personIDs.contains($0.id) }.map(\.name).joined(separator: ", ").isEmpty ? "Add people" : model.memories.people.filter { draft.personIDs.contains($0.id) }.map(\.name).joined(separator: ", "))
-                }.accessibilityIdentifier("memory-people")
+                PeopleSelectionField(selection: $draft.personIDs).accessibilityIdentifier("memory-people")
                 if draft.visitStart == nil { DatePicker("Date", selection: $draft.date, in: ...Date(), displayedComponents: .date) }
             }
             Section("Photos") {
                 if !draft.photoIDs.isEmpty {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))]) {
-                        ForEach(draft.photoIDs, id: \.self) { id in
-                            VStack(spacing: 0) {
-                                if let photo = photos.first(where: { $0.id == id }), let image = UIImage(contentsOfFile: photo.thumbnailURL.path) {
-                                    Image(uiImage: image).resizable().scaledToFit().frame(height: 90)
-                                } else { StoredPhoto(id: id, thumbnail: true).frame(height: 90).clipped() }
-                                Button("Remove photo", systemImage: "xmark.circle.fill") {
-                                    if let photo = photos.first(where: { $0.id == id }) { photoDraft.remove(photo) }
-                                    draft.photoIDs.removeAll { $0 == id }; photos.removeAll { $0.id == id }
-                                }.labelStyle(.iconOnly).frame(minHeight: Layout.touchTarget)
-                            }
-                        }
+                    PhotoGrid(items: draft.photoIDs.map { PhotoReference(id: $0) }, remove: { reference in
+                        if let photo = photos.first(where: { $0.id == reference.id }) { photoDraft.remove(photo) }
+                        draft.photoIDs.removeAll { $0 == reference.id }; photos.removeAll { $0.id == reference.id }
+                    }) { reference in
+                        if let photo = photos.first(where: { $0.id == reference.id }), let image = UIImage(contentsOfFile: photo.thumbnailURL.path) {
+                            Image(uiImage: image).resizable().scaledToFill()
+                        } else { StoredPhoto(id: reference.id, thumbnail: true) }
                     }
                 }
                 if importing { ProgressView(importProgress) }
@@ -198,15 +170,10 @@ struct MemoryEditor: View {
                           selectionBehavior: .ordered, matching: .images, preferredItemEncoding: .current)
             .onChange(of: selection) { importSelectionIfReady() }
             .onChange(of: choosingPhotos) { importSelectionIfReady() }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importTask?.cancel(); photoDraft.discard(); dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }.disabled(saving || importing || (draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.photoIDs.isEmpty && draft.personIDs.isEmpty))
-                        .accessibilityIdentifier("save-memory")
-                }
-            }
-            .interactiveDismissDisabled(saving || importing)
-            .alert("Couldn’t save memory", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") { error = nil } } message: { Text(error ?? "") }
+            .modifier(EditorControls(saving: saving,
+                canSave: !importing && (!draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.photoIDs.isEmpty || !draft.personIDs.isEmpty),
+                dismissalBlocked: importing, error: $error, errorTitle: "Couldn’t save memory", saveIdentifier: "save-memory",
+                cancel: { importTask?.cancel(); photoDraft.discard(); dismiss() }, save: { save() }))
             .confirmationDialog("Delete this memory and its photos?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete memory", role: .destructive) { save(deleting: true) }
             }

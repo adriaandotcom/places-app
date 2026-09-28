@@ -50,6 +50,36 @@ struct PersonRow: View {
     }
 }
 
+struct PeopleSelectionField: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Binding var selection: [String]
+    var body: some View {
+        let people = selection.compactMap { id in model.memories.people.first { $0.id == id } }
+        NavigationLink { PeoplePicker(selection: $selection) } label: {
+            layout {
+                Text("People")
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
+                if people.isEmpty { Text("Add people").foregroundStyle(Palette.muted) }
+                else {
+                    HStack(spacing: -Layout.avatarOverlap) {
+                        ForEach(people.prefix(3)) { person in
+                            PersonAvatar(person: person, size: Layout.touchTarget)
+                                .overlay(Circle().stroke(Palette.paper, lineWidth: Layout.avatarBorder))
+                        }
+                    }
+                    if people.count > 3 { Text("+\(people.count - 3)").foregroundStyle(Palette.muted) }
+                }
+            }.frame(minHeight: Layout.touchTarget)
+        }.accessibilityLabel("People").accessibilityValue(people.isEmpty ? "Add people" : people.map(\.name).joined(separator: ", "))
+    }
+    private var layout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Layout.compact))
+            : AnyLayout(HStackLayout(spacing: Layout.spacing))
+    }
+}
+
 struct PersonMentionText: View {
     @Environment(AppModel.self) private var model
     let text: String

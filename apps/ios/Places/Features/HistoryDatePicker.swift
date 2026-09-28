@@ -65,8 +65,7 @@ struct HistoryDatePicker: View {
                     }.pickerStyle(.segmented).accessibilityIdentifier("history-selection-mode")
                 }
                 if range {
-                    DatePicker("From", selection: $start, in: ...Date(), displayedComponents: .date)
-                    DatePicker("To", selection: $end, in: start...max(start, Date()), displayedComponents: .date)
+                    DateRangeFields(start: $start, end: $end)
                 } else {
                     HistoryCalendar(days: model.historyDays, selection: $start).frame(minHeight: 360)
                 }
@@ -134,7 +133,6 @@ struct HistoryDatePicker: View {
             .navigationTitle(timelineOnly ? "Your history" : "Dates & visits").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
             .sheet(item: $tripDraft) { trip in NavigationStack { TripEditor(trip: trip) } }
-            .onChange(of: start) { _, value in if end < value { end = value } }
             .task {
                 range = !timelineOnly && model.mapPeriod != nil
                 start = timelineOnly ? model.selectedDay : model.mapPeriod?.interval.start ?? model.selectedDay

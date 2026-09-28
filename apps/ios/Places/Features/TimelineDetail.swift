@@ -66,7 +66,7 @@ struct TimelineDetail: View {
                             }.buttonStyle(.plain).accessibilityIdentifier("visit-suggestion-\(candidate.id)")
                             if candidate.id != suggestions.last?.id { Divider().padding(.horizontal, Layout.spacing) }
                         }
-                    }.background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                    }.modifier(CardSurface(padding: 0))
                 }
                 if item.kind == .gap {
                     Text(item.connection == nil
@@ -79,15 +79,9 @@ struct TimelineDetail: View {
                         Label(model.endpointName(connection.to, fallback: "Later location"), systemImage: "b.circle.fill")
                     }.font(BrandFont.body)
                 }
-                if model.mapsAvailable && (item.kind != .gap || item.connection != nil) {
-                    PrivacyMapView(items: [item]).frame(height: Layout.mapHeight).clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
-                    if item.connection != nil {
-                        Text("Dashed lines link known endpoints; they aren’t a recorded route.")
-                            .font(.caption).foregroundStyle(Palette.muted)
-                    }
-                }
+                MapPreviewCard(items: [item], caption: item.connection == nil ? nil : "Dashed lines link known endpoints; they aren’t a recorded route.")
                 if let place {
-                    NavigationLink { PlaceDetail(placeID: place.id) } label: { InfoRow(symbol: place.symbol, title: "About this place", subtitle: place.name, colorIndex: place.colorIndex) }.buttonStyle(.plain)
+                    NavigationLink { PlaceDetail(placeID: place.id) } label: { SavedPlaceRow(place: place, title: "About this place", subtitle: place.name, card: true) }.buttonStyle(.plain)
                 }
                 if let trip = model.memories.trips.first(where: { !$0.hidden && $0.contains(item.start) }) { TripLink(trip: trip) }
                 MemorySection(context: .visit(item))

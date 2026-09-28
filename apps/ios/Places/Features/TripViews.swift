@@ -11,7 +11,7 @@ struct TripsList: View {
                 .frame(minHeight: Layout.touchTarget)
         }
         if trips.isEmpty {
-            EmptyHistory(symbol: "suitcase.rolling", title: "Your time away", message: "Your trips will appear here. You can also add one yourself.")
+            EmptyState(symbol: "suitcase.rolling", title: "Your time away", message: "Your trips will appear here. You can also add one yourself.")
         }
         ForEach(trips) { trip in TripLink(trip: trip) }
     }
@@ -47,18 +47,15 @@ struct TripDetail: View {
                     Text(TripDisplay.dates(trip)).font(.subheadline).foregroundStyle(Palette.muted)
                     PersonAvatarGroup(personIDs: trip.personIDs)
                     MemorySection(context: .trip(trip))
-                    if model.mapsAvailable && !items.isEmpty {
-                        PrivacyMapView(items: items, routePoints: routes).frame(height: Layout.mapHeight)
-                            .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
-                    }
+                    MapPreviewCard(items: items, routePoints: routes)
                     if loadError { Text("The trip’s visits couldn’t be loaded. Reopen this trip to try again.").foregroundStyle(Palette.muted) }
                     let places = model.places.filter { place in items.contains { $0.kind == .stay && $0.placeID == place.id } }
                     if !places.isEmpty {
-                        Text("Places on this trip").font(BrandFont.heading)
+                        SectionHeading(title: "Places on this trip")
                         ForEach(places) { place in
                             NavigationLink {
                                 TripPlaceVisits(trip: trip, place: place, items: items.filter { $0.kind == .stay && $0.placeID == place.id })
-                            } label: { InfoRow(symbol: place.symbol, title: place.name, subtitle: "View visits & memories", colorIndex: place.colorIndex) }.buttonStyle(.plain)
+                            } label: { SavedPlaceRow(place: place, subtitle: "View visits & memories", card: true) }.buttonStyle(.plain)
                         }
                     }
                 }.padding(Layout.gutter)
@@ -119,28 +116,19 @@ struct TripEditor: View {
         Form {
             Section {
                 TextField("Trip name", text: $trip.title).accessibilityIdentifier("trip-name")
-                DatePicker("From", selection: $trip.start, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
-                Toggle("Ongoing", isOn: $ongoing)
-                if !ongoing { DatePicker("Until", selection: $end, in: trip.start...max(trip.start, Date()), displayedComponents: [.date, .hourAndMinute]) }
+                DateRangeFields(start: $trip.start, end: $end, ongoing: $ongoing, components: [.date, .hourAndMinute], endTitle: "Until")
             }
             Section {
-                NavigationLink { PeoplePicker(selection: $trip.personIDs) } label: { LabeledContent("People", value: "\(trip.personIDs.count)") }.accessibilityIdentifier("trip-people")
+                PeopleSelectionField(selection: $trip.personIDs).accessibilityIdentifier("trip-people")
             }
             if model.memories.trips.contains(where: { $0.id == trip.id }) {
                 Section { Toggle("Hide this trip", isOn: $trip.hidden) } footer: { Text("Hidden trips keep their notes and photos. You can find them under Hidden in Trips.") }
             }
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Trip").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
-            .onChange(of: trip.start) { _, start in if end < start { end = start } }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }.disabled(saving || trip.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (!ongoing && end <= trip.start))
-                        .accessibilityIdentifier("save-trip")
-                }
-            }
-            .interactiveDismissDisabled(saving)
-            .alert("Couldn’t save trip", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") {} } message: { Text(error ?? "") }
+            .modifier(EditorControls(saving: saving,
+                canSave: !trip.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (ongoing || end > trip.start),
+                error: $error, errorTitle: "Couldn’t save trip", saveIdentifier: "save-trip", cancel: { dismiss() }, save: save))
     }
     private func save() {
         guard let epoch else { return }

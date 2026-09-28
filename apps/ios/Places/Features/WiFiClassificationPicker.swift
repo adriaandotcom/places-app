@@ -36,7 +36,7 @@ struct WiFiClassificationPicker: View {
                     }.buttonStyle(.plain).accessibilityAddTraits(classification == option ? .isSelected : [])
                 }
             }
-        }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+        }.modifier(CardSurface())
     }
 }
 

@@ -139,6 +139,15 @@ import XCTest
         app.buttons["save-memory"].tap()
         XCTAssertTrue(app.buttons["Photo 3"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Photo 4"].exists)
+        app.buttons["Edit memory"].firstMatch.tap()
+        XCTAssertEqual(photos.count, 3)
+        // Each grid action removes only its own photo, including inside a Form row.
+        let removeSecond = photos.element(boundBy: 1)
+        reveal(removeSecond, in: app); removeSecond.tap()
+        XCTAssertEqual(photos.count, 2)
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons["Photo 2"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Photo 3"].exists)
     }
 
     func testMentionsAvatarCropAndAddingMorePhotos() {

@@ -36,11 +36,11 @@ struct AvatarChooser: View {
                     .buttonStyle(PrimaryButton()).disabled(loading).accessibilityIdentifier("choose-avatar-photo")
                 if loading { ProgressView("Opening photo…") }
                 if !faces.isEmpty {
-                    Text("Faces from shared trips").font(BrandFont.heading)
+                    SectionHeading(title: "Faces from shared trips")
                     suggestionGrid(faces, facesOnly: true)
                 }
                 if !photos.isEmpty {
-                    Text("Recent trip photos").font(BrandFont.heading)
+                    SectionHeading(title: "Recent trip photos")
                     suggestionGrid(photos, facesOnly: false)
                 }
                 if scanning { ProgressView("Finding photos on this iPhone…") }
@@ -56,17 +56,12 @@ struct AvatarChooser: View {
             .alert("Couldn’t open photo", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") {} } message: { Text(error ?? "") }
     }
     @ViewBuilder private func suggestionGrid(_ suggestions: [AvatarSuggestion], facesOnly: Bool) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: Layout.portraitSize))], spacing: Layout.compact) {
-            ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
-                Button { open(suggestion) } label: {
-                    if let image = UIImage(data: suggestion.preview) {
-                        Image(uiImage: image).resizable().scaledToFill().frame(height: Layout.portraitSize)
-                            .clipped().clipShape(RoundedRectangle(cornerRadius: Layout.compact))
-                    }
-                }.disabled(loading).accessibilityLabel(facesOnly ? "Suggested face \(index + 1)" : "Trip photo \(index + 1)")
-            }
-        }
+        PhotoGrid(items: suggestions, label: { facesOnly ? "Suggested face \($0 + 1)" : "Trip photo \($0 + 1)" }, open: open) { suggestion in
+            if let image = UIImage(data: suggestion.preview) { Image(uiImage: image).resizable().scaledToFill() }
+            else { Image(systemName: "photo").foregroundStyle(Palette.muted) }
+        }.disabled(loading)
     }
+
     private func importSelection() {
         guard !choosingPhoto, !loading, let selected = selection else { return }
         selection = nil; loading = true
@@ -162,7 +157,7 @@ private struct AvatarCropEditor: View {
     @State private var crop = CGRect(x: 0, y: 0, width: 1, height: 1)
     @State private var zoom: CGFloat = 1
     @State private var saving = false
-    @State private var error = false
+    @State private var error: String?
     var body: some View {
         VStack(spacing: Layout.spacing) {
             Spacer()
@@ -181,21 +176,17 @@ private struct AvatarCropEditor: View {
             Spacer()
         }.padding(Layout.gutter).background(Palette.background)
             .navigationTitle("Crop photo").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Use photo") {
-                        saving = true
-                        let rect = crop
-                        Task {
-                            do { let data = try await Task.detached(priority: .userInitiated) { try AvatarImage.cropped(source.data, rect: rect) }.value; use(data) }
-                            catch { self.error = true }
-                            saving = false
-                        }
-                    }.disabled(saving).accessibilityIdentifier("use-avatar-crop")
-                }
-            }.interactiveDismissDisabled(saving)
-            .alert("Couldn’t crop photo", isPresented: $error) { Button("OK") {} } message: { Text("Try choosing the photo again.") }
+            .modifier(EditorControls(saving: saving, error: $error, errorTitle: "Couldn’t crop photo", saveTitle: "Use photo",
+                saveIdentifier: "use-avatar-crop", cancel: { dismiss() }, save: save))
+    }
+    private func save() {
+        saving = true
+        let rect = crop
+        Task {
+            do { let data = try await Task.detached(priority: .userInitiated) { try AvatarImage.cropped(source.data, rect: rect) }.value; use(data) }
+            catch { self.error = "Try choosing the photo again." }
+            saving = false
+        }
     }
 }
 

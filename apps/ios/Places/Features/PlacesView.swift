@@ -20,12 +20,11 @@ struct PlacesView: View {
                 else if section == "People" { PeopleList() }
                 else {
                 if model.places.isEmpty {
-                    EmptyHistory(symbol: "mappin.and.ellipse", title: "Start with somewhere familiar", message: "Add home, work, or a favourite stop. A name and a location are all you need.")
-                    Button("Add a place") { adding = true }.buttonStyle(PrimaryButton())
+                    EmptyState(symbol: "mappin.and.ellipse", title: "Start with somewhere familiar", message: "Add home, work, or a favourite stop. A name and a location are all you need.", actionTitle: "Add a place", action: { adding = true })
                 }
                 ForEach(model.places) { place in
                     NavigationLink { PlaceDetail(placeID: place.id) } label: {
-                        InfoRow(symbol: place.symbol, title: place.name, subtitle: place.address.isEmpty ? "Saved place" : place.address, colorIndex: place.colorIndex)
+                        SavedPlaceRow(place: place, card: true)
                     }.buttonStyle(.plain)
                 }
                 }
@@ -78,7 +77,7 @@ struct PlaceDetail: View {
                         }
                     }
                     if !tripIDs.isEmpty {
-                        Text("Trips here").font(BrandFont.heading)
+                        SectionHeading(title: "Trips here")
                         ForEach(model.memories.trips.filter { tripIDs.contains($0.id) }) { trip in TripLink(trip: trip) }
                     }
                     MemorySection(context: .place(place))
@@ -86,14 +85,7 @@ struct PlaceDetail: View {
                     let points = model.accessPoints.filter { $0.placeID == placeID }
                     let networks = model.networks.filter { network in points.contains { $0.networkID == network.id } || place.expectedSSIDs.contains(network.ssid) }
                     let names = place.expectedSSIDs + networks.map(\.ssid).filter { !place.expectedSSIDs.contains($0) }
-                    HStack {
-                        Text("Wi-Fi networks").font(BrandFont.heading)
-                        Spacer()
-                        Button(names.isEmpty ? "Add" : "Edit") { editor = .wifi }
-                            .frame(minWidth: Layout.touchTarget, minHeight: Layout.touchTarget)
-                            .foregroundStyle(Palette.green)
-                            .accessibilityLabel("Edit Wi-Fi networks").accessibilityIdentifier("place-edit-wifi")
-                    }
+                    SectionHeading(title: "Wi-Fi networks", actionTitle: names.isEmpty ? "Add" : "Edit", actionIdentifier: "place-edit-wifi", action: { editor = .wifi })
                     if names.isEmpty { Text("No Wi-Fi networks added.").font(BrandFont.body).foregroundStyle(Palette.muted) }
                     else {
                         VStack(alignment: .leading, spacing: Layout.compact) {
@@ -108,7 +100,7 @@ struct PlaceDetail: View {
                                     }.buttonStyle(.plain)
                                 } else { WiFiNameLabel(name: name) }
                             }
-                        }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                        }.modifier(CardSurface())
                     }
                     Text("Coordinates are stored locally. Changing a place re-evaluates observations, while preserving your timeline corrections.").font(.footnote).foregroundStyle(Palette.muted)
                     Button("Edit place") { editor = .place }.buttonStyle(PrimaryButton())

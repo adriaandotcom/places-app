@@ -5,11 +5,11 @@ struct PeopleList: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         if model.memories.people.isEmpty {
-            EmptyHistory(symbol: "person.2", title: "The people in your memories", message: "Add someone by name, then include them in a trip or a memory.")
+            EmptyState(symbol: "person.2", title: "The people in your memories", message: "Add someone by name, then include them in a trip or a memory.")
         }
         ForEach(model.memories.people) { person in
             NavigationLink { PersonDetail(personID: person.id) } label: {
-                PersonRow(person: person).padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                PersonRow(person: person).modifier(CardSurface())
             }.buttonStyle(.plain)
         }
     }
@@ -77,12 +77,12 @@ struct PersonDetail: View {
                     if !person.detail.isEmpty { PersonMentionText(text: person.detail, mentions: person.mentions ?? []) }
                     let trips = model.memories.trips.filter { !$0.hidden && $0.personIDs.contains(personID) }
                     if !trips.isEmpty {
-                        Text("Trips together").font(BrandFont.heading)
+                        SectionHeading(title: "Trips together")
                         ForEach(trips) { trip in TripLink(trip: trip) }
                     }
                     let memories = model.memories.memories.filter { $0.linkedPersonIDs.contains(personID) }
                     if !memories.isEmpty {
-                        Text("Shared memories").font(BrandFont.heading)
+                        SectionHeading(title: "Shared memories")
                         ForEach(memories) { memory in MemoryCard(memory: memory) }
                     }
                     if trips.isEmpty && memories.isEmpty { Text("Include \(person.name) in a trip or a memory to see it here.").foregroundStyle(Palette.muted) }
@@ -124,15 +124,11 @@ struct PersonEditor: View {
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Person").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
             .sheet(isPresented: $choosingAvatar) { NavigationStack { AvatarChooser(person: person) { person.avatarJPEG = $0; choosingAvatar = false } } }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(saving || person.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
-            }
-            .interactiveDismissDisabled(saving)
+            .modifier(EditorControls(saving: saving, canSave: !person.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                error: $error, errorTitle: "Couldn’t save person", cancel: { dismiss() }, save: { save() }))
             .confirmationDialog("Remove this person from your trips and memories? Notes and photos will stay.", isPresented: $deleting, titleVisibility: .visible) {
                 Button("Delete person", role: .destructive) { save(deleting: true) }
             }
-            .alert("Couldn’t save person", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") {} } message: { Text(error ?? "") }
     }
     private func save(deleting: Bool = false) {
         guard let epoch else { return }

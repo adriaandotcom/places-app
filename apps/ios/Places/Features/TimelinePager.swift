@@ -172,7 +172,7 @@ private struct TimelineDayPage: View {
                 } else if !loaded {
                     ProgressView().padding()
                 } else if items.isEmpty {
-                    EmptyHistory(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
+                    EmptyState(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "A little history starts here",
                         message: "Your visits and journeys will appear as you go. Add a familiar place, or enable location in Settings.")
                     Button("Add a familiar place", action: addPlace).buttonStyle(PrimaryButton())
                 } else {

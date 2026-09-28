@@ -90,33 +90,29 @@ struct PrimaryButton: ButtonStyle {
             .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
-struct EmptyHistory: View {
-    let symbol: String
-    let title: String
-    let message: String
-    var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: symbol).font(.system(size: 38, weight: .light)).foregroundStyle(Palette.green)
-                .frame(width: 88, height: 88).background(Palette.soft(0), in: RoundedRectangle(cornerRadius: 28))
-            Text(title).font(BrandFont.heading)
-            Text(message).font(BrandFont.body).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
-        }.frame(maxWidth: .infinity).padding(.horizontal, 24).padding(.vertical, 40)
-    }
-}
 struct InfoRow: View {
     let symbol: String
     let title: String
     let subtitle: String
     var colorIndex = 0
+    var card = true
+    var showsDisclosure = false
     var body: some View {
-        HStack(spacing: 14) {
+        Group {
+            if card { content.modifier(CardSurface()) }
+            else { content }
+        }
+    }
+    private var content: some View {
+        HStack(spacing: Layout.spacing) {
             PlaceIcon(symbol: symbol, colorIndex: colorIndex, size: 36)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(BrandFont.title)
-                Text(subtitle).font(.subheadline).foregroundStyle(Palette.muted)
+                if !subtitle.isEmpty { Text(subtitle).font(.subheadline).foregroundStyle(Palette.muted) }
             }
             Spacer(minLength: 0)
-        }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: 20))
+            if showsDisclosure { Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted).accessibilityHidden(true) }
+        }.frame(minHeight: Layout.touchTarget)
     }
 }
 enum Display {
@@ -146,7 +142,7 @@ struct InlineNotice: View {
                 Text(message).font(.subheadline).foregroundStyle(Palette.muted)
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Layout.spacing).background(Palette.soft(2), in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+            .modifier(CardSurface(color: Palette.soft(2)))
             .accessibilityElement(children: .combine)
     }
 }

@@ -28,13 +28,9 @@ struct SettingsView: View {
                 }
             }
             Section("Permissions") {
-                Button { model.tracking.requestLocation() } label: { LabeledContent("Location", value: model.tracking.locationStatus) }
-                Button { model.tracking.requestMotion() } label: {
-                    LabeledContent("Motion & Fitness", value: model.tracking.motionAuthorization == .authorized ? "Enabled" : "Not enabled")
-                }
-                Button { Task { await model.tracking.requestNotifications() } } label: {
-                    LabeledContent("Notifications", value: model.tracking.notificationAuthorization == .authorized ? "Enabled" : "Not enabled")
-                }
+                PermissionAccessRow(permission: .location)
+                PermissionAccessRow(permission: .motion)
+                PermissionAccessRow(permission: .notifications)
                 Button("Open system settings") { model.tracking.openSettings() }
             }
             Section {
@@ -51,7 +47,7 @@ struct SettingsView: View {
                 NavigationLink("Saved Wi-Fi networks") {
                     ScrollView {
                         VStack(spacing: 16) {
-                            if model.networks.isEmpty { EmptyHistory(symbol: "wifi", title: "No networks yet", message: "Connected networks appear when precise location access and Wi-Fi information are available.") }
+                            if model.networks.isEmpty { EmptyState(symbol: "wifi", title: "No networks yet", message: "Connected networks appear when precise location access and Wi-Fi information are available.") }
                             ForEach(model.networks) { network in WiFiClassificationPicker(network: network) }
                         }.padding(20)
                     }.background(Palette.background).navigationTitle("Wi-Fi networks")

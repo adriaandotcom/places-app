@@ -99,9 +99,9 @@ struct OnboardingView: View {
             }
             Text("Record your day, even with your phone in your pocket.").font(BrandFont.body).foregroundStyle(Palette.muted)
             VStack(spacing: Layout.spacing) {
-                LocationAccessRow(title: "Background location", detail: model.tracking.authorization == .authorizedAlways ? "Always allowed" : "Still needed", complete: model.tracking.authorization == .authorizedAlways)
-                LocationAccessRow(title: "Precise Location", detail: model.tracking.accuracy == .fullAccuracy && model.tracking.canLocate ? "Enabled" : "Still needed", complete: model.tracking.accuracy == .fullAccuracy && model.tracking.canLocate)
-            }.padding(Layout.spacing).background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                PermissionRow(title: "Background location", status: model.tracking.authorization == .authorizedAlways ? "Always allowed" : "Still needed", enabled: model.tracking.authorization == .authorizedAlways, style: .detailed)
+                PermissionRow(title: "Precise Location", status: model.tracking.accuracy == .fullAccuracy && model.tracking.canLocate ? "Enabled" : "Still needed", enabled: model.tracking.accuracy == .fullAccuracy && model.tracking.canLocate, style: .detailed)
+            }.modifier(CardSurface())
             if !model.tracking.locationSetupReady {
                 InlineNotice(title: "Location setup is incomplete", message: model.tracking.locationSetupMessage)
                 if !model.tracking.canLocate {
@@ -123,12 +123,12 @@ struct OnboardingView: View {
             Text("Motion helps tell walking from cycling or driving, and helps the tracker notice when movement resumes.").font(BrandFont.body)
             InfoRow(symbol: "battery.100percent", title: "Less unnecessary location work", subtitle: "Use simple movement signals when they are available.", colorIndex: 0)
             if model.tracking.motionAuthorization != .notDetermined {
-                Text(model.tracking.motionAuthorization == .authorized ? "Motion access is enabled." : "Motion is unavailable. Location tracking can still work.").font(BrandFont.body)
+                PermissionAccessRow(permission: .motion, style: .detailed).modifier(CardSurface())
             }
         case .places:
             Text("Places you\nalready know").font(BrandFont.hero)
             Text("Start with the places that feel like you.").font(BrandFont.body).foregroundStyle(Palette.muted)
-            ForEach(model.places) { place in InfoRow(symbol: place.symbol, title: place.name, subtitle: "Saved", colorIndex: place.colorIndex) }
+            ForEach(model.places) { place in SavedPlaceRow(place: place, subtitle: "Saved", card: true) }
             if !model.places.contains(where: { $0.name.lowercased() == "home" }) {
                 PlacePresetCard(title: "Home", subtitle: "Your own little corner", symbol: "house.fill", colorIndex: 0) { placePreset = .home }
                     .accessibilityIdentifier("preset-home")
@@ -147,11 +147,14 @@ struct OnboardingView: View {
         case .notifications:
             permissionHero(symbol: "bell.fill", title: "Only when\nit matters", index: 2)
             Text("Places can let you know if background location access changes and your history may develop gaps. There are no daily nudges or promotional notifications.").font(BrandFont.body)
-            Text("Notifications are optional. All tracking status is also available inside the app.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            Text("All tracking status is also available inside the app.").font(BrandFont.body).foregroundStyle(Palette.muted)
+            if model.tracking.notificationAuthorization != .notDetermined {
+                PermissionAccessRow(permission: .notifications, style: .detailed).modifier(CardSurface())
+            }
         case .ready:
             permissionHero(symbol: "checkmark", title: "Make yourself\nat home", index: 0)
             Text("Your history begins with the permissions you chose. You can change them later in Settings.").font(BrandFont.body)
-            InfoRow(symbol: "location.fill", title: "Location", subtitle: model.tracking.locationStatus, colorIndex: 1)
+            PermissionAccessRow(permission: .location, style: .detailed).modifier(CardSurface())
             InfoRow(symbol: "mappin", title: "Familiar places", subtitle: "\(model.places.count) saved", colorIndex: 2)
             InfoRow(symbol: "lock.fill", title: "Storage", subtitle: "On this iPhone. Maps: \(model.mapProvider.title).")
         }
@@ -184,23 +187,6 @@ struct OnboardingView: View {
         case .ready: Task { await model.finishOnboarding() }
         default: next()
         }
-    }
-}
-
-private struct LocationAccessRow: View {
-    let title: String
-    let detail: String
-    let complete: Bool
-    var body: some View {
-        HStack(spacing: Layout.spacing) {
-            Image(systemName: complete ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(complete ? Palette.green : Palette.warning).font(.title2)
-            VStack(alignment: .leading, spacing: Layout.compact) {
-                Text(title).font(BrandFont.title)
-                Text(detail).font(.subheadline).foregroundStyle(Palette.muted)
-            }
-            Spacer(minLength: 0)
-        }.accessibilityElement(children: .combine)
     }
 }
 

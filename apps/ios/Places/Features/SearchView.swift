@@ -18,11 +18,11 @@ struct SearchView: View {
                 if model.searchText.isEmpty {
                     Text("Search your saved names and addresses.").font(BrandFont.body).foregroundStyle(Palette.muted)
                 } else if model.searchResults.isEmpty {
-                    EmptyHistory(symbol: "text.magnifyingglass", title: "No places found", message: "Try a shorter name or an address you’ve saved.")
+                    EmptyState(symbol: "text.magnifyingglass", title: "No places found", message: "Try a shorter name or an address you’ve saved.")
                 }
                 ForEach(model.searchResults) { place in
                     NavigationLink { PlaceDetail(placeID: place.id) } label: {
-                        InfoRow(symbol: place.symbol, title: place.name, subtitle: place.address.isEmpty ? "Saved place" : place.address, colorIndex: place.colorIndex)
+                        SavedPlaceRow(place: place, card: true)
                     }.buttonStyle(.plain)
                 }
             }.padding(Layout.gutter)

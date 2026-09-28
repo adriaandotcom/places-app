@@ -225,10 +225,8 @@ struct PlaceEditor: View {
                 }
             }
             .navigationTitle(wifiOnly ? "Wi-Fi networks" : original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) { Button(saving ? "Saving…" : "Save", action: save).disabled(saving).accessibilityIdentifier("save-place") }
-            }
+            .modifier(EditorControls(saving: saving, error: $validation, errorTitle: "Couldn’t save this place",
+                saveIdentifier: "save-place", cancel: { dismiss() }, save: save))
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if focusedField != nil || wifiFocused {
                     HStack {
@@ -240,7 +238,6 @@ struct PlaceEditor: View {
                         .background(Palette.background)
                 }
             }
-            .interactiveDismissDisabled(saving)
             .task {
                 if let assigning { adjacent = (try? await model.store?.adjacentPlaces(for: assigning)) ?? [] }
                 // Reuse a fresh authorized fix; searching must never start sensors
@@ -286,9 +283,6 @@ struct PlaceEditor: View {
                 Button("Cancel", role: .cancel) { existingSuggestion = nil }
             } message: { Text("Use your saved place instead of creating a duplicate.") }
             .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: Binding(get: { symbol }, set: { symbol = $0; userChoseIcon = true }), colorIndex: colorIndex) } }
-            .alert("Couldn’t save this place", isPresented: Binding(get: { validation != nil }, set: { if !$0 { validation = nil } })) {
-                Button("OK") { validation = nil }
-            } message: { Text(validation ?? "") }
             .onChange(of: name) { _, value in
                 if !userChoseIcon { symbol = PlaceIconMatcher.suggestedSymbol(name: value, category: value == catalogName ? catalogCategory : nil) ?? "mappin" }
             }
@@ -395,13 +389,7 @@ private struct SavedPlacePicker: View {
         List {
             ForEach(places) { place in
                 Button { select(place) } label: {
-                    HStack(spacing: Layout.spacing) {
-                        PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex)
-                        VStack(alignment: .leading) {
-                            Text(place.name).foregroundStyle(Palette.ink)
-                            if !place.address.isEmpty { Text(place.address).font(.caption).foregroundStyle(Palette.muted) }
-                        }
-                    }.frame(minHeight: Layout.touchTarget)
+                    SavedPlaceRow(place: place)
                 }.accessibilityIdentifier("saved-place-\(place.id)")
             }
             if places.isEmpty { Text("No saved places match this name.").foregroundStyle(Palette.muted) }
