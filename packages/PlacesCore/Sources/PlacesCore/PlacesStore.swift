@@ -89,7 +89,7 @@ public actor PlacesStore {
 
     public func savePlace(_ place: Place, assigning edit: UserOverride? = nil) throws {
         guard !place.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius) else { throw PlacesError.invalidPlace }
+              place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius), place.area?.isValid != false else { throw PlacesError.invalidPlace }
         try queue.write { db in
             if let edit, edit.kind != .stay || edit.placeID != place.id { throw PlacesError.invalidCorrection }
             try StoreSQL.savePlace(place, db: db)
@@ -439,7 +439,7 @@ public actor PlacesStore {
 enum StoreSQL {
     static func savePlace(_ place: Place, db: Database) throws {
         guard !place.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius) else { throw PlacesError.invalidPlace }
+              place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius), place.area?.isValid != false else { throw PlacesError.invalidPlace }
         try db.execute(sql: "INSERT INTO places(id, name, address, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, address = excluded.address, payload = excluded.payload",
                        arguments: [place.id, place.name, place.address, try encode(place)])
         try db.execute(sql: "DELETE FROM placeSearch WHERE placeID = ?", arguments: [place.id])

@@ -122,7 +122,7 @@ def check_map_manifest(packs):
         errors.append('Map pack manifest must contain exactly the three supported packs')
     for pack in packs:
         version = pack.get('version', '')
-        expected = f'https://github.com/adriaandotcom/places-app/releases/download/maps-{version}/{pack.get("id")}.pmtiles'
+        expected = f'https://places-app.b-cdn.net/maps/bootstrap/{version}/{pack.get("id")}.pmtiles'
         if not re.fullmatch(r'[0-9.]+', version) or pack.get('url') != expected:
             errors.append('Map pack URL must be an immutable Places release asset with no query or fragment')
         if not re.fullmatch('[0-9a-f]{64}', pack.get('sha256', '')):

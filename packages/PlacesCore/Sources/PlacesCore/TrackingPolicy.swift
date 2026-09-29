@@ -25,7 +25,7 @@ public struct SensorPolicy: Equatable, Sendable {
 }
 
 public enum TrackingPolicy {
-    public static let version = "1.4"
+    public static let version = "1.5"
     public static let stationaryDuration: TimeInterval = 180
     public static let evidenceGap: TimeInterval = 20 * 60
     public static let stationaryRadius: Double = 60
@@ -57,7 +57,7 @@ public enum TrackingPolicy {
         guard let coordinate = observation.usableCoordinate,
               let accuracy = observation.horizontalAccuracy else { return nil }
         let candidates = places.filter {
-            accuracy <= min(100, $0.radius) && coordinate.distance(to: $0.coordinate) <= $0.radius
+            accuracy <= min(100, $0.radius) && $0.contains(coordinate)
         }.sorted { coordinate.distance(to: $0.coordinate) < coordinate.distance(to: $1.coordinate) }
         // Overlapping places cannot be resolved from one coarse fix.
         guard let closest = candidates.first else { return nil }
@@ -80,7 +80,7 @@ public enum TrackingPolicy {
         let ids = Set(accessPoints.filter { $0.networkID == network.id && $0.bssid.lowercased() == bssid }.compactMap(\.placeID))
         guard ids.count == 1, let place = places.first(where: { ids.contains($0.id) }) else { return nil }
         if let coordinate = observation.usableCoordinate,
-           coordinate.distance(to: place.coordinate) > place.radius + min(100, observation.horizontalAccuracy ?? 0) {
+           !place.contains(coordinate, tolerance: min(100, observation.horizontalAccuracy ?? 0)) {
             return nil
         }
         return place

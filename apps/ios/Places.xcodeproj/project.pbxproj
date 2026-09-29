@@ -50,6 +50,7 @@
 		8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738274611DA8F1F53B88808E /* HistoryCalendar.swift */; };
 		9162EEFC324833E93A1486AF /* OfflineMaps in Resources */ = {isa = PBXBuildFile; fileRef = 3D4D0C7A10D98A0969FDD33A /* OfflineMaps */; };
 		9612B46A325D2254206D4715 /* AppleMapsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */; };
+		A0149028523DCE2ECFAC8FF0 /* MapParkCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943131F4A6EC985998F4F312 /* MapParkCatalog.swift */; };
 		A3FB6C17CAEF0EE2EBFE79D6 /* BricolageGrotesque-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */; };
 		A48B0DD0D51FE08FD52CA6EA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6ED1792B97EE623188206D05 /* Assets.xcassets */; };
 		A94B210A5F4EC76421EDF598 /* DemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129CE07ADA04E88C1C23E71 /* DemoFixtures.swift */; };
@@ -57,6 +58,7 @@
 		BA60D0E791CB46DE7E6E47DF /* WiFiTrackingControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */; };
 		BD22F1A51DD600D357144295 /* PlaceEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */; };
 		BFAE0FBEA803C5B9D62BF290 /* PlacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */; };
+		C3C5E2D02AE0D27792664BA4 /* PlaceAreaEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC934B5FB2EF8487E979FE7 /* PlaceAreaEditor.swift */; };
 		CB030EB2FECF48BC78AE2A32 /* RewindNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */; };
 		CCBD069A321A0025EE164EE9 /* PeopleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CB0F95F81035FD35384D4E /* PeopleViews.swift */; };
 		CCDEBFBDE6EACDA02A79A5F4 /* MemoryPhotoPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E40C48BB5A298680CAF05C /* MemoryPhotoPager.swift */; };
@@ -105,6 +107,7 @@
 		17246D2B38F558823736D16B /* Places.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Places.entitlements; sourceTree = "<group>"; };
 		19157741242CE715116913F2 /* PlacesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesView.swift; sourceTree = "<group>"; };
 		19E16CB5D0FBE5CF702B4018 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		1DC934B5FB2EF8487E979FE7 /* PlaceAreaEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceAreaEditor.swift; sourceTree = "<group>"; };
 		28EAB82AE40CC1AEC1590474 /* PlacesCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PlacesCore; path = ../../packages/PlacesCore; sourceTree = SOURCE_ROOT; };
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -132,6 +135,7 @@
 		85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceIconPicker.swift; sourceTree = "<group>"; };
 		8683E4F2F033E292992D7CAC /* AddPastVisits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPastVisits.swift; sourceTree = "<group>"; };
 		87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindNotificationTests.swift; sourceTree = "<group>"; };
+		943131F4A6EC985998F4F312 /* MapParkCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapParkCatalog.swift; sourceTree = "<group>"; };
 		9600EC9BAFA7C29D961C9667 /* AvatarViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarViews.swift; sourceTree = "<group>"; };
 		96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "GRDB-LICENSE.txt"; sourceTree = "<group>"; };
 		986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-ExtraBold.ttf"; sourceTree = "<group>"; };
@@ -217,6 +221,7 @@
 				0E0914E2F6C1361BCFAF40D5 /* PermissionAccessRow.swift */,
 				4CF65AC60760C72109D6FE00 /* PersonComponents.swift */,
 				E3572E6AA534B1A12C5149AD /* PhotoGrid.swift */,
+				1DC934B5FB2EF8487E979FE7 /* PlaceAreaEditor.swift */,
 				48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */,
 				0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */,
 				85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */,
@@ -286,6 +291,7 @@
 			isa = PBXGroup;
 			children = (
 				F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */,
+				943131F4A6EC985998F4F312 /* MapParkCatalog.swift */,
 				A9F3E9E483AB8609D59EFDEB /* MemoryPhotoDraft.swift */,
 				9B116AB54E14230415ABC727 /* ProtectedStorage.swift */,
 			);
@@ -515,6 +521,7 @@
 				5D2B4C3A49707483172B47E7 /* MapDetailPicker.swift in Sources */,
 				0406B697C7B67839B5EA122A /* MapDownloads.swift in Sources */,
 				5CFD873D521F99D2384FCAD5 /* MapPackFiles.swift in Sources */,
+				A0149028523DCE2ECFAC8FF0 /* MapParkCatalog.swift in Sources */,
 				0ED2B97434350FC9C53E3D25 /* MapPresentation.swift in Sources */,
 				5FD9FBF86AD3822E430BE2D0 /* MapsSettings.swift in Sources */,
 				224E79B89600320590F3F8FE /* MemoryPhotoBrowser.swift in Sources */,
@@ -528,6 +535,7 @@
 				0854E6199407FAB813FD71B3 /* PermissionAccessRow.swift in Sources */,
 				D149052064DDEB622FD5B974 /* PersonComponents.swift in Sources */,
 				CFDD21A83C4FDC4B87238412 /* PhotoGrid.swift in Sources */,
+				C3C5E2D02AE0D27792664BA4 /* PlaceAreaEditor.swift in Sources */,
 				2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */,
 				BD22F1A51DD600D357144295 /* PlaceEditor.swift in Sources */,
 				1BE484548285A1988C171A4C /* PlaceIconPicker.swift in Sources */,

@@ -4,6 +4,33 @@ import PlacesCore
 @testable import Places
 
 @MainActor final class OfflineMapTests: XCTestCase {
+    func testLocalParkMetadataLoadsGzipAndRejectsInvalidOffsets() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pmtiles")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let compressed = Data(base64Encoded: "H4sIAAAAAAAC/52Qyw6CMBBFf4V0rSQ+EPQD3KkLl4aYBkZsrJ2mD6Mh/XfbAhth5WpmzpzcTtoSyWkF+koVUE12SUteoDRD4fvFLCGSqkfgl5aw2ldyY29jFczDgnhB0CcEvu94MvAKUdVMUAMxlVPDjK3DkC3T1cYbHEUzsHVaFM6zcEb0JfJPg6J/Gq0B1bU/Qdk4KPdBIy//39tOedmUV3p4Rw7x6jKOGq2q4Nh/0kmCOBsFYA5UEudK574ogPU2ggEAAA==")!
+        var archive = Data(repeating: 0, count: 127)
+        archive.replaceSubrange(0..<7, with: Data("PMTiles".utf8)); archive[7] = 3; archive[97] = 2
+        func set(_ value: UInt64, at offset: Int) {
+            for byte in 0..<8 { archive[offset + byte] = UInt8((value >> (8 * byte)) & 255) }
+        }
+        set(127, at: 24); set(UInt64(compressed.count), at: 32); archive.append(compressed)
+        try archive.write(to: file)
+        let parks = try MapParkCatalog.read(file)
+        XCTAssertEqual(parks.map(\.name), ["Fixture park"])
+        XCTAssertTrue(parks[0].area.contains(parks[0].coordinate))
+        let catalog = MapParkCatalog()
+        let nearby = await catalog.nearby(Coordinate(latitude: 52.36, longitude: 4.88), files: [file])
+        XCTAssertTrue(nearby.available); XCTAssertEqual(nearby.parks.count, 1)
+        let distant = await catalog.nearby(Coordinate(latitude: 40, longitude: 10), files: [file])
+        XCTAssertTrue(distant.available); XCTAssertTrue(distant.parks.isEmpty)
+        let removed = await catalog.nearby(parks[0].coordinate, files: [])
+        XCTAssertFalse(removed.available)
+        set(UInt64.max, at: 24); try archive.write(to: file)
+        XCTAssertThrowsError(try MapParkCatalog.read(file))
+        set(127, at: 24); archive[archive.count - 1] ^= 1; try archive.write(to: file)
+        XCTAssertThrowsError(try MapParkCatalog.read(file))
+    }
+
     func testPeriodMapsContainEveryPlaceAndKeepRecordedPathsDistinctFromEndpointLinks() async throws {
         let store = try PlacesStore()
         try await DemoFixtures.seedMapPeriods(store)

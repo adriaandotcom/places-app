@@ -57,6 +57,7 @@ public struct MapPack: Codable, Equatable, Identifiable, Sendable {
     public let updatedAt: String?
     public let sourceDate: String?
     public let bounds: [Double]?
+    public let areaVersion: Int?
     public var filename: String { "\(id.rawValue)\(detail.map { "-" + $0.rawValue } ?? "")-\(version).pmtiles" }
     public var updatedDate: Date? {
         if let updatedAt { return ISO8601DateFormatter().date(from: updatedAt) }
@@ -64,6 +65,21 @@ public struct MapPack: Codable, Equatable, Identifiable, Sendable {
         return formatter.date(from: String(version.prefix(8)))
     }
     public var sizeLabel: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+
+    // Migrate legacy persisted descriptors without discarding a verified local map.
+    // Even a resumed old transfer must start a new request at the Bunny mirror.
+    public var downloadURL: URL {
+        guard detail == nil else { return url }
+        var parts = URLComponents(); parts.scheme = "https"; parts.host = MapCatalog.host
+        parts.path = "/maps/bootstrap/\(version)/\(id.rawValue).pmtiles"
+        return parts.url!
+    }
+
+    public var downloadDescriptor: Self {
+        Self(id: id, name: name, version: version, bytes: bytes, sha256: sha256,
+             minZoom: minZoom, maxZoom: maxZoom, url: downloadURL, attribution: attribution,
+             detail: detail, updatedAt: updatedAt, sourceDate: sourceDate, bounds: bounds, areaVersion: areaVersion)
+    }
 
     // Both catalogs use a fixed allowlist and immutable paths. No coordinates,
     // search terms, device identifiers, or history are part of requests.
@@ -80,8 +96,8 @@ public struct MapPack: Codable, Equatable, Identifiable, Sendable {
                 && updatedAt.flatMap({ ISO8601DateFormatter().date(from: $0) }) != nil
                 && MapCatalog.validBounds(bounds)
         }
-        return ID.bootstrapIDs.contains(id) && url.host == "github.com"
-            && url.path == "/adriaandotcom/places-app/releases/download/maps-\(version)/\(id.rawValue).pmtiles"
+        return ID.bootstrapIDs.contains(id) && (url == downloadURL || (url.host == "github.com"
+            && url.path == "/adriaandotcom/places-app/releases/download/maps-\(version)/\(id.rawValue).pmtiles"))
     }
 }
 

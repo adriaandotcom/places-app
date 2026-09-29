@@ -45,7 +45,7 @@ struct MapsSettings: View {
                             }
                     }
                 } header: { Text("On-device maps") } footer: {
-                    Text("World gives an overview everywhere. Choose a detail level for each country. Country downloads come from Bunny and World comes from GitHub. They receive your IP address and the file you choose. Map browsing stays on this iPhone.")
+                    Text("Map downloads come from Bunny.net servers. We disabled their IP logging.")
                 }
                 Section {
                     Button { Task { await downloads.refreshCatalog(force: true) } } label: {
@@ -82,7 +82,7 @@ struct MapsSettings: View {
                 Button("Download") { activateOffline(approved: true) }
             } message: {
                 if let world = downloads.pack(.world) {
-                    Text("This connection may use mobile data or Low Data Mode. Download \(ByteCountFormatter.string(fromByteCount: downloads.remaining(world), countStyle: .file)) from GitHub to use On-device Maps?")
+                    Text("This connection may use mobile data or Low Data Mode. Download \(ByteCountFormatter.string(fromByteCount: downloads.remaining(world), countStyle: .file)) from Bunny.net to use On-device Maps?")
                 }
             }
             .confirmationDialog("Delete downloaded map?", isPresented: Binding(get: { deletingPack != nil }, set: { if !$0 { deletingPack = nil } }), titleVisibility: .visible) {

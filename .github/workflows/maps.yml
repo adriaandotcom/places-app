@@ -49,7 +49,7 @@ jobs:
           COUNTRY_IDS: ${{ inputs.countries }}
           SOURCE_DATE: ${{ inputs.source_date }}
         run: |
-          python3 -m py_compile scripts/maps/build_country.py scripts/maps/build_lite.py scripts/maps/publish_maps.py
+          python3 -m py_compile scripts/maps/build_country.py scripts/maps/build_lite.py scripts/maps/build_areas.py scripts/maps/publish_maps.py
           python3 scripts/maps/build_country.py --work output --index-only
           python3 - <<'PY'
           import json, os, sys

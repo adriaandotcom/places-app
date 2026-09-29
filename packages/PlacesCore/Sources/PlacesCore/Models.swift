@@ -115,14 +115,16 @@ public struct Place: Codable, Identifiable, Hashable, Sendable {
     public var catalogReference: PlaceCatalogReference?
     public var locality: PlaceLocality?
     public var tripRole: PlaceTripRole?
+    public var area: PlaceArea?
     public init(id: String = UUID().uuidString, name: String, address: String = "", coordinate: Coordinate,
                 radius: Double = 100, symbol: String = "mappin", colorIndex: Int = 0,
-                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil) {
+                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil, area: PlaceArea? = nil) {
         self.id = id; self.name = name; self.address = address; self.coordinate = coordinate
         self.radius = radius; self.symbol = symbol; self.colorIndex = colorIndex
         self.expectedSSIDs = expectedSSIDs; self.createdAt = createdAt
         self.catalogReference = catalogReference; self.locality = locality
         self.tripRole = tripRole
+        self.area = area
     }
 }
 

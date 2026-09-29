@@ -69,6 +69,7 @@ private struct AppleMapSurface: View {
     }
     var body: some View {
         Map(position: $camera) {
+            PlaceAreaOverlay(areas: presentation.areas)
             ForEach(presentation.pins) { pin in
                 Annotation(pin.name, coordinate: CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)) {
                     if let place = model.places.first(where: { $0.id == pin.placeID }) {
@@ -146,38 +147,69 @@ struct MapScreen: View {
     }
 }
 
-// This wrapper checks live consent before constructing the editor's MapKit view.
+// The same editor surface and geometry are used by both providers.
 struct PlaceLocationMap: View {
     @Environment(AppModel.self) private var model
     @Binding var coordinate: Coordinate?
     let radius: Double
     let colorIndex: Int
+    var name = "Place"
+    var area: PlaceArea?
+    var drawing: [Coordinate] = []
+    var focusRequest: UUID?
+    var onTap: ((Coordinate) -> Void)?
     @State private var viewport: MapViewport?
+    private var presentation: MapPresentation {
+        var value = MapPresentation(pins: coordinate.map { [MapPin(id: "draft", name: name, coordinate: $0, symbol: "mappin", colorIndex: colorIndex)] } ?? [], radius: area == nil && onTap == nil ? radius : nil)
+        value.areas = area.map { [$0] } ?? []
+        if !drawing.isEmpty {
+            value.pins = drawing.enumerated().map { MapPin(id: "corner-\($0.offset)", name: "", coordinate: $0.element, symbol: "circle.fill", colorIndex: colorIndex, letter: String($0.offset + 1)) }
+            value.paths = [MapPath(id: "drawing", coordinates: drawing, dashed: false)]
+        }
+        return value
+    }
+    private func tapped(_ point: Coordinate) {
+        if let onTap { onTap(point) }
+        else if area == nil { coordinate = point }
+    }
     var body: some View {
         if model.mapsEnabled {
-            PlacePinSurface(coordinate: $coordinate, radius: radius, colorIndex: colorIndex, viewport: $viewport)
+            PlacePinSurface(presentation: presentation, colorIndex: colorIndex, viewport: $viewport, focusRequest: focusRequest, tapped: tapped)
         } else if model.mapProvider == .onDevice {
-            OfflineMapView(presentation: MapPresentation(pins: coordinate.map { [MapPin(id: "draft", name: "Place", coordinate: $0, symbol: "mappin", colorIndex: colorIndex)] } ?? [], radius: radius), viewport: $viewport, pinChanged: { coordinate = $0 })
+            OfflineMapView(presentation: presentation, viewport: $viewport, focusRequest: focusRequest, pinChanged: tapped)
         }
     }
 }
 
 private struct PlacePinSurface: View {
-    @Binding var coordinate: Coordinate?
-    let radius: Double
+    let presentation: MapPresentation
     let colorIndex: Int
-    @State private var camera: MapCameraPosition = .automatic
+    @State private var camera: MapCameraPosition = .region(MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
+        span: MKCoordinateSpan(latitudeDelta: 70, longitudeDelta: 140)))
     @Binding var viewport: MapViewport?
+    let focusRequest: UUID?
+    let tapped: (Coordinate) -> Void
     var body: some View {
         MapReader { proxy in
             Map(position: $camera) {
-                if let coordinate {
-                    let center = CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                    MapCircle(center: center, radius: radius).foregroundStyle(Palette.accent(colorIndex).opacity(0.18))
+                PlaceAreaOverlay(areas: presentation.areas, colorIndex: colorIndex)
+                if let coordinate = presentation.pins.first?.coordinate, let radius = presentation.radius {
+                    MapCircle(center: coordinate.mapCoordinate, radius: radius).foregroundStyle(Palette.accent(colorIndex).opacity(0.18))
                         .stroke(Palette.accent(colorIndex), lineWidth: 2)
-                    Annotation("Place", coordinate: center) {
-                        Image(systemName: "mappin.circle.fill").font(.largeTitle)
-                            .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.accent(colorIndex))
+                }
+                ForEach(presentation.paths) { path in
+                    MapPolyline(coordinates: path.coordinates.map(\.mapCoordinate)).stroke(Palette.accent(colorIndex), lineWidth: 2)
+                }
+                ForEach(presentation.pins) { pin in
+                    Annotation(pin.name, coordinate: pin.coordinate.mapCoordinate) {
+                        if let letter = pin.letter {
+                            Text(letter).font(.caption.bold()).foregroundStyle(.white).padding(6)
+                                .background(Palette.accent(colorIndex), in: Circle())
+                        } else {
+                            Image(systemName: "mappin.circle.fill").font(.largeTitle)
+                                .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.accent(colorIndex))
+                        }
                     }
                 }
             }
@@ -188,27 +220,46 @@ private struct PlacePinSurface: View {
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
             .mapControls { MapCompass(); MapScaleView() }
             .simultaneousGesture(SpatialTapGesture().onEnded { event in
-                if let point = proxy.convert(event.location, from: .local) {
-                    coordinate = Coordinate(latitude: point.latitude, longitude: point.longitude)
-                }
+                if let point = proxy.convert(event.location, from: .local) { tapped(Coordinate(latitude: point.latitude, longitude: point.longitude)) }
             })
             .accessibilityIdentifier("place-pin-map")
-            .accessibilityLabel("Place location. Tap to choose a pin, or use your current location below.")
         }
-        .onAppear {
-            if let viewport {
-                camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: viewport.center.latitude, longitude: viewport.center.longitude),
-                    span: MKCoordinateSpan(latitudeDelta: viewport.latitudeSpan, longitudeDelta: viewport.longitudeSpan)))
-            } else { centerOnPin() }
-        }
-        .onChange(of: coordinate) { old, new in
-            if let new, old.map({ $0.distance(to: new) > 500 }) ?? true { centerOnPin() }
+        .onAppear { frame(restore: true) }
+        .onChange(of: focusRequest) { _, _ in frame(restore: false) }
+        .onChange(of: presentation.pins.first?.coordinate) { old, new in
+            // Drawing corners must never reset the camera while drawing.
+            if presentation.pins.first?.letter == nil, let new, old.map({ $0.distance(to: new) > 500 }) ?? true { frame(restore: false) }
         }
     }
-    private func centerOnPin() {
-        guard let coordinate else { return }
-        camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
-                                             latitudinalMeters: max(radius * 4, 1000), longitudinalMeters: max(radius * 4, 1000)))
+    private func frame(restore: Bool) {
+        if let region = restore ? (viewport ?? presentation.fittingViewport) : presentation.fittingViewport {
+            camera = .region(MKCoordinateRegion(center: region.center.mapCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: region.latitudeSpan, longitudeDelta: region.longitudeSpan)))
+        }
+    }
+}
+
+struct PlaceAreaOverlay: MapContent {
+    let areas: [PlaceArea]
+    var colorIndex = 0
+    var body: some MapContent {
+        ForEach(areas.indices, id: \.self) { areaIndex in
+            ForEach(areas[areaIndex].polygons.indices, id: \.self) { index in
+                MapPolygon(areas[areaIndex].polygons[index].mapPolygon)
+                    .foregroundStyle(Palette.accent(colorIndex).opacity(0.18))
+                    .stroke(Palette.accent(colorIndex), lineWidth: 2)
+            }
+        }
+    }
+}
+
+private extension Coordinate {
+    var mapCoordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
+}
+private extension PlaceArea.Polygon {
+    var mapPolygon: MKPolygon {
+        let interior = holes.map { points in MKPolygon(coordinates: points.map(\.mapCoordinate), count: points.count) }
+        return MKPolygon(coordinates: outer.map(\.mapCoordinate), count: outer.count, interiorPolygons: interior)
     }
 }
 

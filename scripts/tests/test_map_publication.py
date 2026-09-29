@@ -34,7 +34,7 @@ class MapPublicationTests(unittest.TestCase):
                     attempts += 1
                     self.assertFalse(source.exists())
                     self.assertFalse(partial.exists())
-                    self.assertEqual(options['timeout'], 600)
+                    self.assertEqual(options['timeout'], 1800)
                     partial.write_bytes(b'partial' if attempts == 1 else b'verified')
                     if attempts == 1: raise subprocess.TimeoutExpired(command, 600)
                 else:

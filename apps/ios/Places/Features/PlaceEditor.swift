@@ -16,6 +16,8 @@ struct PlaceEditor: View {
     @State private var longitude: String
     @State private var coordinate: Coordinate?
     @State private var radius: Double
+    @State private var area: PlaceArea?
+    @State private var choosingArea = false
     @State private var symbol: String
     @State private var tripRole: PlaceTripRole
     @State private var userChoseIcon: Bool
@@ -72,6 +74,7 @@ struct PlaceEditor: View {
         _longitude = State(initialValue: point.map { String($0.longitude) } ?? "")
         _coordinate = State(initialValue: point)
         _radius = State(initialValue: place?.radius ?? 100)
+        _area = State(initialValue: place?.area)
         _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? PlaceIconMatcher.suggestedSymbol(name: suggestedName) ?? "mappin")
         _userChoseIcon = State(initialValue: place != nil)
         _tripRole = State(initialValue: place?.tripRole ?? .automatic)
@@ -158,7 +161,7 @@ struct PlaceEditor: View {
                 }
             }
             Section("Location") {
-                if (assigning != nil || catalogReference != nil) && coordinate != nil && !changingLocation {
+                if (assigning != nil || catalogReference != nil) && coordinate != nil && !changingLocation && area == nil {
                     HStack {
                         Label(catalogReference == nil ? "Using this visit’s location" : "Using the suggested location", systemImage: "mappin.circle.fill")
                         Spacer()
@@ -167,10 +170,10 @@ struct PlaceEditor: View {
                     }
                 } else {
                     if model.mapsAvailable {
-                        PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex)
+                        PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex, name: name.isEmpty ? "Place" : name, area: area)
                             .frame(height: Layout.mapHeight).listRowInsets(EdgeInsets())
-                        Label(coordinate == nil ? "Tap the map to place your pin" : "Tap the map to move your pin", systemImage: "hand.tap")
-                            .font(.subheadline).foregroundStyle(Palette.muted)
+                        if area == nil { Label(coordinate == nil ? "Tap the map to place your pin" : "Tap the map to move your pin", systemImage: "hand.tap")
+                            .font(.subheadline).foregroundStyle(Palette.muted) }
                     } else if !usesCoordinates {
                         VStack(alignment: .leading, spacing: Layout.spacing) {
                             Text("Choose your place on a map").font(BrandFont.title)
@@ -206,13 +209,22 @@ struct PlaceEditor: View {
                         TextField("Longitude", text: $longitude).keyboardType(.numbersAndPunctuation)
                             .accessibilityIdentifier("place-longitude").focused($focusedField, equals: .longitude)
                     }
-                    if model.mapsAvailable || usesCoordinates {
+                    if area == nil && (model.mapsAvailable || usesCoordinates) {
                         HStack {
                             Text("Recognition radius"); Spacer()
                             Text("\(Int(radius)) m").foregroundStyle(Palette.muted).accessibilityIdentifier("recognition-radius-value")
                         }
                         Slider(value: $radius, in: 50...1000, step: 25).accessibilityLabel("Recognition radius in metres")
                     }
+                }
+                Button { choosingArea = true } label: {
+                    HStack {
+                        Label(area == nil ? "Choose or draw an area" : "Change area", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        Spacer(); Image(systemName: "chevron.right").font(.caption)
+                    }.frame(minHeight: Layout.touchTarget)
+                }.accessibilityIdentifier("choose-place-area")
+                if area != nil {
+                    Button("Use a radius instead") { area = nil }.accessibilityIdentifier("use-place-radius")
                 }
             }
             }
@@ -268,6 +280,14 @@ struct PlaceEditor: View {
                 } catch is CancellationError { }
                 catch { if !Task.isCancelled { catalogMessage = "Suggestions are unavailable. You can enter a place yourself." } }
             }
+            .sheet(isPresented: $choosingArea) {
+                NavigationStack {
+                    PlaceAreaEditor(coordinate: coordinate ?? recentSearchAnchor, area: area, colorIndex: colorIndex) { selected, point, suggestedName in
+                        area = selected; coordinate = point; changingLocation = true
+                        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let suggestedName { name = suggestedName }
+                    }
+                }
+            }
             .sheet(isPresented: $choosingWiFi, onDismiss: {
                 withAnimation { scroll.scrollTo("place-wifi-entry", anchor: .bottom) }
                 if enterWiFiAfterPicker { enterWiFiAfterPicker = false; wifiFocused = true }
@@ -317,6 +337,7 @@ struct PlaceEditor: View {
             return
         }
         locationRequest.cancel()
+        area = nil
         catalogCategory = candidate.category; catalogName = candidate.name
         name = candidate.name; address = candidate.address; coordinate = candidate.coordinate
         latitude = String(candidate.coordinate.latitude); longitude = String(candidate.coordinate.longitude)
@@ -340,6 +361,7 @@ struct PlaceEditor: View {
         Task {
             do {
                 let location = try await locationRequest.request()
+                area = nil
                 coordinate = Coordinate(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
                 locationSelected = true
             } catch is CancellationError { }
@@ -376,7 +398,7 @@ struct PlaceEditor: View {
         guard wifi.finish() else { wifiFocused = true; return }
         let place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole)
+            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole, area: area)
         saving = true; focusedField = nil; wifiFocused = false
         Task {
             if await model.save(place, assigning: assigning) {

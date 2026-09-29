@@ -1302,6 +1302,50 @@ import XCTest
         XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     }
 
+    func testPlaceAreaDrawingOnBothMapProviders() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-fixture"] + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 15))
+            if !offline { app.buttons["tab-map"].tap(); enableAppleMaps(in: app) }
+            app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()
+            let name = app.textFields["place-name"]
+            name.tap(); name.typeText("Fixture area")
+            app.buttons["dismiss-keyboard"].tap()
+            let choose = app.buttons["choose-place-area"]
+            // Scroll the form margin to avoid panning the map inside it.
+            for _ in 0..<10 {
+                if choose.exists && choose.isHittable { break }
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.8))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.25)))
+            }
+            XCTAssertTrue(choose.isHittable); choose.tap()
+            XCTAssertTrue(app.buttons["draw-place-area"].waitForExistence(timeout: 5))
+            app.buttons["draw-place-area"].tap()
+            let maps = offline ? app.otherElements.matching(identifier: "place-pin-map") : app.maps
+            XCTAssertTrue(maps.firstMatch.waitForExistence(timeout: 10))
+            // The parent editor's map remains underneath this sheet.
+            let map = maps.allElementsBoundByIndex.last!
+            let save = app.buttons["use-place-area"]
+            XCTAssertFalse(save.isEnabled)
+            for point in [(0.3, 0.35), (0.7, 0.35), (0.7, 0.65), (0.3, 0.65)] {
+                map.coordinate(withNormalizedOffset: CGVector(dx: point.0, dy: point.1)).tap()
+            }
+            XCTAssertTrue(save.isEnabled)
+            // MapLibre draws updated vector sources on its next renderer frame.
+            Thread.sleep(forTimeInterval: 1)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Polygon drawing \(offline ? "on-device" : "Apple")"; screenshot.lifetime = .keepAlways; add(screenshot)
+            save.tap()
+            XCTAssertTrue(app.buttons["use-place-radius"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.sliders["Recognition radius in metres"].exists)
+            app.buttons["save-place"].tap()
+            XCTAssertTrue(app.staticTexts["Fixture area"].waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
     func testEditorCreatesMapOnlyAfterConsentAndSavesSelectedPin() {
         let app = launch(fixture: true)
         app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()

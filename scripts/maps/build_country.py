@@ -107,7 +107,7 @@ def extract_source(command, source, pmtiles):
         partial.unlink(missing_ok=True)
         print(f"Extracting {source.name}: attempt {attempt}/3", flush=True)
         try:
-            subprocess.run(command, check=True, timeout=600)
+            subprocess.run(command, check=True, timeout=1800)
             subprocess.run([str(pmtiles), "verify", str(partial)], check=True, timeout=120)
             partial.replace(source)
             return
@@ -136,17 +136,19 @@ def build_region(country, work, pmtiles, source_date, version, preview=False):
         outline.write_text(json.dumps(dict(type="FeatureCollection", features=[dict(type="Feature", properties={}, geometry=country["geometry"])])))
         command.append("--region=" + str(outline))
     extract_source(command, source, pmtiles)
+    from build_areas import build_areas
+    areas = build_areas(source)
     updated = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     variants = []
     for detail, zoom in DETAIL_ZOOMS.items():
         destination = output / f"{detail}.pmtiles"
-        build(source, destination, identifier, detail=detail, version=version, source_date=source_date)
+        build(source, destination, identifier, detail=detail, version=version, source_date=source_date, areas=areas)
         subprocess.run([str(pmtiles), "verify", str(destination)], check=True)
         report = json.loads(destination.with_suffix(".json").read_text())
         variants.append(dict(id=identifier, name="Amsterdam" if preview else country["name"], detail=detail,
                              version=version, bytes=report["bytes"], sha256=report["sha256"], minZoom=7, maxZoom=zoom,
                              url=f"{PUBLIC_BASE}/{identifier}/{version}/{detail}.pmtiles", updatedAt=updated,
-                             sourceDate=source_date, bounds=AMSTERDAM_BOUNDS if preview else country["bounds"], attribution=ATTRIBUTION))
+                             sourceDate=source_date, bounds=AMSTERDAM_BOUNDS if preview else country["bounds"], attribution=ATTRIBUTION, areaVersion=1))
     entry = {k: v for k, v in country.items() if k != "geometry"} if not preview else dict(id="amsterdam", name="Amsterdam", bounds=AMSTERDAM_BOUNDS)
     entry["variants"] = variants
     (output / "entry.json").write_text(json.dumps(entry, indent=2) + "\n")

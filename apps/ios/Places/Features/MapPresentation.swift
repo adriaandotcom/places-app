@@ -27,7 +27,8 @@ struct MapPresentation: Equatable {
     var pins: [MapPin] = []
     var paths: [MapPath] = []
     var radius: Double?
-    var coordinates: [Coordinate] { pins.map(\.coordinate) + paths.flatMap(\.coordinates) }
+    var areas: [PlaceArea] = []
+    var coordinates: [Coordinate] { pins.map(\.coordinate) + paths.flatMap(\.coordinates) + areas.flatMap(\.vertices) }
     var fittingViewport: MapViewport? {
         let points = coordinates.filter(\.isValid)
         guard let first = points.first else { return nil }

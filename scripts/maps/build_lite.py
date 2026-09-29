@@ -155,7 +155,7 @@ def strip_tile(data, stats, detail="legacy"):
     return b"".join(field(3, layer) for layer in layers if layer)
 
 
-def build(source, destination, region, detail="legacy", version=VERSION, source_date="20260925"):
+def build(source, destination, region, detail="legacy", version=VERSION, source_date="20260925", areas=None):
     from pmtiles.reader import Reader, MmapSource, all_tiles
     from pmtiles.writer import Writer
     from pmtiles.tile import Compression, TileType, zxy_to_tileid
@@ -182,6 +182,11 @@ def build(source, destination, region, detail="legacy", version=VERSION, source_
                     "vector_layers": [{"id": name, "fields": {key: "String" for key in sorted(keys)}} for name in sorted(stats)]}
         if detail in DETAIL_ZOOMS:
             header["max_zoom"] = DETAIL_ZOOMS[detail]
+        if areas is not None:
+            metadata['places_areas'] = areas
+            encoded = json.dumps(metadata).encode()
+            if len(encoded) > 32_000_000 or len(gzip.compress(encoded, mtime=0)) > 8_000_000:
+                raise ValueError('Park metadata exceeds the on-device decoder limit')
         # PMTiles' writer timestamps its compressed directories and metadata. Fix
         # that timestamp too so the same inputs produce the same release bytes.
         compress = gzip.compress

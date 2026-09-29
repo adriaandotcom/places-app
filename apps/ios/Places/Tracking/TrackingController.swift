@@ -334,7 +334,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     }
     private func configureRegions() {
         guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self), authorization == .authorizedAlways else { return }
-        let sorted = places.sorted {
+        let sorted = places.filter { $0.area == nil }.sorted {
             if $0.id == wifiPlaceID { return $1.id != wifiPlaceID }
             if $1.id == wifiPlaceID { return false }
             guard let currentLocation else { return $0.name < $1.name }
@@ -372,7 +372,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         }
         if let id = wifiPlaceID, let place = places.first(where: { $0.id == id }),
            let coordinate = observation.usableCoordinate,
-           coordinate.distance(to: place.coordinate) > place.radius + min(100, location.horizontalAccuracy) {
+           !place.contains(coordinate, tolerance: min(100, location.horizontalAccuracy)) {
             invalidateWiFi()
         }
         if wifiPlaceID != nil && departureNeedsFixAfter == nil {
@@ -574,6 +574,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) { regionChanged(region, entering: false) }
     private func regionChanged(_ region: CLRegion, entering: Bool) {
         guard hasStarted else { return }
+        // A queued circular callback can arrive after a place changes to an area.
+        guard !places.contains(where: { $0.id == region.identifier && $0.area != nil }) else { return }
         onObservations?([SensorObservation(timestamp: Date(), source: entering ? .regionEnter : .regionExit,
                                     monitoredPlaceID: region.identifier == "temporary-stop" ? nil : region.identifier)])
         if !entering {

@@ -151,6 +151,12 @@ final class MapDownloads: NSObject {
         for task in running {
             guard let task = task as? URLSessionDownloadTask, let (id, token) = identity(task),
                   transfers[id]?.token == token, (transfers[id]?.phase == .downloading || transfers[id]?.phase == .pausing) else { task.cancel(); continue }
+            guard task.originalRequest?.url == transfers[id]?.pack?.downloadURL else {
+                task.cancel(); transfers[id]?.phase = .paused
+                transfers[id]?.message = "Download moved to Bunny. Tap Resume to continue."
+                if let file = resumeFile(id) { try? FileManager.default.removeItem(at: file) }
+                continue
+            }
             tasks[id] = task
             if transfers[id]?.phase == .pausing {
                 transfers[id]?.phase = .downloading
@@ -225,7 +231,7 @@ final class MapDownloads: NSObject {
     var pending: Set<MapPack.ID> { Set(transfers.filter { [.downloading, .pausing, .verifying].contains($0.value.phase) }.keys) }
     var totalInstalledBytes: Int64 { installedPacks.values.reduce(0) { $0 + $1.bytes } }
     func remaining(_ pack: MapPack) -> Int64 {
-        let resumable = transfers[pack.id]?.pack == pack && (resumeFile(pack.id).map { FileManager.default.fileExists(atPath: $0.path) } ?? false)
+        let resumable = pack.url == pack.downloadURL && transfers[pack.id]?.pack == pack && (resumeFile(pack.id).map { FileManager.default.fileExists(atPath: $0.path) } ?? false)
         return MapDownloadPolicy.remaining(total: pack.bytes, received: resumable ? (transfers[pack.id]?.received ?? 0) : 0)
     }
 
@@ -237,22 +243,23 @@ final class MapDownloads: NSObject {
             return
         }
         do {
+            let target = pack.downloadDescriptor
             try MapPackFiles.checkSpace(at: directory, pack: pack)
             let token = UUID().uuidString
             let resumeURL = resumeFile(pack.id)
             let task: URLSessionDownloadTask
             // Separate sessions enforce network restrictions even while the app
             // is suspended. Requests inherit the selected session's permissions.
-            if let resumeURL, transfers[pack.id]?.pack == pack, let data = try? Data(contentsOf: resumeURL) {
+            if let resumeURL, transfers[pack.id]?.pack == target, let data = try? Data(contentsOf: resumeURL) {
                 task = session.downloadTask(withResumeData: data)
             } else {
-                var request = URLRequest(url: pack.url)
+                var request = URLRequest(url: pack.downloadURL)
                 request.httpShouldHandleCookies = false
                 task = session.downloadTask(with: request)
                 transfers[pack.id]?.received = 0
             }
             transfers[pack.id] = MapPackTransfer(token: token, phase: .downloading,
-                received: transfers[pack.id]?.received ?? 0, approvedMetered: approvedMetered, pack: pack)
+                received: transfers[pack.id]?.received ?? 0, approvedMetered: approvedMetered, pack: target)
             task.taskDescription = pack.id.rawValue + "|" + token
             tasks[pack.id] = task
             try saveTransfers(); task.resume()
@@ -507,11 +514,6 @@ extension MapDownloads: URLSessionDownloadDelegate {
                                willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
                                completionHandler: @escaping (URLRequest?) -> Void) {
         let original = task.originalRequest?.url
-        if original?.host == MapCatalog.host {
-            completionHandler(request.url == original ? request : nil)
-        } else {
-            let host = request.url?.host
-            completionHandler(request.url?.scheme == "https" && (host == "github.com" || host == "release-assets.githubusercontent.com") ? request : nil)
-        }
+        completionHandler(original?.host == MapCatalog.host && request.url == original ? request : nil)
     }
 }

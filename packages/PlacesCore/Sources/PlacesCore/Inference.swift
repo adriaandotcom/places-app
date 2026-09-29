@@ -48,6 +48,11 @@ public enum InferenceEngine {
             }
 
             if observation.source == .regionExit || observation.source == .visitDeparture {
+                if observation.source == .regionExit,
+                   places.contains(where: { $0.id == observation.monitoredPlaceID && $0.area != nil }) {
+                    // A historical circular boundary is not a polygon departure.
+                    continue
+                }
                 if observation.source == .regionExit, let item = current, item.kind == .stay,
                    item.placeID != observation.monitoredPlaceID {
                     // Nearby or overlapping monitored regions are not proof of leaving this stay.

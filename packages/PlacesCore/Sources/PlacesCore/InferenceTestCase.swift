@@ -101,7 +101,8 @@ public struct InferenceTestCase: Codable, Sendable {
         }
         let places = archive.places.map { value in
             Place(id: placeIDs[value.id]!, name: placeIDs[value.id]!, coordinate: rotation.apply(value.coordinate),
-                  radius: value.radius, expectedSSIDs: value.expectedSSIDs.compactMap { ssids[$0] }, createdAt: date(value.createdAt))
+                  radius: value.radius, expectedSSIDs: value.expectedSSIDs.compactMap { ssids[$0] }, createdAt: date(value.createdAt),
+                  area: value.area?.transformed(rotation.apply))
         }
         let networks = archive.networks.map { value in
             WiFiNetwork(id: networkIDs[value.id]!, ssid: ssids[value.ssid]!, classification: value.classification,

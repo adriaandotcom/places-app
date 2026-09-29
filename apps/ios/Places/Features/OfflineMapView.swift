@@ -195,13 +195,15 @@ struct OfflineMapSurface: UIViewRepresentable {
         func render(_ map: MLNMapView) {
             guard let style = map.style, rendered != parent.presentation else { frame(map); return }
             if let rendered, rendered.coordinates != parent.presentation.coordinates, parent.pinChanged == nil { framed = false; restoreViewport = false }
-            if parent.pinChanged != nil, let point = parent.presentation.pins.first?.coordinate,
+            if parent.pinChanged != nil, parent.presentation.pins.first?.letter == nil, let point = parent.presentation.pins.first?.coordinate,
                (rendered?.pins.first?.coordinate).map({ $0.distance(to: point) > 500 }) ?? true {
                 framed = false; restoreViewport = false
             }
             rendered = parent.presentation
             for id in routeLayerIDs {
                 if let layer = style.layer(withIdentifier: id) { style.removeLayer(layer) }
+            }
+            for id in routeLayerIDs {
                 if let source = style.source(withIdentifier: id) { style.removeSource(source) }
             }
             routeLayerIDs = []
@@ -229,6 +231,23 @@ struct OfflineMapSurface: UIViewRepresentable {
                 layer.fillColor = NSExpression(forConstantValue: UIColor(Palette.accent(pin.colorIndex)))
                 layer.fillOpacity = NSExpression(forConstantValue: 0.2)
                 style.addSource(source); style.addLayer(layer); routeLayerIDs.append(id)
+            }
+            for (index, polygon) in parent.presentation.areas.flatMap(\.polygons).enumerated() {
+                let interior = polygon.holes.map { ring -> MLNPolygon in
+                    var points = (ring + ring.prefix(1)).map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                    return MLNPolygon(coordinates: &points, count: UInt(points.count))
+                }
+                var points = (polygon.outer + polygon.outer.prefix(1)).map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+                let shape = MLNPolygon(coordinates: &points, count: UInt(points.count), interiorPolygons: interior)
+                let id = "place-area-\(index)"
+                let source = MLNShapeSource(identifier: id, shape: shape, options: nil)
+                let color = UIColor(Palette.accent(parent.presentation.pins.first?.colorIndex ?? 0))
+                let fill = MLNFillStyleLayer(identifier: id, source: source)
+                fill.fillColor = NSExpression(forConstantValue: color); fill.fillOpacity = NSExpression(forConstantValue: 0.18)
+                let line = MLNLineStyleLayer(identifier: id + "-outline", source: source)
+                line.lineColor = NSExpression(forConstantValue: color); line.lineWidth = NSExpression(forConstantValue: 2)
+                style.addSource(source); style.addLayer(fill); style.addLayer(line)
+                routeLayerIDs += [id, id + "-outline"]
             }
             if !annotations.isEmpty { map.removeAnnotations(annotations) }
             annotations = parent.presentation.pins.map(MapAnnotation.init)
@@ -259,6 +278,14 @@ struct OfflineMapSurface: UIViewRepresentable {
             guard let annotation = annotation as? MapAnnotation else { return nil }
             let pin = annotation.pin
             let view = OfflineAnnotationView(annotation: annotation, reuseIdentifier: nil)
+            if pin.name.isEmpty, let letter = pin.letter {
+                view.frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+                view.backgroundColor = UIColor(Palette.accent(pin.colorIndex)); view.layer.cornerRadius = 13
+                let text = UILabel(frame: view.bounds); text.text = letter; text.textAlignment = .center
+                text.font = .boldSystemFont(ofSize: 13); text.textColor = .white; view.addSubview(text)
+                view.isAccessibilityElement = true; view.accessibilityLabel = "Corner \(letter)"
+                return view
+            }
             view.frame = CGRect(x: 0, y: 0, width: 140, height: 70)
             view.isAccessibilityElement = true; view.accessibilityLabel = pin.name
             let badge = UIView(frame: CGRect(x: 50, y: 0, width: 40, height: 40))
