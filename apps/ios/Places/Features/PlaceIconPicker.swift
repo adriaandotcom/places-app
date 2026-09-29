@@ -6,7 +6,9 @@ struct PlaceIconPicker: View {
     @State var symbol: String
     @State var colorIndex: Int
     @State var customColorHex: String?
-    let apply: (String, Int, String?) -> Void
+    @State var photoJPEG: Data?
+    var photoIDs: [String] = []
+    let apply: (String, Int, String?, Data?) -> Void
     @State private var query = ""
     @State private var searching = false
     @State private var revealed: Set<String> = []
@@ -14,13 +16,15 @@ struct PlaceIconPicker: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Layout.spacing) {
-                PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, size: 64)
+                CroppedPhotoField(photo: $photoJPEG, photoIDs: photoIDs, identifier: "choose-place-photo") {
+                    PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, photoJPEG: photoJPEG, size: Layout.portraitSize)
+                }
                 PlaceColorPicker(colorIndex: $colorIndex, customColorHex: $customColorHex)
             }.padding(Layout.gutter)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: Layout.iconTile), spacing: Layout.compact)], spacing: Layout.spacing) {
                 ForEach(PlaceIconCatalog.search(query)) { icon in
                     Button {
-                        symbol = icon.symbol; searching = false
+                        symbol = icon.symbol; photoJPEG = nil; searching = false
                     } label: {
                         VStack(spacing: Layout.compact) {
                             ZStack {
@@ -51,12 +55,12 @@ struct PlaceIconPicker: View {
             if PlaceIconCatalog.search(query).isEmpty {
                 Text("No icons found. Try a place or activity.").foregroundStyle(Palette.muted).padding(Layout.gutter)
             }
-        }.background(Palette.background).navigationTitle("Icon & color").navigationBarTitleDisplayMode(.inline)
+        }.background(Palette.background).navigationTitle("Appearance").navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "Work, coffee, gym…")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { apply(symbol, colorIndex, customColorHex); dismiss() }
+                    Button("Done") { apply(symbol, colorIndex, customColorHex, photoJPEG); dismiss() }
                         .accessibilityIdentifier("save-place-appearance")
                 }
             }

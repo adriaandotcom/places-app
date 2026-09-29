@@ -12,6 +12,7 @@ public struct PlaceMergePlan: Equatable, Sendable {
             + (place.symbol != (PlaceIconMatcher.suggestedSymbol(name: place.name) ?? "mappin") ? 4 : 0)
             + (place.customColorHex != nil || place.colorIndex != 0 ? 3 : 0)
             + (place.area != nil ? 4 : 0)
+            + (place.photoJPEG != nil ? 4 : 0)
             + (place.expectedSSIDs.isEmpty ? 0 : 3)
             + (place.address.isEmpty ? 0 : 1)
             + (place.tripRole != nil && place.tripRole != .automatic ? 2 : 0)

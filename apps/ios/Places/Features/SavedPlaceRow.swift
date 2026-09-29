@@ -11,7 +11,7 @@ struct SavedPlaceRow: View {
     var body: some View {
         InfoRow(symbol: place.symbol, title: title ?? place.name,
                 subtitle: subtitle ?? (place.address.isEmpty ? "Saved place" : place.address),
-                colorIndex: place.colorIndex, customColorHex: place.customColorHex, card: card, showsDisclosure: showsDisclosure)
+                colorIndex: place.colorIndex, customColorHex: place.customColorHex, photoJPEG: place.photoJPEG, card: card, showsDisclosure: showsDisclosure)
             .foregroundStyle(Palette.ink).contentShape(Rectangle())
     }
 }

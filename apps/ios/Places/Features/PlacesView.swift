@@ -54,7 +54,7 @@ struct PlaceDetail: View {
             if let place {
                 VStack(alignment: .leading, spacing: Layout.spacing) {
                     HStack(spacing: Layout.spacing) {
-                        PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex, customColorHex: place.customColorHex)
+                        PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex, customColorHex: place.customColorHex, photoJPEG: place.photoJPEG)
                         Text(place.name).font(BrandFont.heading)
                     }
                     PlaceRecognitionMap(place: place)

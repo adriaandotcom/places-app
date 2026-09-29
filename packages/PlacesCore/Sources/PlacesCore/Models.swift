@@ -119,9 +119,10 @@ public struct Place: Codable, Identifiable, Hashable, Sendable {
     public var customColorHex: String?
     public var userEditedAt: Date?
     public var mergedPlaceIDs: [String]?
+    public var photoJPEG: Data?
     public init(id: String = UUID().uuidString, name: String, address: String = "", coordinate: Coordinate,
                 radius: Double = 100, symbol: String = "mappin", colorIndex: Int = 0,
-                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil, area: PlaceArea? = nil, customColorHex: String? = nil, userEditedAt: Date? = nil, mergedPlaceIDs: [String]? = nil) {
+                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil, area: PlaceArea? = nil, customColorHex: String? = nil, userEditedAt: Date? = nil, mergedPlaceIDs: [String]? = nil, photoJPEG: Data? = nil) {
         self.id = id; self.name = name; self.address = address; self.coordinate = coordinate
         self.radius = radius; self.symbol = symbol; self.colorIndex = colorIndex
         self.expectedSSIDs = expectedSSIDs; self.createdAt = createdAt
@@ -129,6 +130,7 @@ public struct Place: Codable, Identifiable, Hashable, Sendable {
         self.tripRole = tripRole
         self.area = area
         self.customColorHex = customColorHex; self.userEditedAt = userEditedAt; self.mergedPlaceIDs = mergedPlaceIDs
+        self.photoJPEG = photoJPEG
     }
 }
 

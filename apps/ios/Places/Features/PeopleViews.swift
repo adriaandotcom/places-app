@@ -109,7 +109,6 @@ struct PersonEditor: View {
     @State private var error: String?
     @State private var deleting = false
     @State private var epoch: Int?
-    @State private var choosingAvatar = false
     var onDelete: () -> Void
     init(person: MemoryPerson = MemoryPerson(name: ""), onDelete: @escaping () -> Void = {}) {
         _person = State(initialValue: person); self.onDelete = onDelete
@@ -117,12 +116,10 @@ struct PersonEditor: View {
     var body: some View {
         Form {
             Section {
-                VStack(spacing: Layout.compact) {
-                    Button { choosingAvatar = true } label: { PersonAvatar(person: person, size: Layout.portraitSize) }
-                        .accessibilityLabel("Choose avatar").accessibilityIdentifier("choose-person-avatar")
-                    Button(person.avatarJPEG == nil ? "Add photo" : "Change photo") { choosingAvatar = true }
-                    if person.avatarJPEG != nil { Button("Remove photo", role: .destructive) { person.avatarJPEG = nil } }
-                }.frame(maxWidth: .infinity).padding(.vertical, Layout.compact)
+                CroppedPhotoField(photo: $person.avatarJPEG, photoIDs: model.memories.avatarPhotoIDs(for: person.id),
+                    suggestsFaces: true, identifier: "choose-person-avatar") {
+                    PersonAvatar(person: person, size: Layout.portraitSize)
+                }
             }.listRowBackground(Color.clear)
             Section {
                 TextField("Name", text: $person.name).textContentType(.name).accessibilityIdentifier("person-name")
@@ -133,7 +130,6 @@ struct PersonEditor: View {
             }
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Person").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
-            .sheet(isPresented: $choosingAvatar) { NavigationStack { AvatarChooser(person: person) { person.avatarJPEG = $0; choosingAvatar = false } } }
             .modifier(EditorControls(saving: saving, canSave: !person.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 error: $error, errorTitle: "Couldn’t save person", cancel: { dismiss() }, save: { save() }))
             .confirmationDialog("Remove this person from your trips and memories? Notes and photos will stay.", isPresented: $deleting, titleVisibility: .visible) {

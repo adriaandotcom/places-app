@@ -99,12 +99,20 @@ struct PlaceIcon: View {
     var symbol: String
     var colorIndex: Int = 0
     var customColorHex: String?
+    var photoJPEG: Data?
     var size: CGFloat = 44
+    @State private var image: UIImage?
     var body: some View {
-        Image(systemName: symbol).font(.system(size: size * 0.48, weight: .semibold))
-            .foregroundStyle(Palette.iconInk(colorIndex, hex: customColorHex)).frame(width: size, height: size)
-            .background(Palette.accent(colorIndex, hex: customColorHex), in: RoundedRectangle(cornerRadius: size * 0.3))
+        ZStack {
+            Palette.accent(colorIndex, hex: customColorHex)
+            if let image { Image(uiImage: image).resizable().scaledToFill() }
+            else {
+                Image(systemName: symbol).font(.system(size: size * 0.48, weight: .semibold))
+                    .foregroundStyle(Palette.iconInk(colorIndex, hex: customColorHex))
+            }
+        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: size * 0.3))
             .rotationEffect(.degrees(-4)).accessibilityHidden(true)
+            .onChange(of: photoJPEG, initial: true) { _, data in image = data.flatMap { UIImage(data: $0) } }
     }
 }
 struct PrimaryButton: ButtonStyle {
@@ -123,6 +131,7 @@ struct InfoRow: View {
     let subtitle: String
     var colorIndex = 0
     var customColorHex: String?
+    var photoJPEG: Data?
     var card = true
     var showsDisclosure = false
     var body: some View {
@@ -133,7 +142,7 @@ struct InfoRow: View {
     }
     private var content: some View {
         HStack(spacing: Layout.spacing) {
-            PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, size: 36)
+            PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, photoJPEG: photoJPEG, size: 36)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(BrandFont.title)
                 if !subtitle.isEmpty { Text(subtitle).font(.subheadline).foregroundStyle(Palette.muted) }

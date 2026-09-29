@@ -22,7 +22,7 @@ import Testing
     let date = Date(timeIntervalSince1970: 1_700_000_000)
     let old = Place(id: "old", name: "Imported garden", coordinate: .init(latitude: 1, longitude: 1), expectedSSIDs: ["Fixture WiFi"])
     let kept = Place(id: "kept", name: "My garden", coordinate: .init(latitude: 2, longitude: 2), symbol: "tree.fill",
-        expectedSSIDs: ["Fixture second network"], customColorHex: "7A1234", userEditedAt: date)
+        expectedSSIDs: ["Fixture second network"], customColorHex: "7A1234", userEditedAt: date, photoJPEG: Data([5, 6, 7]))
     try await store.savePlace(old); try await store.savePlace(kept)
     try await store.append([
         SensorObservation(id: "arrival", timestamp: date, source: .wifi, coordinate: old.coordinate,
@@ -39,6 +39,7 @@ import Testing
         placeID: old.id, visitStart: correction.start, personIDs: [person.id], photoIDs: [photo.id]), adding: [photo])
     let before = try await store.observations()
     let result = try await store.mergePlaces(edited: old, with: kept.id, keeping: kept.id, now: date.addingTimeInterval(5000))
+    #expect(result.photoJPEG == kept.photoJPEG)
     #expect(result.customColorHex == kept.customColorHex && result.symbol == kept.symbol && result.coordinate == kept.coordinate)
     #expect(Set(result.expectedSSIDs) == Set(old.expectedSSIDs + kept.expectedSSIDs))
     #expect(result.mergedPlaceIDs == [old.id])
@@ -78,4 +79,13 @@ import Testing
     #expect(items.first?.end == date.addingTimeInterval(600))
     #expect(items.last?.kind == .journey)
     #expect(observations.last?.monitoredPlaceID == "old")
+}
+
+
+@Test func placeMergePreservesTheChosenPhotoIncludingExplicitRemoval() {
+    let original = Place(id: "original", name: "Garden", coordinate: .init(latitude: 1, longitude: 1))
+    var personalized = original; personalized.id = "personalized"; personalized.photoJPEG = Data([1, 2, 3])
+    #expect(PlaceMergePlan(original, personalized).combined.photoJPEG == personalized.photoJPEG)
+    var edited = original; edited.userEditedAt = Date(timeIntervalSince1970: 100)
+    #expect(PlaceMergePlan(personalized, edited).combined.photoJPEG == nil)
 }

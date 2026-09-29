@@ -182,6 +182,7 @@ enum MemorySQL {
     }
     static func memories(_ db: Database) throws -> [PlaceMemory] { try StoreSQL.decodeAll(PlaceMemory.self, db: db, sql: "SELECT payload FROM memories ORDER BY date DESC") }
     static func saveTrip(_ trip: Trip, db: Database) throws {
+        guard trip.photoJPEG.map({ !$0.isEmpty && $0.count <= 200_000 }) ?? true else { throw MemoryError.invalidPhoto }
         try db.execute(sql: "INSERT INTO trips(id, payload) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload", arguments: [trip.id, try StoreSQL.encode(trip)])
     }
     static func saveMemory(_ memory: PlaceMemory, db: Database) throws {

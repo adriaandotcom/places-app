@@ -14,6 +14,7 @@ struct MapPin: Equatable, Identifiable {
     var symbol: String
     var colorIndex: Int
     var customColorHex: String?
+    var photoJPEG: Data?
     var placeID: String?
     var letter: String?
 }
@@ -54,14 +55,14 @@ struct MapPresentation: Equatable {
     init(pins: [MapPin], radius: Double? = nil) { self.pins = pins; self.radius = radius }
     init(place: Place) {
         pins = [MapPin(id: place.id, name: place.name, coordinate: place.coordinate,
-            symbol: place.symbol, colorIndex: place.colorIndex, customColorHex: place.customColorHex)]
+            symbol: place.symbol, colorIndex: place.colorIndex, customColorHex: place.customColorHex, photoJPEG: place.photoJPEG)]
         radius = place.area == nil ? place.radius : nil
         areas = place.area.map { [$0] } ?? []
     }
     init(items: [TimelineItem], routePoints: [RoutePoint], places: [Place]) {
         let ids = Set(items.compactMap(\.placeID))
         pins = places.filter { ids.contains($0.id) }.map {
-            MapPin(id: $0.id, name: $0.name, coordinate: $0.coordinate, symbol: $0.symbol, colorIndex: $0.colorIndex, customColorHex: $0.customColorHex, placeID: $0.id)
+            MapPin(id: $0.id, name: $0.name, coordinate: $0.coordinate, symbol: $0.symbol, colorIndex: $0.colorIndex, customColorHex: $0.customColorHex, photoJPEG: $0.photoJPEG, placeID: $0.id)
         }
         for item in items {
             if item.kind == .stay, !places.contains(where: { $0.id == item.placeID }), let coordinate = item.coordinate, coordinate.isValid {

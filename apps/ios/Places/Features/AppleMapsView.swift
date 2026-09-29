@@ -79,14 +79,14 @@ private struct AppleMapSurface: View {
             ForEach(presentation.pins) { pin in
                 Annotation(pin.name, coordinate: CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)) {
                     if let place = model.places.first(where: { $0.id == pin.placeID }) {
-                        Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, size: 40) }
+                        Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40) }
                             .accessibilityLabel(pin.name)
                     } else if let letter = pin.letter {
                         Text(letter).font(.headline.bold()).foregroundStyle(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex))
                             .frame(width: 32, height: 32).background(Palette.accent(pin.colorIndex, hex: pin.customColorHex), in: Circle())
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                             .accessibilityLabel("Endpoint \(letter)").accessibilityIdentifier("endpoint-\(letter)")
-                    } else { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, size: 40).accessibilityLabel(pin.name) }
+                    } else { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40).accessibilityLabel(pin.name) }
                 }
             }
             ForEach(presentation.paths) { path in

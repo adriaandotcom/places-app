@@ -37,7 +37,7 @@ struct TimelineDetail: View {
                 HStack(spacing: Layout.spacing) {
                     if !dynamicTypeSize.isAccessibilitySize {
                         PlaceIcon(symbol: item.kind == .gap ? "questionmark" : item.kind == .journey ? item.mode.symbol : place?.symbol ?? "mappin",
-                                  colorIndex: place?.colorIndex ?? 4, customColorHex: place?.customColorHex)
+                                  colorIndex: place?.colorIndex ?? 4, customColorHex: place?.customColorHex, photoJPEG: place?.photoJPEG)
                     }
                     Text(title).font(BrandFont.heading)
                 }

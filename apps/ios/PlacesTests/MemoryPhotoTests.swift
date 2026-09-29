@@ -80,7 +80,7 @@ import PlacesCore
             kCGImagePropertyExifDictionary: [kCGImagePropertyExifUserComment: "Private fixture"]
         ] as CFDictionary)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
-        let data = try AvatarImage.cropped(source as Data, rect: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let data = try SquarePhotoImage.cropped(source as Data, rect: CGRect(x: 0, y: 0, width: 1, height: 1))
         XCTAssertLessThanOrEqual(data.count, 200_000)
         let result = try XCTUnwrap(CGImageSourceCreateWithData(data as CFData, nil))
         let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(result, 0, nil) as? [CFString: Any])
@@ -90,7 +90,7 @@ import PlacesCore
         XCTAssertNil((properties[kCGImagePropertyExifDictionary] as? [CFString: Any])?[kCGImagePropertyExifUserComment])
         // Crop coordinates are measured from the top, matching the preview and Vision conversion.
         for (y, expectedChannel) in [(0.0, 0), (0.5, 2)] {
-            let crop = try AvatarImage.cropped(source as Data, rect: CGRect(x: 0, y: y, width: 0.2, height: 0.25))
+            let crop = try SquarePhotoImage.cropped(source as Data, rect: CGRect(x: 0, y: y, width: 0.2, height: 0.25))
             let decoded = try XCTUnwrap(CGImageSourceCreateWithData(crop as CFData, nil))
             let cg = try XCTUnwrap(CGImageSourceCreateImageAtIndex(decoded, 0, nil))
             var pixel = [UInt8](repeating: 0, count: 4)
@@ -102,14 +102,14 @@ import PlacesCore
             XCTAssertGreaterThan(pixel[expectedChannel], 220)
             XCTAssertLessThan(pixel[expectedChannel == 0 ? 2 : 0], 30)
         }
-        XCTAssertThrowsError(try AvatarImage.cropped(source as Data, rect: CGRect(x: 2, y: 2, width: 1, height: 1)))
-        XCTAssertThrowsError(try AvatarImage.cropped(Data(), rect: .zero))
+        XCTAssertThrowsError(try SquarePhotoImage.cropped(source as Data, rect: CGRect(x: 2, y: 2, width: 1, height: 1)))
+        XCTAssertThrowsError(try SquarePhotoImage.cropped(Data(), rect: .zero))
     }
 
     func testFaceSuggestionSquaresStayInsidePortraitAndLandscapeImages() {
         for (width, height) in [(1600.0, 900.0), (900.0, 1600.0)] {
             for face in [CGRect(x: 0.02, y: 0.02, width: 0.15, height: 0.2), CGRect(x: 0.8, y: 0.8, width: 0.2, height: 0.2)] {
-                let square = AvatarImage.square(around: face, width: width, height: height)
+                let square = SquarePhotoImage.square(around: face, width: width, height: height)
                 XCTAssertEqual(square.width * width, square.height * height, accuracy: 0.001)
                 XCTAssertGreaterThanOrEqual(square.minX, 0); XCTAssertGreaterThanOrEqual(square.minY, 0)
                 XCTAssertLessThanOrEqual(square.maxX, 1.001); XCTAssertLessThanOrEqual(square.maxY, 1.001)

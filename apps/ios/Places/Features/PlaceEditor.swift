@@ -22,6 +22,7 @@ struct PlaceEditor: View {
     @State private var tripRole: PlaceTripRole
     @State private var userChoseIcon: Bool
     @State private var customColorHex: String?
+    @State private var photoJPEG: Data?
     @State private var mergeDraft: Place?
     @State private var didMerge = false
     @State private var colorIndex: Int
@@ -82,6 +83,7 @@ struct PlaceEditor: View {
         _userChoseIcon = State(initialValue: place != nil)
         _tripRole = State(initialValue: place?.tripRole ?? .automatic)
         _customColorHex = State(initialValue: place?.customColorHex)
+        _photoJPEG = State(initialValue: place?.photoJPEG)
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
         _wifi = State(initialValue: PlaceWiFiDraft(names: place?.expectedSSIDs ?? []))
         _catalogReference = State(initialValue: place?.catalogReference ?? suggestion?.reference)
@@ -133,10 +135,10 @@ struct PlaceEditor: View {
             Section("Details") {
                 Button { choosingIcon = true } label: {
                     HStack(spacing: Layout.spacing) {
-                        PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex)
+                        PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, photoJPEG: photoJPEG)
                         Text(PlaceIconCatalog.title(for: symbol)).foregroundStyle(Palette.ink)
                         Spacer()
-                        Text("Change icon").font(.subheadline)
+                        Text("Change appearance").font(.subheadline)
                         Image(systemName: "chevron.right").font(.caption)
                     }.frame(minHeight: Layout.touchTarget)
                 }.accessibilityIdentifier("choose-place-icon")
@@ -311,8 +313,9 @@ struct PlaceEditor: View {
             } message: { Text("Use your saved place instead of creating a duplicate.") }
             .sheet(isPresented: $choosingIcon) {
                 NavigationStack {
-                    PlaceIconPicker(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex) { icon, index, hex in
-                        symbol = icon; colorIndex = index; customColorHex = hex; userChoseIcon = true
+                    PlaceIconPicker(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, photoJPEG: photoJPEG,
+                        photoIDs: model.memories.memories.filter { original != nil && $0.placeID == original?.id }.sorted { $0.date > $1.date }.flatMap(\.photoIDs)) { icon, index, hex, photo in
+                        symbol = icon; colorIndex = index; customColorHex = hex; photoJPEG = photo; userChoseIcon = true
                     }
                 }
             }
@@ -417,7 +420,7 @@ struct PlaceEditor: View {
         guard wifi.finish() else { wifiFocused = true; return nil }
         var place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole, area: area, customColorHex: customColorHex, userEditedAt: original?.userEditedAt, mergedPlaceIDs: original?.mergedPlaceIDs)
+            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole, area: area, customColorHex: customColorHex, userEditedAt: original?.userEditedAt, mergedPlaceIDs: original?.mergedPlaceIDs, photoJPEG: photoJPEG)
         if original?.tripRole == nil && tripRole == .automatic { place.tripRole = nil }
         if original != place { place.userEditedAt = Date() }
         return place

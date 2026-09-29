@@ -438,6 +438,7 @@ public actor PlacesStore {
 
 enum StoreSQL {
     static func savePlace(_ place: Place, db: Database) throws {
+        guard place.photoJPEG.map({ !$0.isEmpty && $0.count <= 200_000 }) ?? true else { throw MemoryError.invalidPhoto }
         guard !place.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               place.coordinate.isValid, place.radius.isFinite, (50...1000).contains(place.radius), place.area?.isValid != false else { throw PlacesError.invalidPlace }
         try db.execute(sql: "INSERT INTO places(id, name, address, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, address = excluded.address, payload = excluded.payload",

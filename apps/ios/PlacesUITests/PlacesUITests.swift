@@ -446,6 +446,55 @@ import XCTest
         XCTAssertFalse(app.buttons["Photo 3"].exists)
     }
 
+    func testCroppedPhotosForPlacesAndTrips() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-browser"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.buttons.containing(.staticText, identifier: "Seaside stay").firstMatch.tap()
+        app.buttons["edit-place-details"].tap()
+        reveal(app.buttons["choose-place-icon"], in: app); app.buttons["choose-place-icon"].tap()
+        app.buttons["choose-place-photo"].tap()
+        app.buttons["choose-crop-photo"].tap()
+        let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+        XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["use-photo-crop"].waitForExistence(timeout: 15))
+        app.sliders["Crop zoom"].adjust(toNormalizedSliderPosition: 0.2)
+        app.buttons["use-photo-crop"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 10))
+        app.buttons["save-place-appearance"].tap()
+        app.navigationBars["Edit place"].buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["edit-place-details"].waitForExistence(timeout: 10))
+        let savedPlace = XCTAttachment(screenshot: app.screenshot()); savedPlace.name = "Place with cropped photo"; savedPlace.lifetime = .keepAlways; add(savedPlace)
+        app.buttons["edit-place-details"].tap()
+        reveal(app.buttons["choose-place-icon"], in: app); app.buttons["choose-place-icon"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 5))
+        app.buttons["Remove photo"].tap()
+        app.navigationBars["Appearance"].buttons["Cancel"].tap()
+        app.buttons["choose-place-icon"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 5), "Cancel must keep the photo")
+        app.buttons["Remove photo"].tap(); app.buttons["save-place-appearance"].tap()
+        app.navigationBars["Edit place"].buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["edit-place-details"].waitForExistence(timeout: 10))
+        app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons["trip-photo-trip"].tap(); app.buttons["edit-trip"].tap()
+        app.buttons["choose-trip-photo"].tap()
+        let suggested = app.buttons["Suggested photo 1"]
+        XCTAssertTrue(suggested.waitForExistence(timeout: 10)); suggested.tap()
+        XCTAssertTrue(app.buttons["use-photo-crop"].waitForExistence(timeout: 5))
+        app.sliders["Crop zoom"].adjust(toNormalizedSliderPosition: 0.1)
+        app.buttons["use-photo-crop"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 10)); app.buttons["save-trip"].tap()
+        XCTAssertTrue(app.buttons["trip-photo"].waitForExistence(timeout: 10))
+        let savedTrip = XCTAttachment(screenshot: app.screenshot()); savedTrip.name = "Trip with cropped photo"; savedTrip.lifetime = .keepAlways; add(savedTrip)
+        app.buttons["edit-trip"].tap()
+        XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 5))
+        app.buttons["Remove photo"].tap(); app.buttons["save-trip"].tap()
+        XCTAssertTrue(app.buttons["edit-trip"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["trip-photo"].exists)
+    }
+
     func testMentionsAvatarCropAndAddingMorePhotos() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-memories"]
@@ -490,12 +539,12 @@ import XCTest
         XCTAssertTrue(robin.waitForExistence(timeout: 5)); reveal(robin, in: app); robin.tap()
         let choose = app.buttons["choose-person-avatar"]
         reveal(choose, in: app); choose.tap()
-        let suggested = app.buttons["Trip photo 1"]
+        let suggested = app.buttons["Suggested photo 1"]
         XCTAssertTrue(suggested.waitForExistence(timeout: 15)); suggested.tap()
-        XCTAssertTrue(app.buttons["use-avatar-crop"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["use-photo-crop"].waitForExistence(timeout: 5))
         app.sliders["Crop zoom"].adjust(toNormalizedSliderPosition: 0.15)
         let crop = XCTAttachment(screenshot: app.screenshot()); crop.name = "Private square avatar crop"; crop.lifetime = .keepAlways; add(crop)
-        app.buttons["use-avatar-crop"].tap()
+        app.buttons["use-photo-crop"].tap()
         XCTAssertTrue(app.buttons["Remove photo"].waitForExistence(timeout: 10))
         app.navigationBars["Person"].buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["Friend of @Robin "].waitForExistence(timeout: 8))

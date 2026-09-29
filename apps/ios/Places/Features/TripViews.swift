@@ -21,7 +21,7 @@ struct TripLink: View {
     let trip: Trip
     var body: some View {
         NavigationLink { TripDetail(tripID: trip.id) } label: {
-            InfoRow(symbol: "suitcase.rolling.fill", title: trip.title, subtitle: TripDisplay.dates(trip), colorIndex: 1)
+            InfoRow(symbol: "suitcase.rolling.fill", title: trip.title, subtitle: TripDisplay.dates(trip), colorIndex: 1, photoJPEG: trip.photoJPEG)
         }.buttonStyle(.plain).accessibilityIdentifier("trip-\(trip.id)")
     }
 }
@@ -43,6 +43,11 @@ struct TripDetail: View {
         ScrollView {
             if let trip {
                 VStack(alignment: .leading, spacing: Layout.spacing) {
+                    if trip.photoJPEG != nil {
+                        Button { editing = true } label: {
+                            PlaceIcon(symbol: "suitcase.rolling.fill", colorIndex: 1, photoJPEG: trip.photoJPEG, size: Layout.portraitSize)
+                        }.buttonStyle(.plain).accessibilityLabel("Change trip photo").accessibilityIdentifier("trip-photo")
+                    }
                     Text(trip.title).font(BrandFont.hero)
                     Text(TripDisplay.dates(trip)).font(.subheadline).foregroundStyle(Palette.muted)
                     PersonAvatarGroup(personIDs: trip.personIDs)
@@ -114,6 +119,13 @@ struct TripEditor: View {
     }
     var body: some View {
         Form {
+            Section {
+                CroppedPhotoField(photo: $trip.photoJPEG,
+                    photoIDs: model.memories.memories.filter { $0.belongs(to: trip) }.sorted { $0.date > $1.date }.flatMap(\.photoIDs),
+                    identifier: "choose-trip-photo") {
+                    PlaceIcon(symbol: "suitcase.rolling.fill", colorIndex: 1, photoJPEG: trip.photoJPEG, size: Layout.portraitSize)
+                }
+            }.listRowBackground(Color.clear)
             Section {
                 TextField("Trip name", text: $trip.title).accessibilityIdentifier("trip-name")
                 DateRangeFields(start: $trip.start, end: $end, ongoing: $ongoing, components: [.date, .hourAndMinute], endTitle: "Until")

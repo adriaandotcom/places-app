@@ -4,28 +4,53 @@ import ImageIO
 import Vision
 import PlacesCore
 
-private struct AvatarSource: Identifiable {
+/// The same private picker and square crop for people, places and trips.
+struct CroppedPhotoField<Preview: View>: View {
+    @Binding var photo: Data?
+    var photoIDs: [String] = []
+    var suggestsFaces = false
+    let identifier: String
+    @ViewBuilder let preview: () -> Preview
+    @State private var choosing = false
+    var body: some View {
+        VStack(spacing: Layout.compact) {
+            Button { choosing = true } label: { preview() }
+                .buttonStyle(.plain).accessibilityLabel(photo == nil ? "Add photo" : "Change photo")
+                .accessibilityIdentifier(identifier)
+            Button(photo == nil ? "Add photo" : "Change photo") { choosing = true }.buttonStyle(.borderless)
+            if photo != nil { Button("Remove photo", role: .destructive) { photo = nil }.buttonStyle(.borderless) }
+        }.frame(maxWidth: .infinity).padding(.vertical, Layout.compact)
+            .sheet(isPresented: $choosing) {
+                NavigationStack {
+                    CroppedPhotoChooser(photoIDs: photoIDs, suggestsFaces: suggestsFaces) { photo = $0; choosing = false }
+                }
+            }
+    }
+}
+
+private struct PhotoCropSource: Identifiable {
     let id = UUID()
     let data: Data
     var crop: CGRect?
 }
-private struct AvatarSuggestion: Identifiable, Sendable {
+private struct PhotoCropSuggestion: Identifiable, Sendable {
     let id: String
     let photoID: String
     let preview: Data
     let crop: CGRect?
 }
 
-struct AvatarChooser: View {
+struct CroppedPhotoChooser: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    let person: MemoryPerson
+    var photoIDs: [String] = []
+    var suggestsFaces = false
     let use: (Data) -> Void
     @State private var choosingPhoto = false
     @State private var selection: PhotosPickerItem?
-    @State private var source: AvatarSource?
-    @State private var faces: [AvatarSuggestion] = []
-    @State private var photos: [AvatarSuggestion] = []
+    @State private var source: PhotoCropSource?
+    @State private var faces: [PhotoCropSuggestion] = []
+    @State private var photos: [PhotoCropSuggestion] = []
     @State private var scanning = true
     @State private var loading = false
     @State private var error: String?
@@ -33,30 +58,30 @@ struct AvatarChooser: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Layout.spacing) {
                 Button("Choose a photo", systemImage: "photo.badge.plus") { choosingPhoto = true }
-                    .buttonStyle(PrimaryButton()).disabled(loading).accessibilityIdentifier("choose-avatar-photo")
+                    .buttonStyle(PrimaryButton()).disabled(loading).accessibilityIdentifier("choose-crop-photo")
                 if loading { ProgressView("Opening photo…") }
                 if !faces.isEmpty {
                     SectionHeading(title: "Faces from shared trips")
                     suggestionGrid(faces, facesOnly: true)
                 }
                 if !photos.isEmpty {
-                    SectionHeading(title: "Recent trip photos")
+                    SectionHeading(title: "Photos from memories")
                     suggestionGrid(photos, facesOnly: false)
                 }
                 if scanning { ProgressView("Finding photos on this iPhone…") }
             }.padding(Layout.gutter)
         }.background(Palette.background).foregroundStyle(Palette.ink)
-            .navigationTitle("Choose avatar").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Choose photo").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
             .photosPicker(isPresented: $choosingPhoto, selection: $selection, matching: .images, preferredItemEncoding: .current)
             .onChange(of: selection) { importSelection() }
             .onChange(of: choosingPhoto) { importSelection() }
-            .sheet(item: $source) { source in NavigationStack { AvatarCropEditor(source: source, use: use) } }
+            .sheet(item: $source) { source in NavigationStack { PhotoCropEditor(source: source, use: use) } }
             .task { await loadSuggestions() }
             .alert("Couldn’t open photo", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") {} } message: { Text(error ?? "") }
     }
-    @ViewBuilder private func suggestionGrid(_ suggestions: [AvatarSuggestion], facesOnly: Bool) -> some View {
-        PhotoGrid(items: suggestions, label: { facesOnly ? "Suggested face \($0 + 1)" : "Trip photo \($0 + 1)" }, open: open) { suggestion in
+    @ViewBuilder private func suggestionGrid(_ suggestions: [PhotoCropSuggestion], facesOnly: Bool) -> some View {
+        PhotoGrid(items: suggestions, label: { facesOnly ? "Suggested face \($0 + 1)" : "Suggested photo \($0 + 1)" }, open: open) { suggestion in
             if let image = UIImage(data: suggestion.preview) { Image(uiImage: image).resizable().scaledToFill() }
             else { Image(systemName: "photo").foregroundStyle(Palette.muted) }
         }.disabled(loading)
@@ -70,17 +95,17 @@ struct AvatarChooser: View {
             do {
                 guard let data = try await selected.loadTransferable(type: Data.self) else { throw MemoryError.invalidPhoto }
                 let clean = try await Task.detached(priority: .userInitiated) { try MemoryPhotoImport.make(data).jpeg }.value
-                source = AvatarSource(data: clean)
+                source = PhotoCropSource(data: clean)
             } catch { self.error = "Try choosing that photo again." }
         }
     }
-    private func open(_ suggestion: AvatarSuggestion) {
+    private func open(_ suggestion: PhotoCropSuggestion) {
         loading = true
         Task {
             defer { loading = false }
             do {
                 guard let data = try await model.store?.photoData(id: suggestion.photoID) else { throw MemoryError.invalidPhoto }
-                source = AvatarSource(data: data, crop: suggestion.crop)
+                source = PhotoCropSource(data: data, crop: suggestion.crop)
             } catch { self.error = "This photo is no longer available." }
         }
     }
@@ -88,25 +113,26 @@ struct AvatarChooser: View {
         defer { scanning = false }
         guard let store = model.store else { return }
         // A bounded recent suggestion set; importing photos remains unlimited.
-        for id in model.memories.avatarPhotoIDs(for: person.id).prefix(40) {
+        var seen: Set<String> = []
+        for id in photoIDs.filter({ seen.insert($0).inserted }).prefix(40) {
             guard !Task.isCancelled else { return }
             do {
                 guard let data = try await store.photoData(id: id), let preview = try await store.photoData(id: id, thumbnail: true) else { continue }
-                let suggestions = await Task.detached(priority: .utility) {
-                    (try? AvatarImage.faceCrops(in: data))?.enumerated().compactMap { index, rect -> AvatarSuggestion? in
-                        guard let thumb = try? AvatarImage.cropped(data, rect: rect, maximumSize: 160) else { return nil }
-                        return AvatarSuggestion(id: "\(id)-face-\(index)", photoID: id, preview: thumb, crop: rect)
+                let suggestions: [PhotoCropSuggestion] = suggestsFaces ? await Task.detached(priority: .utility) {
+                    (try? SquarePhotoImage.faceCrops(in: data))?.enumerated().compactMap { index, rect -> PhotoCropSuggestion? in
+                        guard let thumb = try? SquarePhotoImage.cropped(data, rect: rect, maximumSize: 160) else { return nil }
+                        return PhotoCropSuggestion(id: "\(id)-face-\(index)", photoID: id, preview: thumb, crop: rect)
                     } ?? []
-                }.value
+                }.value : []
                 guard !Task.isCancelled else { return }
-                photos.append(AvatarSuggestion(id: id, photoID: id, preview: preview, crop: nil))
+                photos.append(PhotoCropSuggestion(id: id, photoID: id, preview: preview, crop: nil))
                 faces.append(contentsOf: suggestions)
             } catch { continue }
         }
     }
 }
 
-enum AvatarImage {
+enum SquarePhotoImage {
     nonisolated static func faceCrops(in data: Data) throws -> [CGRect] {
         let image = try image(data)
         let request = VNDetectFaceRectanglesRequest()
@@ -150,9 +176,9 @@ enum AvatarImage {
     }
 }
 
-private struct AvatarCropEditor: View {
+private struct PhotoCropEditor: View {
     @Environment(\.dismiss) private var dismiss
-    let source: AvatarSource
+    let source: PhotoCropSource
     let use: (Data) -> Void
     @State private var crop = CGRect(x: 0, y: 0, width: 1, height: 1)
     @State private var zoom: CGFloat = 1
@@ -165,7 +191,7 @@ private struct AvatarCropEditor: View {
                 SquareCropSurface(image: image, initialCrop: source.crop, crop: $crop, zoom: $zoom)
                     .aspectRatio(1, contentMode: .fit).clipped()
                     .overlay { Rectangle().stroke(Palette.green, lineWidth: 2).allowsHitTesting(false) }
-                    .accessibilityIdentifier("avatar-crop")
+                    .accessibilityIdentifier("photo-crop")
                 HStack {
                     Image(systemName: "minus.magnifyingglass")
                     Slider(value: $zoom, in: 1...8).accessibilityLabel("Crop zoom")
@@ -177,13 +203,16 @@ private struct AvatarCropEditor: View {
         }.padding(Layout.gutter).background(Palette.background)
             .navigationTitle("Crop photo").navigationBarTitleDisplayMode(.inline)
             .modifier(EditorControls(saving: saving, error: $error, errorTitle: "Couldn’t crop photo", saveTitle: "Use photo",
-                saveIdentifier: "use-avatar-crop", cancel: { dismiss() }, save: save))
+                saveIdentifier: "use-photo-crop", cancel: { dismiss() }, save: save))
     }
     private func save() {
         saving = true
         let rect = crop
         Task {
-            do { let data = try await Task.detached(priority: .userInitiated) { try AvatarImage.cropped(source.data, rect: rect) }.value; use(data) }
+            do {
+                let data = try await Task.detached(priority: .userInitiated) { try SquarePhotoImage.cropped(source.data, rect: rect) }.value
+                use(data)
+            }
             catch { self.error = "Try choosing the photo again." }
             saving = false
         }

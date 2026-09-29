@@ -51,11 +51,12 @@ private func detect(_ items: [TimelineItem], places: [Place] = [home, hotel], no
     #expect(detect([visit("far-night", "far", 1, 20, 2, 8)], places: [far]).isEmpty)
 }
 @Test func automaticUpdatesPreserveNamesDatesCompanionsAndHiddenTrips() throws {
-    var original = Trip(title: "My holiday", start: date(1, 8), end: date(4, 18), personIDs: ["friend"], automaticAnchor: date(1, 19), datesEdited: true, titleEdited: true, hidden: true)
+    var original = Trip(title: "My holiday", start: date(1, 8), end: date(4, 18), personIDs: ["friend"], automaticAnchor: date(1, 19), datesEdited: true, titleEdited: true, hidden: true, photoJPEG: Data([1, 2, 3]))
     let inferred = Trip(title: "Hotel", start: date(1, 9), end: nil, automaticAnchor: date(1, 19))
     #expect(TripDetection.reconcile([inferred], existing: [original]) == [original])
     original.datesEdited = false
     let updated = try #require(TripDetection.reconcile([inferred], existing: [original]).first)
+    #expect(updated.photoJPEG == original.photoJPEG)
     #expect(updated.id == original.id); #expect(updated.end == nil); #expect(updated.personIDs == ["friend"])
     let manual = Trip(title: "Manual", start: date(1, 0), end: date(5, 0))
     #expect(TripDetection.reconcile([inferred], existing: [manual]) == [manual])
@@ -305,4 +306,48 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
         PlaceMemory(date: date(1, 0), placeID: hotel.id, personIDs: [person.id], photoIDs: ["tagged-photo"])]
     #expect(library.avatarPhotoIDs(for: person.id, now: date(6, 0)) == ["visit-photo", "trip-photo", "tagged-photo"])
     #expect(library.avatarPhotoIDs(for: "someone-else", now: date(6, 0)).isEmpty)
+}
+
+
+@Test func placeAndTripPhotosPersistExportPrivatelyAndCanBeRemoved() async throws {
+    let path = FileManager.default.temporaryDirectory.appendingPathComponent("cover-\(UUID()).sqlite")
+    defer { for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: path.path + suffix) } }
+    let store = try PlacesStore(path: path.path)
+    let photo = Data("Synthetic cover photo payload".utf8)
+    var place = hotel; place.photoJPEG = photo
+    var trip = Trip(title: "Private trip", start: date(1, 0), end: date(5, 0), photoJPEG: photo)
+    try await store.savePlace(place); try await store.saveTrip(trip)
+    let reopened = try PlacesStore(path: path.path)
+    #expect(try await reopened.places().first?.photoJPEG == photo)
+    #expect(try await reopened.memoryLibrary().trips.first?.photoJPEG == photo)
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let archive = try decoder.decode(HistoryArchive.self, from: await reopened.exportHistory())
+    #expect(archive.places.first?.photoJPEG == photo)
+    #expect(archive.memories?.trips.first?.photoJPEG == photo)
+    for export in [try await reopened.exportDiagnostics(), try await reopened.exportTestCase()] {
+        let text = String(decoding: export, as: UTF8.self)
+        #expect(!text.contains("photoJPEG") && !text.contains(photo.base64EncodedString()))
+    }
+    for invalid in [Data(), Data(repeating: 1, count: 200_001)] {
+        var invalidPlace = place; invalidPlace.photoJPEG = invalid
+        var invalidTrip = trip; invalidTrip.photoJPEG = invalid
+        await #expect(throws: MemoryError.invalidPhoto) { try await reopened.savePlace(invalidPlace) }
+        await #expect(throws: MemoryError.invalidPhoto) { try await reopened.saveTrip(invalidTrip) }
+    }
+    #expect(try await reopened.places().first?.photoJPEG == photo)
+    #expect(try await reopened.memoryLibrary().trips.first?.photoJPEG == photo)
+    place.photoJPEG = nil; trip.photoJPEG = nil
+    try await reopened.savePlace(place); try await reopened.saveTrip(trip)
+    #expect(try await store.places().first?.photoJPEG == nil)
+    #expect(try await store.memoryLibrary().trips.first?.photoJPEG == nil)
+    #expect(try await store.places().first?.symbol == hotel.symbol)
+}
+
+@Test func oldPlacesAndTripsDecodeWithoutPhotoFields() throws {
+    let trip = Trip(title: "Existing trip", start: date(1, 0))
+    for data in [try JSONEncoder().encode(hotel), try JSONEncoder().encode(trip)] {
+        #expect(!String(decoding: data, as: UTF8.self).contains("photoJPEG"))
+    }
+    #expect(try JSONDecoder().decode(Place.self, from: JSONEncoder().encode(hotel)).photoJPEG == nil)
+    #expect(try JSONDecoder().decode(Trip.self, from: JSONEncoder().encode(trip)).photoJPEG == nil)
 }

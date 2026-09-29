@@ -293,6 +293,10 @@ struct OfflineMapSurface: UIViewRepresentable {
             if let letter = pin.letter {
                 let text = UILabel(frame: badge.bounds); text.text = letter; text.textAlignment = .center
                 text.font = .boldSystemFont(ofSize: 20); text.textColor = UIColor(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex)); badge.addSubview(text)
+            } else if let data = pin.photoJPEG, let photo = UIImage(data: data) {
+                let image = UIImageView(image: photo)
+                image.frame = badge.bounds; image.contentMode = .scaleAspectFill
+                badge.clipsToBounds = true; badge.addSubview(image)
             } else {
                 let image = UIImageView(image: UIImage(systemName: pin.symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .semibold)))
                 image.tintColor = UIColor(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex)); image.contentMode = .scaleAspectFit; image.frame = badge.bounds.insetBy(dx: 7, dy: 7); badge.addSubview(image)

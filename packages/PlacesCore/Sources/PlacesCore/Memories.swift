@@ -35,11 +35,13 @@ public struct Trip: Codable, Identifiable, Hashable, Sendable {
     public var datesEdited: Bool
     public var titleEdited: Bool
     public var hidden: Bool
+    public var photoJPEG: Data?
     public init(id: String = UUID().uuidString, title: String, start: Date, end: Date? = nil,
                 personIDs: [String] = [], automaticAnchor: Date? = nil,
-                datesEdited: Bool = false, titleEdited: Bool = false, hidden: Bool = false) {
+                datesEdited: Bool = false, titleEdited: Bool = false, hidden: Bool = false, photoJPEG: Data? = nil) {
         self.id = id; self.title = title; self.start = start; self.end = end; self.personIDs = personIDs
         self.automaticAnchor = automaticAnchor; self.datesEdited = datesEdited; self.titleEdited = titleEdited; self.hidden = hidden
+        self.photoJPEG = photoJPEG
     }
     public func contains(_ date: Date, now: Date = Date()) -> Bool { date >= start && date < (end ?? now) }
     public func interval(now: Date = Date()) -> DateInterval { DateInterval(start: start, end: max(start, end ?? now)) }

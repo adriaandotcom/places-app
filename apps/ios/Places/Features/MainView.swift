@@ -144,7 +144,7 @@ struct TimelineRow: View {
     var body: some View {
         if item.kind == .stay {
             HStack(alignment: .top, spacing: 14) {
-                PlaceIcon(symbol: place?.symbol ?? "mappin", colorIndex: place?.colorIndex ?? 4, customColorHex: place?.customColorHex)
+                PlaceIcon(symbol: place?.symbol ?? "mappin", colorIndex: place?.colorIndex ?? 4, customColorHex: place?.customColorHex, photoJPEG: place?.photoJPEG)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(place?.name ?? "Somewhere new").font(BrandFont.title).multilineTextAlignment(.leading)
                     Text(Display.range(item)).font(.subheadline).foregroundStyle(Palette.muted)
