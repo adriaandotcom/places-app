@@ -44,7 +44,7 @@ struct PastVisitReview: View {
                 if let plan, !drafts.isEmpty {
                     Section("Ready to add") {
                         if plan.count == 0 {
-                            Text("No new visits yet").foregroundStyle(Palette.muted)
+                            Text(plan.memoryVisits.isEmpty ? "No new visits yet" : "Visits already in your timeline").foregroundStyle(Palette.muted)
                             Button("Choose another suggestion", action: chooseNext)
                         }
                         ForEach(plan.visits) { visit in
@@ -60,7 +60,7 @@ struct PastVisitReview: View {
                 }
                 if !photoIDs.isEmpty {
                     Section("Memory") {
-                        let visits = plan?.visits.filter { !$0.intervals.isEmpty } ?? []
+                        let visits = plan?.memoryVisits ?? []
                         if visits.count > 1 {
                             Picker("Save photos at", selection: $memoryVisitID) {
                                 ForEach(visits) { visit in Text(visit.place?.name ?? "Visit").tag(Optional(visit.id)) }
@@ -78,7 +78,7 @@ struct PastVisitReview: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Adding…" : "Add visits") { Task { await save() } }
+                    Button(saving ? "Adding…" : plan?.count == 0 && memoryVisitID != nil && !photoIDs.isEmpty ? "Add memory" : "Add visits") { Task { await save() } }
                         .disabled(saving || context == nil || drafts.isEmpty).accessibilityIdentifier("confirm-past-visits")
                 }
             }.interactiveDismissDisabled(saving)
@@ -100,7 +100,7 @@ struct PastVisitReview: View {
             }
     }
     private func updateMemoryPlace() {
-        let visits = plan?.visits.filter { !$0.intervals.isEmpty } ?? []
+        let visits = plan?.memoryVisits ?? []
         if !visits.contains(where: { $0.id == memoryVisitID }) { memoryVisitID = visits.first?.id }
     }
     private func reload() async {
@@ -110,7 +110,7 @@ struct PastVisitReview: View {
         } catch { self.error = "Couldn’t load your timeline. Close this review and try again." }
     }
     private func save() async {
-        guard let plan, plan.canImport else {
+        guard let plan, plan.canImport || (plan.visits.allSatisfy { $0.issue == nil } && memoryVisitID != nil && !photoIDs.isEmpty) else {
             showIssues = true
             error = "Check the selected places and times. Existing entries are kept unless you choose to replace them."
             return
@@ -122,7 +122,7 @@ struct PastVisitReview: View {
             let memory = photos.isEmpty ? nil : memoryVisitID.map { PastVisitMemory(visitID: $0, suggestionID: selection.id, photos: photos) }
             if !photos.isEmpty && memory == nil { throw PastVisitImportError.invalidSelection }
             try await model.importPastVisits(drafts, reviewed: plan, at: reviewedAt, memory: memory, epoch: epoch)
-            onSaved(memory == nil ? "Visits added" : "Visits and memory added")
+            onSaved(memory == nil ? "Visits added" : plan.count == 0 ? "Memory added" : "Visits and memory added")
         } catch PastVisitImportError.timelineChanged {
             await reload()
             self.error = "Your timeline changed. Review the updated overlaps, then confirm again."

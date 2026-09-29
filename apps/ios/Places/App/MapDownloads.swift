@@ -66,6 +66,18 @@ final class MapDownloads: NSObject {
     }
 
     #if DEBUG
+    func installPreviewMapForTesting() async throws {
+        guard testing, let directory else { return }
+        while !ready { await Task.yield() }
+        guard let pack = choices(.netherlands).first(where: { $0.detail == .normal }) else { return }
+        let source = OfflineMapStyle.resourceRoot.appendingPathComponent("Previews/amsterdam-normal.pmtiles")
+        let target = directory.appendingPathComponent(pack.filename)
+        try MapPackFiles.validate(source, pack: pack)
+        try FileManager.default.copyItem(at: source, to: target)
+        installedPacks[pack.id] = pack; installed[pack.id] = target
+        transfers[pack.id] = MapPackTransfer(token: UUID().uuidString, phase: .installed, received: pack.bytes, pack: pack)
+        try saveInstalled(); persist()
+    }
     func loadPreviewCatalogForTesting() {
         guard testing,
               let url = Bundle.main.url(forResource: "manifest", withExtension: "json", subdirectory: "OfflineMaps/Previews"),

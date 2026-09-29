@@ -211,6 +211,8 @@ public struct UserOverride: Codable, Identifiable, Sendable {
     public var createdAt: Date
     /// A user-confirmed addition from Journaling Suggestions, not a sensor observation.
     public var importedVisitID: String?
+    /// Keeps a confirmed visit located after its saved place is deleted.
+    public var coordinate: Coordinate?
     public init(id: String = UUID().uuidString, start: Date, end: Date, kind: TimelineKind,
                 placeID: String? = nil, mode: TransportMode = .unknown, createdAt: Date = Date(), importedVisitID: String? = nil) {
         self.id = id; self.start = start; self.end = end; self.kind = kind

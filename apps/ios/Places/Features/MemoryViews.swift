@@ -30,7 +30,6 @@ struct MemorySection: View {
     @Environment(AppModel.self) private var model
     let context: MemoryContext
     @State private var editing: PlaceMemory?
-    @State private var suggestions = false
     var body: some View {
         let memories = model.memories.memories.filter(context.includes)
         VStack(alignment: .leading, spacing: Layout.spacing) {
@@ -40,20 +39,12 @@ struct MemorySection: View {
                     actionTitle: "Add a memory", actionIdentifier: "add-memory", action: { editing = context.draft })
             } else {
                 SectionHeading(title: "Memories", actionTitle: "Add", actionSymbol: "plus", actionIdentifier: "add-memory", action: { editing = context.draft })
-                if case .place = context {
-                    Button { suggestions = true } label: {
-                        Label("Apple memory suggestions", systemImage: "sparkles").frame(minHeight: Layout.touchTarget)
-                    }.foregroundStyle(Palette.green).accessibilityIdentifier("apple-memory-suggestions")
-                }
                 ForEach(memories) { memory in
                     MemoryCard(memory: memory, tripPersonIDs: context.tripPersonIDs)
                 }
             }
         }
         .sheet(item: $editing) { memory in NavigationStack { MemoryEditor(memory: memory) } }
-        .sheet(isPresented: $suggestions) {
-            if case .place(let place) = context { AppleSuggestionsFlow(place: place) }
-        }
     }
 }
 

@@ -83,6 +83,7 @@ public struct InferenceTestCase: Codable, Sendable {
         let offset = 946_857_600 - floor(earliest.timeIntervalSince1970 / 86_400) * 86_400
         func date(_ value: Date) -> Date { value.addingTimeInterval(offset) }
         let anchor = archive.observations.compactMap(\.coordinate).first ?? archive.places.first?.coordinate
+            ?? archive.corrections.compactMap(\.coordinate).first
             ?? Coordinate(latitude: 0, longitude: 0)
         let rotation = CoordinateRotation(anchor: anchor)
 
@@ -111,9 +112,11 @@ public struct InferenceTestCase: Codable, Sendable {
                             placeID: value.placeID.flatMap { placeIDs[$0] }, lastSeen: date(value.lastSeen))
         }
         let corrections = archive.corrections.map { value in
-            UserOverride(id: correctionIDs[value.id]!, start: date(value.start), end: date(value.end), kind: value.kind,
+            var copy = UserOverride(id: correctionIDs[value.id]!, start: date(value.start), end: date(value.end), kind: value.kind,
                          placeID: value.placeID.flatMap { placeIDs[$0] }, mode: value.mode, createdAt: date(value.createdAt),
                          importedVisitID: value.importedVisitID == nil ? nil : "import-" + correctionIDs[value.id]!)
+            copy.coordinate = value.coordinate.map(rotation.apply)
+            return copy
         }
         let expected = archive.timeline.map { value in
             var copy = value

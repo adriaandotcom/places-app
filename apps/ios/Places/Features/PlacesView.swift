@@ -45,6 +45,7 @@ struct PlacesView: View {
 }
 
 struct PlaceDetail: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var model
     let placeID: String
     private enum Editor: String, Identifiable {
@@ -109,7 +110,7 @@ struct PlaceDetail: View {
             }
         }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
             .task(id: model.historyRevision) { tripIDs = (try? await model.store?.tripIDs(visiting: placeID)) ?? [] }
-            .sheet(item: $editor) { target in
+            .sheet(item: $editor, onDismiss: { if place == nil { dismiss() } }) { target in
                 if let place { NavigationStack { PlaceEditor(place: place, wifiOnly: target == .wifi) } }
             }
     }

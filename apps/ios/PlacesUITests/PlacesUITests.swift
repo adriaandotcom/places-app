@@ -33,29 +33,42 @@ import XCTest
         app.buttons["tab-places"].tap()
         app.staticTexts["Fixture Garden"].firstMatch.tap()
         XCTAssertTrue(app.buttons["Photo 1"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["apple-memory-suggestions"].exists)
+        app.buttons["tab-timeline"].tap()
         let suggestions = app.buttons["apple-memory-suggestions"]
         reveal(suggestions, in: app); suggestions.tap()
-        XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["suggestion-saved"].label, "This memory is already added")
+        XCTAssertTrue(app.staticTexts["Already added"].waitForExistence(timeout: 5))
     }
 
-    func testPlaceMemorySuggestionsReuseEditorAndCanContinue() {
+    func testTimelineOffersAppleSuggestionsAndPlaceDeletionKeepsMemories() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "--ui-fixture"]
+        app.launchArguments = ["--ui-testing", "--ui-past-visits"]
         app.launch()
-        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
-        app.staticTexts["Home"].firstMatch.tap()
-        let suggestions = app.buttons["apple-memory-suggestions"]
-        reveal(suggestions, in: app); suggestions.tap()
-        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 5))
-        let editor = XCTAttachment(screenshot: app.screenshot()); editor.name = "Apple photos in the shared memory editor"; editor.lifetime = .keepAlways; add(editor)
-        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons["add-past-visits"].waitForExistence(timeout: 10))
+        app.buttons["add-past-visits"].tap()
+        XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
+        app.buttons["confirm-past-visits"].tap()
         XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
-        app.buttons["next-suggestion"].tap()
-        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 5))
-        app.buttons["Cancel"].tap()
+        app.buttons["Done"].tap()
+        let suggestions = app.buttons["apple-memory-suggestions"]
+        XCTAssertTrue(suggestions.waitForExistence(timeout: 5))
+        app.buttons["tab-places"].tap()
+        app.staticTexts["Fixture Garden"].firstMatch.tap()
         XCTAssertTrue(app.buttons["Photo 1"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.buttons.matching(identifier: "Edit memory").count, 1)
+        XCTAssertFalse(app.buttons["apple-memory-suggestions"].exists)
+        reveal(app.buttons["Edit place"], in: app); app.buttons["Edit place"].tap()
+        let remove = app.buttons["delete-place"]
+        reveal(remove, in: app); remove.tap()
+        XCTAssertTrue(app.sheets.buttons["Delete place"].waitForExistence(timeout: 5))
+        app.sheets.buttons["Delete place"].tap()
+        XCTAssertTrue(app.staticTexts["Your places"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["Fixture Garden"].exists)
+        app.buttons["tab-timeline"].tap()
+        let photo = app.buttons["Photo 1"]
+        reveal(photo, in: app)
+        XCTAssertTrue(photo.isHittable)
+        photo.tap()
+        XCTAssertTrue(app.navigationBars["1 of 1"].waitForExistence(timeout: 5))
     }
 
     func testOnboardingReusesPastVisitsReviewWithoutSavingOnCancel() {
@@ -175,9 +188,17 @@ import XCTest
         XCTAssertTrue(zoom.waitForExistence(timeout: 5)); zoom.doubleTap()
         XCTAssertEqual(zoom.value as? String, "Zoomed")
         zoom.doubleTap()
-        app.collectionViews["memory-photo-pager"].swipeLeft()
+        app.otherElements["memory-photo-pager"].swipeLeft()
         XCTAssertTrue(app.navigationBars["2 of 9"].waitForExistence(timeout: 5))
+        app.otherElements["memory-photo-pager"].swipeLeft()
+        XCTAssertTrue(app.navigationBars["3 of 9"].waitForExistence(timeout: 5))
+        app.otherElements["memory-photo-pager"].swipeRight()
+        XCTAssertTrue(app.navigationBars["2 of 9"].waitForExistence(timeout: 5))
+        app.buttons["photo-caption"].tap()
+        XCTAssertTrue(app.textFields["photo-caption-input"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
         app.buttons["Previous photo"].tap()
+        XCTAssertTrue(app.navigationBars["1 of 9"].waitForExistence(timeout: 5))
         app.buttons["photo-caption"].tap()
         let caption = app.textFields["photo-caption-input"]
         XCTAssertTrue(caption.waitForExistence(timeout: 5)); caption.tap(); caption.typeText("Morning by the water")
@@ -870,6 +891,29 @@ import XCTest
         XCTAssertTrue(picker.label.contains("Amsterdam"))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Map visit period with compact date navigation"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
+    func testInstalledMapRowOpensDetailAndSwipeRevealsTrash() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-fixture", "--ui-map-details", "--ui-installed-map-details"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10)); app.buttons["open-settings"].tap()
+        reveal(app.buttons["map-settings"], in: app); app.buttons["map-settings"].tap()
+        let row = app.buttons["map-pack-netherlands"]
+        reveal(row, in: app); XCTAssertTrue(row.exists)
+        XCTAssertFalse(app.buttons["Change detail"].exists)
+        XCTAssertFalse(app.buttons["Delete"].exists)
+        let compact = XCTAttachment(screenshot: app.screenshot()); compact.name = "Compact downloaded map row"; compact.lifetime = .keepAlways; add(compact)
+        row.tap()
+        XCTAssertTrue(app.buttons["map-detail-normal"].waitForExistence(timeout: 5)); assertSelected(app.buttons["map-detail-normal"])
+        app.buttons["Cancel"].tap()
+        row.swipeLeft()
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 5))
+        let swipe = XCTAttachment(screenshot: app.screenshot()); swipe.name = "Swipe map row to reveal trash"; swipe.lifetime = .keepAlways; add(swipe)
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(app.sheets.buttons["Delete Netherlands"].waitForExistence(timeout: 5))
+        app.sheets.buttons["Delete Netherlands"].tap()
+        XCTAssertTrue(app.buttons["download-map-netherlands"].waitForExistence(timeout: 5))
     }
 
     func testCountryDetailPickerUsesLocalPreviewsAndRetainsSelection() {

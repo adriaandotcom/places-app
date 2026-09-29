@@ -10,6 +10,31 @@ public struct PastVisitCandidate: Identifiable, Equatable, Sendable {
     public init(id: String, name: String, city: String? = nil, coordinate: Coordinate? = nil, date: Date? = nil) {
         self.id = id; self.name = name; self.city = city; self.coordinate = coordinate; self.date = date
     }
+
+    /// Match on-device against saved places, including ordinary coordinate drift
+    /// and Apple's appended city names. Never choose between ambiguous neighbors.
+    func savedPlace(named name: String, in places: [Place]) -> Place? {
+        guard let coordinate, coordinate.isValid else { return nil }
+        func normalized(_ value: String) -> String {
+            value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        func baseName(_ value: String) -> String {
+            let value = normalized(value)
+            if let city, !normalized(city).isEmpty, value.hasSuffix(" " + normalized(city)) {
+                return String(value.dropLast(normalized(city).count + 1))
+            }
+            return value
+        }
+        let named = places.filter {
+            !baseName(name).isEmpty && baseName($0.name) == baseName(name)
+                && $0.coordinate.distance(to: coordinate) <= max(150, $0.radius)
+        }
+        if named.count == 1 { return named[0] }
+        if named.count > 1 { return nil }
+        let nearby = places.filter { $0.coordinate.distance(to: coordinate) <= $0.radius }
+        return nearby.count == 1 ? nearby[0] : nil
+    }
 }
 
 public struct PastVisitDraft: Identifiable, Equatable, Sendable {
@@ -32,10 +57,7 @@ public struct PastVisitDraft: Identifiable, Equatable, Sendable {
                 ?? arrival.addingTimeInterval(3600), now)
         }
         // Suggest a saved place only when the location is unambiguous. The user can change it.
-        if let coordinate = candidate.coordinate {
-            let nearby = places.filter { $0.coordinate.distance(to: coordinate) <= min(50, $0.radius) }
-            if nearby.count == 1 { placeID = nearby[0].id }
-        }
+        placeID = candidate.savedPlace(named: name, in: places)?.id
     }
 }
 
@@ -61,6 +83,12 @@ public struct PastVisitPlan: Equatable, Sendable {
     public var visits: [PastVisitResolution]
     public var count: Int { visits.reduce(0) { $0 + $1.intervals.count } }
     public var canImport: Bool { count > 0 && visits.allSatisfy { $0.issue == nil } }
+    public var memoryVisits: [PastVisitResolution] {
+        visits.filter { visit in
+            guard visit.issue == nil, !visit.alreadyAdded, let place = visit.place else { return false }
+            return !visit.intervals.isEmpty || visit.conflicts.contains { $0.kind == .stay && $0.placeID == place.id }
+        }
+    }
 
     public static func make(drafts: [PastVisitDraft], context: PastVisitContext, now: Date) -> Self {
         var visits: [PastVisitResolution] = []
@@ -83,7 +111,7 @@ public struct PastVisitPlan: Equatable, Sendable {
                       !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 // Reuse the same place across several imported visits in this batch.
-                result.place = places.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame && $0.coordinate.distance(to: coordinate) < 30 }
+                result.place = draft.candidate.savedPlace(named: name, in: places)
                     ?? Place(id: "journaling-place-" + draft.id, name: name, address: draft.candidate.city ?? "",
                              coordinate: coordinate, symbol: PlaceIconMatcher.suggestedSymbol(name: name) ?? "mappin", createdAt: now)
             }
@@ -143,10 +171,10 @@ extension PlacesStore {
             let context = try StoreSQL.pastVisitContext(db: db)
             let current = PastVisitPlan.make(drafts: drafts, context: context, now: now)
             guard current == reviewed else { throw PastVisitImportError.timelineChanged }
-            guard current.canImport else { throw PastVisitImportError.invalidSelection }
+            guard current.visits.allSatisfy({ $0.issue == nil }), current.canImport || memory != nil else { throw PastVisitImportError.invalidSelection }
             if let memory {
                 guard !memory.photos.isEmpty,
-                      current.visits.contains(where: { $0.id == memory.visitID && !$0.intervals.isEmpty })
+                      current.memoryVisits.contains(where: { $0.id == memory.visitID })
                 else { throw PastVisitImportError.invalidSelection }
             }
             var saved = Set(context.places.map(\.id))
@@ -158,13 +186,14 @@ extension PlacesStore {
                         start: interval.start, end: interval.end, kind: .stay, placeID: place.id,
                         importedVisitID: visit.id), db: db)
                 }
-                if let memory, memory.visitID == visit.id, let start = visit.intervals.first?.start {
-                    let imported = PlaceMemory(id: PlaceMemory.suggestionID(memory.suggestionID, placeID: place.id),
+            }
+            if let memory, let visit = current.memoryVisits.first(where: { $0.id == memory.visitID }), let place = visit.place,
+               let start = visit.intervals.first?.start ?? drafts.first(where: { $0.id == visit.id })?.arrival {
+                let imported = PlaceMemory(id: PlaceMemory.suggestionID(memory.suggestionID, placeID: place.id),
                         date: start, placeID: place.id, visitStart: start, photoIDs: memory.photos.map(\.id))
-                    // Reopening a suggestion must never overwrite an already edited memory.
-                    if try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?)", arguments: [imported.id])! {
-                        try MemorySQL.saveMemoryWithPhotos(imported, importing: memory.photos, db: db)
-                    }
+                // Reopening a suggestion must never overwrite an already edited memory.
+                if try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?)", arguments: [imported.id])! {
+                    try MemorySQL.saveMemoryWithPhotos(imported, importing: memory.photos, db: db)
                 }
             }
         }

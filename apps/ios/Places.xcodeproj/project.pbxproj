@@ -59,6 +59,7 @@
 		BFAE0FBEA803C5B9D62BF290 /* PlacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */; };
 		CB030EB2FECF48BC78AE2A32 /* RewindNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */; };
 		CCBD069A321A0025EE164EE9 /* PeopleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04CB0F95F81035FD35384D4E /* PeopleViews.swift */; };
+		CCDEBFBDE6EACDA02A79A5F4 /* MemoryPhotoPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E40C48BB5A298680CAF05C /* MemoryPhotoPager.swift */; };
 		CFDD21A83C4FDC4B87238412 /* PhotoGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3572E6AA534B1A12C5149AD /* PhotoGrid.swift */; };
 		D149052064DDEB622FD5B974 /* PersonComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF65AC60760C72109D6FE00 /* PersonComponents.swift */; };
 		D2CC4FB79F9D9EEBFA596703 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA29D2F244CDCEC41CCBFC07 /* SettingsView.swift */; };
@@ -145,6 +146,7 @@
 		C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityView.swift; sourceTree = "<group>"; };
 		CA197721E63F4B0F2F74FC75 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		CA29D2F244CDCEC41CCBFC07 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D1E40C48BB5A298680CAF05C /* MemoryPhotoPager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryPhotoPager.swift; sourceTree = "<group>"; };
 		D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentLocationRequest.swift; sourceTree = "<group>"; };
 		DBC06C622D86AE06DCD94F53 /* MemoryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryViews.swift; sourceTree = "<group>"; };
 		DBEA9C65BB61838DFB0CC890 /* MemoryPhotoBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryPhotoBrowser.swift; sourceTree = "<group>"; };
@@ -206,6 +208,7 @@
 				7F1606887387E5B16905FC86 /* MapPresentation.swift */,
 				67E766F77511EDADA6182DA6 /* MapsSettings.swift */,
 				DBEA9C65BB61838DFB0CC890 /* MemoryPhotoBrowser.swift */,
+				D1E40C48BB5A298680CAF05C /* MemoryPhotoPager.swift */,
 				DBC06C622D86AE06DCD94F53 /* MemoryViews.swift */,
 				142945BC6C090A8B8874AC76 /* OfflineMapStyle.swift */,
 				5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */,
@@ -516,6 +519,7 @@
 				5FD9FBF86AD3822E430BE2D0 /* MapsSettings.swift in Sources */,
 				224E79B89600320590F3F8FE /* MemoryPhotoBrowser.swift in Sources */,
 				F64465C0066D4DF8C71911BA /* MemoryPhotoDraft.swift in Sources */,
+				CCDEBFBDE6EACDA02A79A5F4 /* MemoryPhotoPager.swift in Sources */,
 				06E6340D8CE72B4F46D31C01 /* MemoryViews.swift in Sources */,
 				FA596101EE4C9EAC8807681D /* OfflineMapStyle.swift in Sources */,
 				2DEED30D0157CF0DC566A67D /* OfflineMapView.swift in Sources */,

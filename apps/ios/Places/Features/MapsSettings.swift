@@ -7,6 +7,7 @@ struct MapsSettings: View {
     @State private var confirmWorld = false
     @State private var deletingPack: MapPack?
     @State private var switching = false
+    @State private var detailPack: MapPack?
     private var downloads: MapDownloads { model.mapDownloads }
     var body: some View {
         Form {
@@ -23,19 +24,25 @@ struct MapsSettings: View {
                         .disabled(switching || (provider == .onDevice && !downloads.ready))
                 }
             } header: { Text("Map provider") } footer: {
-                Text("Apple Maps loads the areas you view from Apple. On-device Maps uses downloaded maps and works without a connection. Your places and history stay on this iPhone.")
+                Text("Apple Maps loads the areas you view from Apple servers. On-device Maps uses downloaded maps and works without internet. Your places and history stay on this iPhone.")
             }
             if !downloads.packs.isEmpty {
                 Section {
                     ForEach(countryPacks) { pack in
                         VStack(alignment: .leading, spacing: Layout.compact) {
-                            HStack {
-                                Text(pack.name).font(.body.weight(.semibold))
-                                Spacer()
-                                Text((downloads.installedPacks[pack.id] ?? pack).sizeLabel).foregroundStyle(Palette.muted)
-                            }
+                            if pack.id != .world, !downloads.choices(pack.id).isEmpty {
+                                Button { detailPack = pack } label: { packLabel(pack, opensDetail: true) }
+                                    .buttonStyle(.plain).accessibilityIdentifier("map-pack-" + pack.id.rawValue)
+                                    .accessibilityHint("Change map detail")
+                            } else { packLabel(pack, opensDetail: false) }
                             packState(pack)
-                        }.padding(.vertical, 4).buttonStyle(.borderless)
+                        }.padding(.vertical, Layout.compact).buttonStyle(.borderless)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if let installed = downloads.installedPacks[pack.id] {
+                                    Button(role: .destructive) { deletingPack = installed } label: { Label("Delete", systemImage: "trash") }
+                                        .tint(.red)
+                                }
+                            }
                     }
                 } header: { Text("On-device maps") } footer: {
                     Text("World gives an overview everywhere. Choose a detail level for each country. Country downloads come from Bunny and World comes from GitHub. They receive your IP address and the file you choose. Map browsing stays on this iPhone.")
@@ -58,6 +65,7 @@ struct MapsSettings: View {
         }.scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle("Maps").navigationBarTitleDisplayMode(.inline)
             .task(id: model.mapProvider) { if model.mapProvider == .onDevice { await downloads.refreshCatalog() } }
+            .sheet(item: $detailPack) { pack in NavigationStack { MapDetailPicker(countryID: pack.id) } }
             .confirmationDialog("Use Apple Maps?", isPresented: $confirmApple, titleVisibility: .visible) {
                 if downloads.totalInstalledBytes > 0 || !downloads.transfers.isEmpty {
                     Button("Keep downloaded maps") { switchToApple(deleteDownloads: false) }
@@ -93,16 +101,27 @@ struct MapsSettings: View {
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
+    private func packLabel(_ pack: MapPack, opensDetail: Bool) -> some View {
+        let installed = downloads.installedPacks[pack.id]
+        let displayed = installed ?? pack
+        return HStack(spacing: Layout.spacing) {
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                Text(pack.name).font(.body.weight(.semibold))
+                HStack(spacing: Layout.compact) {
+                    Text(displayed.sizeLabel)
+                    if let detail = displayed.detail { MapDetailIndicator(detail: detail) }
+                    if let date = installed?.updatedDate { Text("· Updated " + date.formatted(.relative(presentation: .named))) }
+                }.font(.footnote).foregroundStyle(Palette.muted)
+            }
+            Spacer(minLength: 0)
+            if opensDetail { Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Palette.muted) }
+        }.foregroundStyle(Palette.ink).frame(minHeight: Layout.touchTarget).contentShape(Rectangle())
+            .accessibilityElement(children: .combine)
+    }
     @ViewBuilder private func packState(_ pack: MapPack) -> some View {
         let transfer = downloads.transfers[pack.id]
         let target = transfer?.pack ?? pack
         let installed = downloads.installedPacks[pack.id]
-        if let installed {
-            HStack {
-                Text(installed.detail?.title ?? "Downloaded")
-                if let date = installed.updatedDate { Text("· Updated " + date.formatted(.relative(presentation: .named))) }
-            }.font(.footnote).foregroundStyle(Palette.muted)
-        }
         if transfer?.phase == .downloading {
             ProgressView(value: Double(transfer?.received ?? 0), total: Double(target.bytes))
                 .accessibilityLabel("Downloading \(pack.name)")
@@ -121,7 +140,7 @@ struct MapsSettings: View {
                 Spacer()
                 Button("Cancel") { downloads.cancel(pack.id) }
             }.frame(minHeight: Layout.touchTarget)
-        } else if let installed {
+        } else if installed != nil {
             if let update = downloads.update(pack.id) {
                 HStack {
                     if let date = update.updatedDate { Text("New map · " + date.formatted(.relative(presentation: .named))).font(.footnote).foregroundStyle(Palette.muted) }
@@ -129,11 +148,6 @@ struct MapsSettings: View {
                     MapPackDownloadButton(pack: update, title: "Update", chooseDetail: false)
                 }.frame(minHeight: Layout.touchTarget)
             }
-            HStack {
-                if !downloads.choices(pack.id).isEmpty { MapPackDownloadButton(pack: pack, title: "Change detail") }
-                Spacer()
-                Button("Delete", role: .destructive) { deletingPack = installed }
-            }.frame(minHeight: Layout.touchTarget)
         } else {
             MapPackDownloadButton(pack: pack).frame(minHeight: Layout.touchTarget)
         }
@@ -205,5 +219,20 @@ struct MapPackDownloadButton: View {
             } message: {
                 Text("This connection may use mobile data or Low Data Mode. The download is \(ByteCountFormatter.string(fromByteCount: model.mapDownloads.remaining(pack), countStyle: .file)).")
             }
+    }
+}
+
+/// Three dots keep storage and detail together without another line of controls.
+struct MapDetailIndicator: View {
+    let detail: MapDetail
+    private var level: Int { switch detail { case .tiny: 1; case .normal: 2; case .extensive: 3 } }
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3) { index in
+                Image(systemName: index < level ? "circle.fill" : "circle")
+                    .font(.system(size: 6, weight: .semibold))
+                    .foregroundStyle(index < level ? Palette.green : Palette.muted)
+            }
+        }.accessibilityElement(children: .ignore).accessibilityLabel(detail.title + " detail")
     }
 }

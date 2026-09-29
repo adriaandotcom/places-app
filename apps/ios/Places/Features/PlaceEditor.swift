@@ -44,6 +44,7 @@ struct PlaceEditor: View {
     @State private var locationSelected = false
     @State private var validation: String?
     @State private var saving = false
+    @State private var deleting = false
     @FocusState private var focusedField: Field?
     private enum Field { case name, address, city, country, latitude, longitude }
     private var usesCoordinates: Bool { !model.mapsAvailable && (manualCoordinates || model.mapsChoiceMade) }
@@ -218,6 +219,12 @@ struct PlaceEditor: View {
             PlaceWiFiEditor(draft: $wifi, coordinate: wifiCoordinate, radius: radius, fieldFocused: $wifiFocused) { suggestions in
                 wifiSuggestions = suggestions; choosingWiFi = true
             }
+            if original != nil && !wifiOnly {
+                Section {
+                    Button("Delete place", role: .destructive) { deleting = true }
+                        .disabled(saving).accessibilityIdentifier("delete-place")
+                }
+            }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                 if wifiFocused {
@@ -289,6 +296,17 @@ struct PlaceEditor: View {
             .onChange(of: coordinate) { _, value in
                 if let value { latitude = String(value.latitude); longitude = String(value.longitude); locationError = nil }
             }
+            .confirmationDialog("Delete this place?", isPresented: $deleting, titleVisibility: .visible) {
+                Button("Delete place", role: .destructive) {
+                    guard let original else { return }
+                    saving = true
+                    Task {
+                        do { try await model.deletePlace(original.id); dismiss() }
+                        catch { validation = "Couldn’t delete this place. Please try again." }
+                        saving = false
+                    }
+                }
+            } message: { Text("Its name and Wi-Fi associations will be removed. Timeline evidence, notes and photos are kept.") }
             .onDisappear { locationRequest.cancel() }
         }
     }

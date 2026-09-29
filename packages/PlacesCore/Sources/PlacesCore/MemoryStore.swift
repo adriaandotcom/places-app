@@ -131,8 +131,11 @@ enum MemorySQL {
         }) else { throw MemoryError.invalidPhoto }
         memory.photoIDs = memory.orderedPhotoIDs
         guard memory.date.timeIntervalSince1970.isFinite, memory.visitStart?.timeIntervalSince1970.isFinite != false,
-              !memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !memory.photoIDs.isEmpty || !memory.personIDs.isEmpty,
-              memory.tripID != nil || memory.placeID != nil || memory.visitStart != nil else { throw MemoryError.invalidMemory }
+              !memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !memory.photoIDs.isEmpty || !memory.personIDs.isEmpty else { throw MemoryError.invalidMemory }
+        if memory.tripID == nil, memory.placeID == nil, memory.visitStart == nil,
+           try !Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?)", arguments: [memory.id])! {
+            throw MemoryError.invalidMemory
+        }
         let addedIDs = photos.map(\.id) + files.map(\.id)
         guard Set(memory.photoIDs).count == memory.photoIDs.count,
               Set(addedIDs).count == addedIDs.count, Set(addedIDs).isSubset(of: Set(memory.photoIDs))

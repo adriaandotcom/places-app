@@ -191,7 +191,10 @@ final class AppModel {
                     }
                     #endif
                     #if DEBUG
-                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-details") { mapDownloads.loadPreviewCatalogForTesting() }
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-details") {
+                        mapDownloads.loadPreviewCatalogForTesting()
+                        if ProcessInfo.processInfo.arguments.contains("--ui-installed-map-details") { try await mapDownloads.installPreviewMapForTesting() }
+                    }
                     if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-on-device-map") {
                         mapProvider = .onDevice; mapsChoiceMade = true
                     }
@@ -495,6 +498,16 @@ final class AppModel {
             return true
         } catch let error as PlacesError { fail(error.localizedDescription); return false }
         catch { fail("Could not save this place. Your changes are still in the form."); return false }
+    }
+    func deletePlace(_ id: String) async throws {
+        let epoch = generation
+        guard let store, !deleting else { throw CancellationError() }
+        await pendingWrite?.value
+        guard generation == epoch, !deleting else { throw CancellationError() }
+        try await store.deletePlace(id: id)
+        guard generation == epoch, !deleting else { throw CancellationError() }
+        await refresh()
+        if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
     }
     func classify(_ network: WiFiNetwork, as classification: WiFiClassification) async {
         do { try await store?.classifyNetwork(id: network.id, as: classification); await refresh() }

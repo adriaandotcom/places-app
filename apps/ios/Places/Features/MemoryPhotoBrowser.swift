@@ -76,8 +76,11 @@ struct MemoryPhotoBrowser: View {
     let load: (String) async throws -> Data?
     let saveCaption: (String, String) async throws -> Void
     @State private var selectedID: String
-    @State private var captionTarget: PhotoReference?
-    @State private var showingInfo = false
+    private enum Detail: Identifiable {
+        case caption(String), location(String)
+        var id: String { switch self { case .caption(let id): "caption-" + id; case .location(let id): "location-" + id } }
+    }
+    @State private var presentedDetail: Detail?
     @State private var share: SharedPhoto?
     @State private var sharePreview: Image?
     @State private var exporting = false
@@ -91,18 +94,10 @@ struct MemoryPhotoBrowser: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                TabView(selection: $selectedID) {
-                    ForEach(Array(photoIDs.enumerated()), id: \.element) { offset, id in
-                        Group {
-                            // Keep decoded images bounded even for very large memories.
-                            if abs(offset - index) <= 1 { PhotoBrowserPage(id: id, active: id == selectedID, load: load) }
-                            else { Color.clear }
-                        }.tag(id)
-                    }
-                }.tabViewStyle(.page(indexDisplayMode: .never)).accessibilityIdentifier("memory-photo-pager")
+                MemoryPhotoPager(photoIDs: photoIDs, selectedID: $selectedID, load: load)
                 VStack(spacing: Layout.compact) {
                     if let date = PhotoDate.label(details[selectedID]) { Text(date).font(.caption).foregroundStyle(Palette.muted).accessibilityIdentifier("photo-created-at") }
-                    Button { captionTarget = PhotoReference(id: selectedID) } label: {
+                    Button { presentedDetail = .caption(selectedID) } label: {
                         Text(details[selectedID]?.caption.isEmpty == false ? details[selectedID]!.caption : "Add a caption…")
                             .font(.subheadline).lineLimit(3).frame(maxWidth: .infinity, minHeight: Layout.touchTarget)
                     }.accessibilityIdentifier("photo-caption")
@@ -112,19 +107,19 @@ struct MemoryPhotoBrowser: View {
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
                     ToolbarItemGroup(placement: .bottomBar) {
-                        if let share, let sharePreview {
-                            Menu {
+                        Menu {
+                            if let share, let sharePreview {
                                 ShareLink(item: share, preview: SharePreview("Photo", image: sharePreview)) { Label("Share photo", systemImage: "square.and.arrow.up") }
                                 Button("Save to Files", systemImage: "folder") { exporting = true }
-                            } label: { Label("Export photo", systemImage: "square.and.arrow.up") }
-                                .accessibilityIdentifier("export-memory-photo")
-                        }
+                            }
+                        } label: { Label("Export photo", systemImage: "square.and.arrow.up") }
+                            .disabled(share == nil).accessibilityIdentifier("export-memory-photo")
                         Spacer()
                         Button("Previous photo", systemImage: "chevron.left") { selectedID = photoIDs[index - 1] }.disabled(index == 0)
                         Button("Next photo", systemImage: "chevron.right") { selectedID = photoIDs[index + 1] }.disabled(index + 1 >= photoIDs.count)
                         Spacer()
                         if details[selectedID]?.coordinate != nil {
-                            Button("Photo location", systemImage: "info.circle") { showingInfo = true }.accessibilityIdentifier("photo-location")
+                            Button("Photo location", systemImage: "info.circle") { presentedDetail = .location(selectedID) }.accessibilityIdentifier("photo-location")
                         }
                     }
                 }
@@ -135,28 +130,35 @@ struct MemoryPhotoBrowser: View {
                         share = SharedPhoto(data: data); sharePreview = Image(uiImage: image)
                     } catch { /* The page displays the load failure; sharing stays unavailable. */ }
                 }
-                .sheet(item: $captionTarget) { photo in
-                    NavigationStack { PhotoCaptionEditor(caption: details[photo.id]?.caption ?? "", save: { try await saveCaption(photo.id, $0) }) }
-                }
                 .fileExporter(isPresented: $exporting, document: share.map { PhotoDocument(data: $0.data) }, contentType: .jpeg, defaultFilename: "Places photo") { result in
                     if case .failure(let error) = result { exportError = error.localizedDescription }
                 }
                 .alert("Couldn’t export photo", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
                     Button("OK") {}
                 } message: { Text(exportError ?? "") }
-                .sheet(isPresented: $showingInfo) {
-                    NavigationStack {
-                        ScrollView {
-                            if let coordinate = details[selectedID]?.coordinate {
-                                PrivacyMapView(items: [], routePoints: [], customPresentation: MapPresentation(pins: [
-                                    MapPin(id: selectedID, name: "Photo location", coordinate: coordinate, symbol: "photo", colorIndex: 1)
-                                ])).frame(height: Layout.mapHeight).clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
-                                    .padding(Layout.gutter)
-                            }
-                        }.background(Palette.background).navigationTitle("Photo location").navigationBarTitleDisplayMode(.inline)
-                            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingInfo = false } } }
-                    }
+        }
+        // One presenter on the browser root, independent of paging content and
+        // toolbar updates while a photo finishes loading.
+        .sheet(item: $presentedDetail) { detail in
+            NavigationStack {
+                switch detail {
+                case .caption(let id):
+                    PhotoCaptionEditor(caption: details[id]?.caption ?? "", cancel: { presentedDetail = nil }, save: { caption in
+                        try await saveCaption(id, caption)
+                        presentedDetail = nil
+                    })
+                case .location(let id):
+                    ScrollView {
+                        if let coordinate = details[id]?.coordinate {
+                            PrivacyMapView(items: [], routePoints: [], customPresentation: MapPresentation(pins: [
+                                MapPin(id: id, name: "Photo location", coordinate: coordinate, symbol: "photo", colorIndex: 1)
+                            ])).frame(height: Layout.mapHeight).clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
+                                .padding(Layout.gutter)
+                        }
+                    }.background(Palette.background).navigationTitle("Photo location").navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { presentedDetail = nil } } }
                 }
+            }
         }
     }
 }
@@ -177,8 +179,8 @@ private struct PhotoDocument: FileDocument {
 }
 
 private struct PhotoCaptionEditor: View {
-    @Environment(\.dismiss) private var dismiss
     @State var caption: String
+    let cancel: () -> Void
     let save: (String) async throws -> Void
     @State private var saving = false
     @State private var error: String?
@@ -186,17 +188,17 @@ private struct PhotoCaptionEditor: View {
         Form { TextField("Add a caption…", text: $caption, axis: .vertical).lineLimit(3...8).accessibilityIdentifier("photo-caption-input") }
             .scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle("Caption").navigationBarTitleDisplayMode(.inline)
-            .modifier(EditorControls(saving: saving, canSave: true, error: $error, errorTitle: "Couldn’t save caption", cancel: { dismiss() }, save: {
+            .modifier(EditorControls(saving: saving, canSave: true, error: $error, errorTitle: "Couldn’t save caption", cancel: cancel, save: {
                 saving = true
                 Task {
-                    do { try await save(caption); dismiss() } catch { self.error = error.localizedDescription }
+                    do { try await save(caption) } catch { self.error = error.localizedDescription }
                     saving = false
                 }
             }))
     }
 }
 
-private struct PhotoBrowserPage: View {
+struct PhotoBrowserPage: View {
     let id: String
     let active: Bool
     let load: (String) async throws -> Data?

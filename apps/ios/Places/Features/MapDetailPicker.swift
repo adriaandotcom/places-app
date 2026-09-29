@@ -21,6 +21,7 @@ struct MapDetailPicker: View {
                                     HStack {
                                         Text(detail.title).font(BrandFont.title)
                                         Spacer()
+                                        MapDetailIndicator(detail: detail)
                                         Text(pack.sizeLabel).font(.subheadline)
                                         Image(systemName: selection == detail ? "checkmark.circle.fill" : "circle")
                                             .foregroundStyle(selection == detail ? Palette.green : Palette.muted)

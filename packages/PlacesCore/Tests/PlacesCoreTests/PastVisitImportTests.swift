@@ -184,3 +184,76 @@ private func existing(_ kind: TimelineKind = .stay, start: TimeInterval = 600, e
     #expect(try await store.places().isEmpty)
     #expect(try await store.memoryLibrary().memories.isEmpty)
 }
+
+@Test func suggestionsReuseNamedPlacesWithCoordinateDriftAndCitySuffix() {
+    let saved = Place(id: "garden", name: "Fixture Garden", coordinate: .init(latitude: 52.36, longitude: 4.88), radius: 125)
+    let neighbor = Place(id: "cafe", name: "Fixture Café", coordinate: .init(latitude: 52.3602, longitude: 4.88), radius: 125)
+    let candidate = PastVisitCandidate(id: "later-visit", name: "fixture garden, Amsterdam", city: "Amsterdam",
+        coordinate: .init(latitude: 52.3608, longitude: 4.88), date: importDay)
+    let visit = PastVisitDraft(candidate: candidate, places: [neighbor, saved], now: importNow)
+    #expect(visit.placeID == saved.id)
+    var batch = visit; batch.placeID = nil
+    let plan = PastVisitPlan.make(drafts: [batch], context: .init(places: [neighbor, saved], items: []), now: importNow)
+    #expect(plan.visits.first?.place?.id == saved.id, "Recheck before creating, including other visits in the batch")
+    let ambiguous = PastVisitCandidate(id: "unknown", name: "Nearby stop", coordinate: candidate.coordinate, date: importDay)
+    #expect(PastVisitDraft(candidate: ambiguous, places: [neighbor, saved], now: importNow).placeID == nil)
+    let far = PastVisitCandidate(id: "other-city", name: saved.name, coordinate: .init(latitude: 53, longitude: 4), date: importDay)
+    #expect(PastVisitDraft(candidate: far, places: [saved], now: importNow).placeID == nil)
+}
+
+@Test func deletingPlacePreservesImportedVisitsPhotosAndRawEvidence() async throws {
+    let store = try PlacesStore()
+    let place = Place(id: "delete-me", name: "Fixture", coordinate: .init(latitude: 1, longitude: 1), expectedSSIDs: ["Fixture WiFi"])
+    try await store.savePlace(place)
+    let observation = SensorObservation(timestamp: importDay.addingTimeInterval(-3600), source: .wifi,
+        coordinate: place.coordinate, horizontalAccuracy: 5, ssid: "Fixture WiFi", bssid: "02:00:00:00:00:01")
+    try await store.append([observation])
+    var visit = draft(); visit.replaceExisting = true
+    let plan = PastVisitPlan.make(drafts: [visit], context: try await store.pastVisitContext(), now: importNow)
+    try await store.importPastVisits([visit], reviewed: plan, now: importNow)
+    let photo = MemoryPhoto(id: "kept-photo", jpeg: Data([1,2]), thumbnail: Data([3]))
+    var memory = PlaceMemory(id: "kept-memory", text: "A note", date: importDay, placeID: place.id, photoIDs: [photo.id])
+    try await store.saveMemory(memory, adding: [photo])
+    let before = try await store.exportHistory()
+    try await store.deletePlace(id: place.id)
+    #expect(try await store.places().isEmpty)
+    let context = try await store.pastVisitContext()
+    #expect(context.importedIDs.contains(visit.id))
+    let imported = try #require(context.items.first { $0.id.hasPrefix("journaling-") })
+    #expect(imported.placeID == nil && imported.coordinate == place.coordinate)
+    #expect(imported.start == visit.arrival && imported.end == visit.departure)
+    let library = try await store.memoryLibrary(now: importNow)
+    #expect(library.memories.first?.placeID == nil && library.memories.first?.text == memory.text)
+    #expect(try await store.photoData(id: photo.id) == photo.jpeg)
+    memory = try #require(library.memories.first); memory.text = "Updated note"
+    try await store.saveMemory(memory)
+    let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+    let original = try decoder.decode(HistoryArchive.self, from: before)
+    let after = try decoder.decode(HistoryArchive.self, from: await store.exportHistory())
+    #expect(after.observations.map(\.id) == original.observations.map(\.id))
+    #expect(after.accessPoints.allSatisfy { $0.placeID != place.id })
+    #expect(after.corrections.allSatisfy { $0.placeID != place.id })
+    try await store.deletePlace(id: place.id) // Idempotent; remaining memories stay intact.
+    #expect(try await store.photoData(id: photo.id) == photo.jpeg)
+}
+
+@Test func suggestionCanAddPhotosToAnExistingVisitWithoutDuplicatingPlaceOrTimeline() async throws {
+    let store = try PlacesStore()
+    let first = draft("recorded")
+    let initial = PastVisitPlan.make(drafts: [first], context: try await store.pastVisitContext(), now: importNow)
+    try await store.importPastVisits([first], reviewed: initial, now: importNow)
+    let candidate = draft("another-suggestion")
+    let reviewed = PastVisitPlan.make(drafts: [candidate], context: try await store.pastVisitContext(), now: importNow)
+    #expect(reviewed.count == 0 && reviewed.memoryVisits.count == 1)
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let jpeg = directory.appendingPathComponent("photo.jpg"), thumbnail = directory.appendingPathComponent("thumb.jpg")
+    try Data([1,2]).write(to: jpeg); try Data([3]).write(to: thumbnail)
+    let photo = MemoryPhotoFile(id: "existing-visit-photo", jpegURL: jpeg, thumbnailURL: thumbnail)
+    try await store.importPastVisits([candidate], reviewed: reviewed, now: importNow,
+        memory: PastVisitMemory(visitID: candidate.id, suggestionID: "existing-visit-memory", photos: [photo]))
+    #expect(try await store.places().count == 1)
+    #expect(try await store.pastVisitContext().items.count == 1)
+    #expect(try await store.memoryLibrary(now: importNow).memories.count == 1)
+}

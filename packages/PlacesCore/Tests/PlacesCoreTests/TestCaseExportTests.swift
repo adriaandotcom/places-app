@@ -86,6 +86,20 @@ private func populatedExportStore(path: String = ":memory:") async throws -> Pla
     }
 }
 
+@Test func detachedVisitCoordinatesAreRetainedAndRedactedInTestCases() async throws {
+    let store = try PlacesStore(path: ":memory:")
+    var visit = UserOverride(start: testDate, end: testDate.addingTimeInterval(3600), kind: .stay)
+    visit.coordinate = testCoordinate
+    try await store.correct(visit)
+    let fixture = try InferenceTestCase.decode(await store.exportTestCase())
+    let coordinate = try #require(fixture.input.corrections.first?.coordinate)
+    #expect(coordinate.isValid)
+    #expect(coordinate != testCoordinate)
+    #expect(fixture.replay() == fixture.expectedTimeline)
+    let encoded = String(decoding: try fixture.encoded(), as: UTF8.self)
+    #expect(!encoded.contains("35.123456") && !encoded.contains("150.654321"))
+}
+
 @Test func testCaseRetainsSharedAndPortableWiFiRelationships() async throws {
     let store = try await populatedExportStore()
     let network = try #require(await store.networks().first)

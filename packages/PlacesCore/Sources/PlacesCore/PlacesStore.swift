@@ -106,6 +106,32 @@ public actor PlacesStore {
         }
     }
 
+    /// Remove recognition and saved-place links, retaining raw evidence, visits,
+    /// memories and photos. Every reference is detached in the same transaction.
+    public func deletePlace(id: String) throws {
+        try queue.write { db in
+            guard let place = try StoreSQL.decodeAll(Place.self, db: db,
+                sql: "SELECT payload FROM places WHERE id = ?", arguments: [id]).first else { return }
+            for var edit in try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides") where edit.placeID == id {
+                edit.placeID = nil
+                edit.coordinate = edit.coordinate ?? place.coordinate
+                try db.execute(sql: "UPDATE overrides SET payload = ? WHERE id = ?", arguments: [try StoreSQL.encode(edit), edit.id])
+            }
+            for var point in try StoreSQL.decodeAll(WiFiAccessPoint.self, db: db, sql: "SELECT payload FROM wifiAccessPoints") where point.placeID == id {
+                point.placeID = nil
+                try db.execute(sql: "UPDATE wifiAccessPoints SET payload = ? WHERE id = ?", arguments: [try StoreSQL.encode(point), point.id])
+            }
+            for var memory in try MemorySQL.memories(db) where memory.placeID == id {
+                memory.placeID = nil
+                try MemorySQL.saveMemory(memory, db: db)
+            }
+            try db.execute(sql: "DELETE FROM placeWifiLinks WHERE placeID = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM placeSearch WHERE placeID = ?", arguments: [id])
+            try db.execute(sql: "DELETE FROM places WHERE id = ?", arguments: [id])
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
+    }
+
     @discardableResult
     public func append(_ observations: [SensorObservation]) throws -> Int {
         try queue.write { db in

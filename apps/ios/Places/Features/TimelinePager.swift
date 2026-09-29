@@ -189,6 +189,20 @@ private struct TimelineDayPage: View {
                             .buttonStyle(.plain).accessibilityIdentifier("timeline-\(item.kind.rawValue)-\(item.id)")
                     }
                 }
+                // A deleted place must not strand its notes or photos. Detached
+                // memories remain available on their date even without a visit.
+                ForEach(model.memories.memories.filter {
+                    $0.tripID == nil && $0.placeID == nil && Calendar.current.isDate($0.date, inSameDayAs: day)
+                }) { memory in
+                    MemoryCard(memory: memory).padding(.top, Layout.spacing)
+                }
+                if loaded, !failed, !(items.isEmpty && model.offersPastVisits(on: day)) {
+                    Button { addPastVisits(day) } label: {
+                        Label("Add visits & memories from Apple", systemImage: "sparkles")
+                            .frame(maxWidth: .infinity, minHeight: Layout.touchTarget, alignment: .leading)
+                    }.foregroundStyle(Palette.green).padding(.top, Layout.spacing)
+                        .accessibilityIdentifier("apple-memory-suggestions")
+                }
             }.padding(.horizontal, Layout.gutter).padding(.bottom, Layout.gutter)
         }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink)
             .refreshable { await model.refresh() }
