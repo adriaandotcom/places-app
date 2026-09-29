@@ -30,7 +30,12 @@ public enum InferenceEngine {
             if current?.evidenceIDs.contains(observation.id) == false { current?.evidenceIDs.append(observation.id) }
         }
 
-        for observation in sorted {
+        let aliases = places.reduce(into: [String: String]()) { result, place in
+            for id in place.mergedPlaceIDs ?? [] { result[id] = place.id }
+        }
+        for var observation in sorted {
+            // Resolve a merged region ID in memory; never rewrite raw evidence.
+            if let id = observation.monitoredPlaceID, let target = aliases[id] { observation.monitoredPlaceID = target }
             let time = observation.timestamp
             if let motion = observation.motion { latestMotion = motion; motionTime = time }
             let motion = time.timeIntervalSince(motionTime) <= 300 ? latestMotion : .unknown

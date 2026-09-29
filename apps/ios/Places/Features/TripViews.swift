@@ -89,7 +89,7 @@ private struct TripPlaceVisits: View {
                 NavigationLink("About this place") { PlaceDetail(placeID: place.id) }.frame(minHeight: Layout.touchTarget)
                 ForEach(items) { item in
                     NavigationLink { TimelineDetail(item: item) } label: {
-                        InfoRow(symbol: "clock", title: item.start.formatted(date: .abbreviated, time: .omitted), subtitle: Display.range(item), colorIndex: place.colorIndex)
+                        InfoRow(symbol: "clock", title: item.start.formatted(date: .abbreviated, time: .omitted), subtitle: Display.range(item), colorIndex: place.colorIndex, customColorHex: place.customColorHex)
                     }.buttonStyle(.plain)
                 }
                 ForEach(model.memories.memories.filter { $0.placeID == place.id && $0.belongs(to: trip) }) { memory in MemoryCard(memory: memory) }

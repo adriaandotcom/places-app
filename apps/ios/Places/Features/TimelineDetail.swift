@@ -18,6 +18,11 @@ struct TimelineDetail: View {
     @State private var createdPlace = false
     @State private var transportSuggestions = TransportSuggestions.none
     private var place: Place? { model.place(for: item) }
+    private var resolvedItem: TimelineItem {
+        var result = item
+        result.placeID = place?.id ?? item.placeID
+        return result
+    }
     private var isUnnamedStay: Bool { item.kind == .stay && place == nil }
     private var title: String {
         switch item.kind {
@@ -32,7 +37,7 @@ struct TimelineDetail: View {
                 HStack(spacing: Layout.spacing) {
                     if !dynamicTypeSize.isAccessibilitySize {
                         PlaceIcon(symbol: item.kind == .gap ? "questionmark" : item.kind == .journey ? item.mode.symbol : place?.symbol ?? "mappin",
-                                  colorIndex: place?.colorIndex ?? 4)
+                                  colorIndex: place?.colorIndex ?? 4, customColorHex: place?.customColorHex)
                     }
                     Text(title).font(BrandFont.heading)
                 }
@@ -79,12 +84,14 @@ struct TimelineDetail: View {
                         Label(model.endpointName(connection.to, fallback: "Later location"), systemImage: "b.circle.fill")
                     }.font(BrandFont.body)
                 }
-                MapPreviewCard(items: [item], caption: item.connection == nil ? nil : "Dashed lines link known endpoints; they aren’t a recorded route.")
                 if let place {
-                    NavigationLink { PlaceDetail(placeID: place.id) } label: { SavedPlaceRow(place: place, title: "About this place", subtitle: place.name, card: true) }.buttonStyle(.plain)
+                    PlaceRecognitionMap(place: place)
+                    PlaceDetailsContent(place: place, memoryContext: .visit(resolvedItem))
+                } else {
+                    MapPreviewCard(items: [item], caption: item.connection == nil ? nil : "Dashed lines link known endpoints; they aren’t a recorded route.")
+                    if let trip = model.memories.trips.first(where: { !$0.hidden && $0.contains(item.start) }) { TripLink(trip: trip) }
+                    MemorySection(context: .visit(item))
                 }
-                if let trip = model.memories.trips.first(where: { !$0.hidden && $0.contains(item.start) }) { TripLink(trip: trip) }
-                MemorySection(context: .visit(item))
                 if item.isUserEdited { Text("Your correction").font(.caption).foregroundStyle(Palette.muted) }
                 NavigationLink { VisitEvidenceView(item: item) } label: {
                     HStack {
@@ -139,8 +146,8 @@ struct TimelineDetail: View {
                         if item.kind == .journey || place != nil {
                             Button("Mark as unknown", systemImage: "questionmark.circle") { correct(kind: .gap) }
                         }
-                    } label: { Image(systemName: "pencil").frame(minWidth: 28, minHeight: 28) }
-                        .accessibilityLabel("Edit entry").accessibilityIdentifier("edit-entry")
+                    } label: { Label("Change type", systemImage: "arrow.triangle.2.circlepath").labelStyle(.iconOnly) }
+                        .accessibilityLabel("Change entry type").accessibilityIdentifier("edit-entry")
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }

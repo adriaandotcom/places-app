@@ -195,7 +195,7 @@ private struct RewindStoryCard: View {
                     Text("Across \(summary.recordedDays) recorded \(summary.recordedDays == 1 ? "day" : "days").").font(BrandFont.body)
                 case .favourite:
                     if let first = summary.places.first {
-                        PlaceIcon(symbol: first.place.symbol, colorIndex: first.place.colorIndex, size: Layout.iconTile)
+                        PlaceIcon(symbol: first.place.symbol, colorIndex: first.place.colorIndex, customColorHex: first.place.customColorHex, size: Layout.iconTile)
                         Text("A familiar\nfavourite.").font(BrandFont.hero)
                         Text(first.place.name).font(BrandFont.hero)
                         Text("Part of \(first.days) of your recorded \(first.days == 1 ? "day" : "days") this month.").font(BrandFont.body)

@@ -17,8 +17,33 @@ enum Palette {
     static let accents: [Color] = [controlGreen, Color(red: 0.23, green: 0.50, blue: 0.85),
         Color(red: 0.82, green: 0.48, blue: 0.17), Color(red: 0.79, green: 0.36, blue: 0.24),
         Color(red: 0.58, green: 0.39, blue: 0.76), Color(red: 0.15, green: 0.54, blue: 0.58)]
-    static func accent(_ index: Int) -> Color { accents[abs(index % accents.count)] }
-    static func soft(_ index: Int) -> Color {
+    static func accent(_ index: Int, hex: String? = nil) -> Color {
+        guard let hex, hex.count == 6, let rgb = UInt(hex, radix: 16) else { return accents[abs(index % accents.count)] }
+        return Color(red: Double((rgb >> 16) & 255) / 255, green: Double((rgb >> 8) & 255) / 255, blue: Double(rgb & 255) / 255)
+    }
+    static func iconInk(_ index: Int, hex: String? = nil) -> Color {
+        guard let hex, hex.count == 6, let rgb = UInt(hex, radix: 16) else { return .white }
+        func linear(_ value: UInt) -> Double { let v = Double(value) / 255; return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        let light = 0.2126 * linear((rgb >> 16) & 255) + 0.7152 * linear((rgb >> 8) & 255) + 0.0722 * linear(rgb & 255)
+        return light > 0.179 ? .black : .white
+    }
+    static func hex(_ color: Color) -> String {
+        // The system picker also supports Display P3. Persist predictable sRGB
+        // bytes, clamping colors outside that gamut instead of overflowing hex.
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let converted = UIColor(color).cgColor.converted(to: space, intent: .defaultIntent, options: nil)
+        let components = converted?.components ?? [0, 0, 0, 1]
+        return components.prefix(3).map { String(format: "%02X", Int((min(1, max(0, $0)) * 255).rounded())) }.joined()
+    }
+    static func soft(_ index: Int, hex: String? = nil) -> Color {
+        if let hex, hex.count == 6, let rgb = UInt(hex, radix: 16) {
+            func blend(_ base: UInt, _ fraction: Double) -> UInt {
+                [16, 8, 0].reduce(UInt(0)) { value, shift in
+                    value | UInt((Double((rgb >> shift) & 255) * fraction + Double(base) * (1 - fraction)).rounded()) << shift
+                }
+            }
+            return adaptive(light: blend(255, 0.18), dark: blend(25, 0.25))
+        }
         let light: [UInt] = [0xDCEFD9, 0xD9E9FC, 0xFBE9C2, 0xF8DECD, 0xEBDDFA, 0xD6EEEC]
         let dark: [UInt] = [0x233D2B, 0x233548, 0x443722, 0x473023, 0x392B47, 0x203C3D]
         let i = abs(index % light.count)
@@ -73,11 +98,12 @@ struct MemoryReadingStyle: ViewModifier {
 struct PlaceIcon: View {
     var symbol: String
     var colorIndex: Int = 0
+    var customColorHex: String?
     var size: CGFloat = 44
     var body: some View {
         Image(systemName: symbol).font(.system(size: size * 0.48, weight: .semibold))
-            .foregroundStyle(.white).frame(width: size, height: size)
-            .background(Palette.accent(colorIndex), in: RoundedRectangle(cornerRadius: size * 0.3))
+            .foregroundStyle(Palette.iconInk(colorIndex, hex: customColorHex)).frame(width: size, height: size)
+            .background(Palette.accent(colorIndex, hex: customColorHex), in: RoundedRectangle(cornerRadius: size * 0.3))
             .rotationEffect(.degrees(-4)).accessibilityHidden(true)
     }
 }
@@ -96,6 +122,7 @@ struct InfoRow: View {
     let title: String
     let subtitle: String
     var colorIndex = 0
+    var customColorHex: String?
     var card = true
     var showsDisclosure = false
     var body: some View {
@@ -106,7 +133,7 @@ struct InfoRow: View {
     }
     private var content: some View {
         HStack(spacing: Layout.spacing) {
-            PlaceIcon(symbol: symbol, colorIndex: colorIndex, size: 36)
+            PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex, size: 36)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(BrandFont.title)
                 if !subtitle.isEmpty { Text(subtitle).font(.subheadline).foregroundStyle(Palette.muted) }

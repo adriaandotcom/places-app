@@ -198,7 +198,7 @@ private struct TimelineDayPage: View {
                 }
                 if loaded, !failed, !(items.isEmpty && model.offersPastVisits(on: day)) {
                     Button { addPastVisits(day) } label: {
-                        Label("Add visits & memories from Apple", systemImage: "sparkles")
+                        Label("Add visits from on-device Apple Memories", systemImage: "sparkles")
                             .frame(maxWidth: .infinity, minHeight: Layout.touchTarget, alignment: .leading)
                     }.foregroundStyle(Palette.green).padding(.top, Layout.spacing)
                         .accessibilityIdentifier("apple-memory-suggestions")

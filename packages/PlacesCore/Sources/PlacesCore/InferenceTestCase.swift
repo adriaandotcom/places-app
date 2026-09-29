@@ -63,7 +63,7 @@ public struct InferenceTestCase: Codable, Sendable {
     }
 
     static func redacting(_ archive: HistoryArchive) -> Self {
-        let placeIDs = aliases(archive.places.map(\.id) + archive.observations.compactMap(\.monitoredPlaceID)
+        var placeIDs = aliases(archive.places.map(\.id) + archive.observations.compactMap(\.monitoredPlaceID)
             + archive.timeline.compactMap(\.placeID) + archive.corrections.compactMap(\.placeID)
             + archive.accessPoints.compactMap(\.placeID), prefix: "place")
         let observationIDs = aliases(archive.observations.map(\.id), prefix: "observation")
@@ -87,6 +87,9 @@ public struct InferenceTestCase: Codable, Sendable {
             ?? Coordinate(latitude: 0, longitude: 0)
         let rotation = CoordinateRotation(anchor: anchor)
 
+        for place in archive.places {
+            for id in place.mergedPlaceIDs ?? [] { placeIDs[id] = placeIDs[place.id] }
+        }
         let observations = archive.observations.map { value in
             var copy = value
             copy.id = observationIDs[value.id]!

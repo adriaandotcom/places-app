@@ -7,6 +7,7 @@ struct PlaceAreaEditor: View {
     @State var coordinate: Coordinate?
     @State var area: PlaceArea?
     let colorIndex: Int
+    var customColorHex: String?
     let select: (PlaceArea, Coordinate, String?) -> Void
     @State private var drawing = false
     @State private var vertices: [Coordinate] = []
@@ -35,7 +36,7 @@ struct PlaceAreaEditor: View {
         Form {
             if model.mapsAvailable {
                 Section {
-                    PlaceLocationMap(coordinate: $coordinate, radius: 100, colorIndex: colorIndex, name: selectedName ?? "Place", area: proposedArea,
+                    PlaceLocationMap(coordinate: $coordinate, radius: 100, colorIndex: colorIndex, customColorHex: customColorHex, name: selectedName ?? "Place", area: proposedArea,
                         drawing: drawing ? vertices : [], focusRequest: focusRequest,
                         onTap: { point in
                             if drawing { if vertices.count < 256 { vertices.append(point) } }

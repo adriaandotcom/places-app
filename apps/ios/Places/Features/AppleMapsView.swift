@@ -69,18 +69,24 @@ private struct AppleMapSurface: View {
     }
     var body: some View {
         Map(position: $camera) {
-            PlaceAreaOverlay(areas: presentation.areas)
+            PlaceAreaOverlay(areas: presentation.areas, colorIndex: presentation.pins.first?.colorIndex ?? 0,
+                customColorHex: presentation.pins.first?.customColorHex)
+            if let pin = presentation.pins.first, let radius = presentation.radius {
+                MapCircle(center: pin.coordinate.mapCoordinate, radius: radius)
+                    .foregroundStyle(Palette.accent(pin.colorIndex, hex: pin.customColorHex).opacity(0.18))
+                    .stroke(Palette.accent(pin.colorIndex, hex: pin.customColorHex), lineWidth: 2)
+            }
             ForEach(presentation.pins) { pin in
                 Annotation(pin.name, coordinate: CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)) {
                     if let place = model.places.first(where: { $0.id == pin.placeID }) {
-                        Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, size: 40) }
+                        Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, size: 40) }
                             .accessibilityLabel(pin.name)
                     } else if let letter = pin.letter {
-                        Text(letter).font(.headline.bold()).foregroundStyle(.white)
-                            .frame(width: 32, height: 32).background(Palette.accent(pin.colorIndex), in: Circle())
+                        Text(letter).font(.headline.bold()).foregroundStyle(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex))
+                            .frame(width: 32, height: 32).background(Palette.accent(pin.colorIndex, hex: pin.customColorHex), in: Circle())
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                             .accessibilityLabel("Endpoint \(letter)").accessibilityIdentifier("endpoint-\(letter)")
-                    } else { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, size: 40).accessibilityLabel(pin.name) }
+                    } else { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, size: 40).accessibilityLabel(pin.name) }
                 }
             }
             ForEach(presentation.paths) { path in
@@ -153,6 +159,7 @@ struct PlaceLocationMap: View {
     @Binding var coordinate: Coordinate?
     let radius: Double
     let colorIndex: Int
+    var customColorHex: String?
     var name = "Place"
     var area: PlaceArea?
     var drawing: [Coordinate] = []
@@ -160,10 +167,10 @@ struct PlaceLocationMap: View {
     var onTap: ((Coordinate) -> Void)?
     @State private var viewport: MapViewport?
     private var presentation: MapPresentation {
-        var value = MapPresentation(pins: coordinate.map { [MapPin(id: "draft", name: name, coordinate: $0, symbol: "mappin", colorIndex: colorIndex)] } ?? [], radius: area == nil && onTap == nil ? radius : nil)
+        var value = MapPresentation(pins: coordinate.map { [MapPin(id: "draft", name: name, coordinate: $0, symbol: "mappin", colorIndex: colorIndex, customColorHex: customColorHex)] } ?? [], radius: area == nil && onTap == nil ? radius : nil)
         value.areas = area.map { [$0] } ?? []
         if !drawing.isEmpty {
-            value.pins = drawing.enumerated().map { MapPin(id: "corner-\($0.offset)", name: "", coordinate: $0.element, symbol: "circle.fill", colorIndex: colorIndex, letter: String($0.offset + 1)) }
+            value.pins = drawing.enumerated().map { MapPin(id: "corner-\($0.offset)", name: "", coordinate: $0.element, symbol: "circle.fill", colorIndex: colorIndex, customColorHex: customColorHex, letter: String($0.offset + 1)) }
             value.paths = [MapPath(id: "drawing", coordinates: drawing, dashed: false)]
         }
         return value
@@ -174,7 +181,7 @@ struct PlaceLocationMap: View {
     }
     var body: some View {
         if model.mapsEnabled {
-            PlacePinSurface(presentation: presentation, colorIndex: colorIndex, viewport: $viewport, focusRequest: focusRequest, tapped: tapped)
+            PlacePinSurface(presentation: presentation, colorIndex: colorIndex, customColorHex: customColorHex, viewport: $viewport, focusRequest: focusRequest, tapped: tapped)
         } else if model.mapProvider == .onDevice {
             OfflineMapView(presentation: presentation, viewport: $viewport, focusRequest: focusRequest, pinChanged: tapped)
         }
@@ -184,6 +191,7 @@ struct PlaceLocationMap: View {
 private struct PlacePinSurface: View {
     let presentation: MapPresentation
     let colorIndex: Int
+    var customColorHex: String?
     @State private var camera: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 20, longitude: 0),
         span: MKCoordinateSpan(latitudeDelta: 70, longitudeDelta: 140)))
@@ -193,22 +201,22 @@ private struct PlacePinSurface: View {
     var body: some View {
         MapReader { proxy in
             Map(position: $camera) {
-                PlaceAreaOverlay(areas: presentation.areas, colorIndex: colorIndex)
+                PlaceAreaOverlay(areas: presentation.areas, colorIndex: colorIndex, customColorHex: customColorHex)
                 if let coordinate = presentation.pins.first?.coordinate, let radius = presentation.radius {
-                    MapCircle(center: coordinate.mapCoordinate, radius: radius).foregroundStyle(Palette.accent(colorIndex).opacity(0.18))
-                        .stroke(Palette.accent(colorIndex), lineWidth: 2)
+                    MapCircle(center: coordinate.mapCoordinate, radius: radius).foregroundStyle(Palette.accent(colorIndex, hex: customColorHex).opacity(0.18))
+                        .stroke(Palette.accent(colorIndex, hex: customColorHex), lineWidth: 2)
                 }
                 ForEach(presentation.paths) { path in
-                    MapPolyline(coordinates: path.coordinates.map(\.mapCoordinate)).stroke(Palette.accent(colorIndex), lineWidth: 2)
+                    MapPolyline(coordinates: path.coordinates.map(\.mapCoordinate)).stroke(Palette.accent(colorIndex, hex: customColorHex), lineWidth: 2)
                 }
                 ForEach(presentation.pins) { pin in
                     Annotation(pin.name, coordinate: pin.coordinate.mapCoordinate) {
                         if let letter = pin.letter {
-                            Text(letter).font(.caption.bold()).foregroundStyle(.white).padding(6)
-                                .background(Palette.accent(colorIndex), in: Circle())
+                            Text(letter).font(.caption.bold()).foregroundStyle(Palette.iconInk(colorIndex, hex: customColorHex)).padding(6)
+                                .background(Palette.accent(colorIndex, hex: customColorHex), in: Circle())
                         } else {
                             Image(systemName: "mappin.circle.fill").font(.largeTitle)
-                                .symbolRenderingMode(.palette).foregroundStyle(.white, Palette.accent(colorIndex))
+                                .symbolRenderingMode(.palette).foregroundStyle(Palette.iconInk(colorIndex, hex: customColorHex), Palette.accent(colorIndex, hex: customColorHex))
                         }
                     }
                 }
@@ -242,12 +250,13 @@ private struct PlacePinSurface: View {
 struct PlaceAreaOverlay: MapContent {
     let areas: [PlaceArea]
     var colorIndex = 0
+    var customColorHex: String?
     var body: some MapContent {
         ForEach(areas.indices, id: \.self) { areaIndex in
             ForEach(areas[areaIndex].polygons.indices, id: \.self) { index in
                 MapPolygon(areas[areaIndex].polygons[index].mapPolygon)
-                    .foregroundStyle(Palette.accent(colorIndex).opacity(0.18))
-                    .stroke(Palette.accent(colorIndex), lineWidth: 2)
+                    .foregroundStyle(Palette.accent(colorIndex, hex: customColorHex).opacity(0.18))
+                    .stroke(Palette.accent(colorIndex, hex: customColorHex), lineWidth: 2)
             }
         }
     }

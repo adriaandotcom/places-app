@@ -50,6 +50,12 @@ public struct PastVisitDraft: Identifiable, Equatable, Sendable {
                 fallbackDate: Date? = nil, now: Date = Date()) {
         self.candidate = candidate; name = candidate.name
         arrival = candidate.date ?? eventDate?.start ?? fallbackDate
+        // Apple can provide a place timestamp outside its enclosing event. Use
+        // the coherent event range rather than extending that conflicting time.
+        if let eventDate, eventDate.duration > 0,
+           candidate.date.map({ $0 < eventDate.start || $0 >= eventDate.end }) ?? true {
+            arrival = eventDate.start
+        }
         if let arrival {
             // An editable default, confirmed by the user before becoming a correction.
             // A suggestion's event end is useful only when it follows this arrival.

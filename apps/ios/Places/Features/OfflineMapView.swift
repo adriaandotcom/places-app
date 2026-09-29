@@ -228,7 +228,7 @@ struct OfflineMapSurface: UIViewRepresentable {
                 let id = "place-radius"
                 let source = MLNShapeSource(identifier: id, shape: MLNPolygon(coordinates: &points, count: UInt(points.count)), options: nil)
                 let layer = MLNFillStyleLayer(identifier: id, source: source)
-                layer.fillColor = NSExpression(forConstantValue: UIColor(Palette.accent(pin.colorIndex)))
+                layer.fillColor = NSExpression(forConstantValue: UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex)))
                 layer.fillOpacity = NSExpression(forConstantValue: 0.2)
                 style.addSource(source); style.addLayer(layer); routeLayerIDs.append(id)
             }
@@ -241,7 +241,7 @@ struct OfflineMapSurface: UIViewRepresentable {
                 let shape = MLNPolygon(coordinates: &points, count: UInt(points.count), interiorPolygons: interior)
                 let id = "place-area-\(index)"
                 let source = MLNShapeSource(identifier: id, shape: shape, options: nil)
-                let color = UIColor(Palette.accent(parent.presentation.pins.first?.colorIndex ?? 0))
+                let color = UIColor(Palette.accent(parent.presentation.pins.first?.colorIndex ?? 0, hex: parent.presentation.pins.first?.customColorHex))
                 let fill = MLNFillStyleLayer(identifier: id, source: source)
                 fill.fillColor = NSExpression(forConstantValue: color); fill.fillOpacity = NSExpression(forConstantValue: 0.18)
                 let line = MLNLineStyleLayer(identifier: id + "-outline", source: source)
@@ -280,22 +280,22 @@ struct OfflineMapSurface: UIViewRepresentable {
             let view = OfflineAnnotationView(annotation: annotation, reuseIdentifier: nil)
             if pin.name.isEmpty, let letter = pin.letter {
                 view.frame = CGRect(x: 0, y: 0, width: 26, height: 26)
-                view.backgroundColor = UIColor(Palette.accent(pin.colorIndex)); view.layer.cornerRadius = 13
+                view.backgroundColor = UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex)); view.layer.cornerRadius = 13
                 let text = UILabel(frame: view.bounds); text.text = letter; text.textAlignment = .center
-                text.font = .boldSystemFont(ofSize: 13); text.textColor = .white; view.addSubview(text)
+                text.font = .boldSystemFont(ofSize: 13); text.textColor = UIColor(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex)); view.addSubview(text)
                 view.isAccessibilityElement = true; view.accessibilityLabel = "Corner \(letter)"
                 return view
             }
             view.frame = CGRect(x: 0, y: 0, width: 140, height: 70)
             view.isAccessibilityElement = true; view.accessibilityLabel = pin.name
             let badge = UIView(frame: CGRect(x: 50, y: 0, width: 40, height: 40))
-            badge.backgroundColor = UIColor(Palette.accent(pin.colorIndex)); badge.layer.cornerRadius = 14
+            badge.backgroundColor = UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex)); badge.layer.cornerRadius = 14
             if let letter = pin.letter {
                 let text = UILabel(frame: badge.bounds); text.text = letter; text.textAlignment = .center
-                text.font = .boldSystemFont(ofSize: 20); text.textColor = .white; badge.addSubview(text)
+                text.font = .boldSystemFont(ofSize: 20); text.textColor = UIColor(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex)); badge.addSubview(text)
             } else {
                 let image = UIImageView(image: UIImage(systemName: pin.symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .semibold)))
-                image.tintColor = .white; image.contentMode = .scaleAspectFit; image.frame = badge.bounds.insetBy(dx: 7, dy: 7); badge.addSubview(image)
+                image.tintColor = UIColor(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex)); image.contentMode = .scaleAspectFit; image.frame = badge.bounds.insetBy(dx: 7, dy: 7); badge.addSubview(image)
             }
             view.addSubview(badge)
             let label = UILabel(frame: CGRect(x: 0, y: 44, width: 140, height: 26))

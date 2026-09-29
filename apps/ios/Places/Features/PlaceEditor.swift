@@ -21,6 +21,9 @@ struct PlaceEditor: View {
     @State private var symbol: String
     @State private var tripRole: PlaceTripRole
     @State private var userChoseIcon: Bool
+    @State private var customColorHex: String?
+    @State private var mergeDraft: Place?
+    @State private var didMerge = false
     @State private var colorIndex: Int
     @State private var wifi: PlaceWiFiDraft
     @FocusState private var wifiFocused: Bool
@@ -78,6 +81,7 @@ struct PlaceEditor: View {
         _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? PlaceIconMatcher.suggestedSymbol(name: suggestedName) ?? "mappin")
         _userChoseIcon = State(initialValue: place != nil)
         _tripRole = State(initialValue: place?.tripRole ?? .automatic)
+        _customColorHex = State(initialValue: place?.customColorHex)
         _colorIndex = State(initialValue: place?.colorIndex ?? (suggestedName == "Work" ? 1 : 0))
         _wifi = State(initialValue: PlaceWiFiDraft(names: place?.expectedSSIDs ?? []))
         _catalogReference = State(initialValue: place?.catalogReference ?? suggestion?.reference)
@@ -127,32 +131,21 @@ struct PlaceEditor: View {
                 Text(original == nil && searchAnchor != nil ? "Nearby suggestions" : "Offline suggestions")
             }
             Section("Details") {
-                Picker("For trips", selection: $tripRole) {
-                    ForEach(PlaceTripRole.allCases, id: \.self) { role in Text(role.title).tag(role) }
-                }
-                TextField("Address (optional)", text: $address).focused($focusedField, equals: .address)
                 Button { choosingIcon = true } label: {
                     HStack(spacing: Layout.spacing) {
-                        PlaceIcon(symbol: symbol, colorIndex: colorIndex)
+                        PlaceIcon(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex)
                         Text(PlaceIconCatalog.title(for: symbol)).foregroundStyle(Palette.ink)
                         Spacer()
                         Text("Change icon").font(.subheadline)
                         Image(systemName: "chevron.right").font(.caption)
                     }.frame(minHeight: Layout.touchTarget)
                 }.accessibilityIdentifier("choose-place-icon")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Layout.compact) {
-                        ForEach(0..<Palette.accents.count, id: \.self) { index in
-                            Button { colorIndex = index } label: {
-                                Circle().fill(Palette.accent(index)).frame(width: 30, height: 30)
-                                    .overlay { if colorIndex == index { Image(systemName: "checkmark").foregroundStyle(.white).bold() } }
-                                    .frame(width: Layout.touchTarget, height: Layout.touchTarget)
-                            }.buttonStyle(.plain).accessibilityLabel("Colour \(index + 1)")
-                                .accessibilityAddTraits(index == colorIndex ? .isSelected : [])
-                        }
-                    }
-                }
             }
+            Section {
+                Picker("Trip detection", selection: $tripRole) {
+                    ForEach(PlaceTripRole.allCases, id: \.self) { role in Text(role.title).tag(role) }
+                }
+            } footer: { Text(tripRole.explanation) }
             Section {
                 DisclosureGroup("City & country") {
                     TextField("City (optional)", text: $city).accessibilityIdentifier("place-city").focused($focusedField, equals: .city)
@@ -161,6 +154,10 @@ struct PlaceEditor: View {
                 }
             }
             Section("Location") {
+                LabeledContent("Address") {
+                    TextField("Street, city…", text: $address).multilineTextAlignment(.trailing)
+                        .focused($focusedField, equals: .address).accessibilityIdentifier("place-address")
+                }
                 if (assigning != nil || catalogReference != nil) && coordinate != nil && !changingLocation && area == nil {
                     HStack {
                         Label(catalogReference == nil ? "Using this visit’s location" : "Using the suggested location", systemImage: "mappin.circle.fill")
@@ -170,7 +167,7 @@ struct PlaceEditor: View {
                     }
                 } else {
                     if model.mapsAvailable {
-                        PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex, name: name.isEmpty ? "Place" : name, area: area)
+                        PlaceLocationMap(coordinate: $coordinate, radius: radius, colorIndex: colorIndex, customColorHex: customColorHex, name: name.isEmpty ? "Place" : name, area: area)
                             .frame(height: Layout.mapHeight).listRowInsets(EdgeInsets())
                         if area == nil { Label(coordinate == nil ? "Tap the map to place your pin" : "Tap the map to move your pin", systemImage: "hand.tap")
                             .font(.subheadline).foregroundStyle(Palette.muted) }
@@ -235,6 +232,9 @@ struct PlaceEditor: View {
                 Section {
                     Button("Delete place", role: .destructive) { deleting = true }
                         .disabled(saving).accessibilityIdentifier("delete-place")
+                    Button("Merge place", systemImage: "arrow.triangle.merge") {
+                        if let place = preparedPlace() { mergeDraft = place }
+                    }.disabled(saving || model.places.count < 2).accessibilityIdentifier("merge-place")
                 }
             }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
@@ -282,7 +282,7 @@ struct PlaceEditor: View {
             }
             .sheet(isPresented: $choosingArea) {
                 NavigationStack {
-                    PlaceAreaEditor(coordinate: coordinate ?? recentSearchAnchor, area: area, colorIndex: colorIndex) { selected, point, suggestedName in
+                    PlaceAreaEditor(coordinate: coordinate ?? recentSearchAnchor, area: area, colorIndex: colorIndex, customColorHex: customColorHex) { selected, point, suggestedName in
                         area = selected; coordinate = point; changingLocation = true
                         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let suggestedName { name = suggestedName }
                     }
@@ -309,7 +309,16 @@ struct PlaceEditor: View {
                 }
                 Button("Cancel", role: .cancel) { existingSuggestion = nil }
             } message: { Text("Use your saved place instead of creating a duplicate.") }
-            .sheet(isPresented: $choosingIcon) { NavigationStack { PlaceIconPicker(selection: Binding(get: { symbol }, set: { symbol = $0; userChoseIcon = true }), colorIndex: colorIndex) } }
+            .sheet(isPresented: $choosingIcon) {
+                NavigationStack {
+                    PlaceIconPicker(symbol: symbol, colorIndex: colorIndex, customColorHex: customColorHex) { icon, index, hex in
+                        symbol = icon; colorIndex = index; customColorHex = hex; userChoseIcon = true
+                    }
+                }
+            }
+            .sheet(item: $mergeDraft, onDismiss: { if didMerge { dismiss() } }) { draft in
+                NavigationStack { MergePlacePicker(edited: draft) { didMerge = true; mergeDraft = nil } }
+            }
             .onChange(of: name) { _, value in
                 if !userChoseIcon { symbol = PlaceIconMatcher.suggestedSymbol(name: value, category: value == catalogName ? catalogCategory : nil) ?? "mappin" }
             }
@@ -382,8 +391,18 @@ struct PlaceEditor: View {
         if let catalogReference, let saved = catalogReference.savedPlace(in: model.places), saved.id != original?.id {
             useSavedPlace(saved); return
         }
+        guard let place = preparedPlace() else { return }
+        saving = true; focusedField = nil; wifiFocused = false
+        Task {
+            if await model.save(place, assigning: assigning) {
+                if let onSave { onSave() } else { dismiss() }
+            }
+            saving = false
+        }
+    }
+    private func preparedPlace() -> Place? {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            focusedField = .name; validation = "Give this place a name."; return
+            focusedField = .name; validation = "Give this place a name."; return nil
         }
         var point = coordinate
         if usesCoordinates {
@@ -393,19 +412,15 @@ struct PlaceEditor: View {
         }
         guard let point, point.isValid else {
             validation = usesCoordinates ? "Enter latitude from −90 to 90 and longitude from −180 to 180, or use your current location."
-                : "Choose a location on the map or use your current location."; return
+                : "Choose a location on the map or use your current location."; return nil
         }
-        guard wifi.finish() else { wifiFocused = true; return }
-        let place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
+        guard wifi.finish() else { wifiFocused = true; return nil }
+        var place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
-            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole, area: area)
-        saving = true; focusedField = nil; wifiFocused = false
-        Task {
-            if await model.save(place, assigning: assigning) {
-                if let onSave { onSave() } else { dismiss() }
-            }
-            saving = false
-        }
+            expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole, area: area, customColorHex: customColorHex, userEditedAt: original?.userEditedAt, mergedPlaceIDs: original?.mergedPlaceIDs)
+        if original?.tripRole == nil && tripRole == .automatic { place.tripRole = nil }
+        if original != place { place.userEditedAt = Date() }
+        return place
     }
 }
 

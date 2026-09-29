@@ -48,70 +48,21 @@ struct PlaceDetail: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var model
     let placeID: String
-    private enum Editor: String, Identifiable {
-        case place, wifi
-        var id: String { rawValue }
-    }
-    @State private var editor: Editor?
-    @State private var tripIDs: [String] = []
-    private var place: Place? { model.places.first { $0.id == placeID } }
+    private var place: Place? { model.places.first { $0.id == placeID || ($0.mergedPlaceIDs ?? []).contains(placeID) } }
     var body: some View {
         ScrollView {
             if let place {
-                VStack(alignment: .leading, spacing: 22) {
-                    PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex, size: 72).padding(.vertical, 12)
-                    Text(place.name).font(BrandFont.hero)
-                    if !place.address.isEmpty { Text(place.address).font(BrandFont.body).foregroundStyle(Palette.muted) }
-                    if let locality = place.locality {
-                        Text([locality.city, locality.country].filter { !$0.isEmpty }.joined(separator: ", "))
-                            .font(BrandFont.body).foregroundStyle(Palette.muted)
-                            .accessibilityIdentifier("place-locality-\(place.id)")
-                    } else if model.placeLookupEnabled {
-                        if model.lookingUpRegions {
-                            ProgressView("Finding city & country…")
-                        } else {
-                            VStack(alignment: .leading, spacing: Layout.compact) {
-                                Text(model.regionLookupIssues[place.id] ?? "City and country haven’t been found yet.")
-                                    .font(.footnote).foregroundStyle(Palette.muted)
-                                Button("Try location details again") { model.retryRegionLookup(for: place.id) }
-                                    .frame(minHeight: Layout.touchTarget).accessibilityIdentifier("retry-city-lookup")
-                            }
-                        }
+                VStack(alignment: .leading, spacing: Layout.spacing) {
+                    HStack(spacing: Layout.spacing) {
+                        PlaceIcon(symbol: place.symbol, colorIndex: place.colorIndex, customColorHex: place.customColorHex)
+                        Text(place.name).font(BrandFont.heading)
                     }
-                    if !tripIDs.isEmpty {
-                        SectionHeading(title: "Trips here")
-                        ForEach(model.memories.trips.filter { tripIDs.contains($0.id) }) { trip in TripLink(trip: trip) }
-                    }
-                    MemorySection(context: .place(place))
-                    InfoRow(symbol: "scope", title: "Recognition area", subtitle: "Within \(Int(place.radius)) metres, when the evidence is clear.", colorIndex: place.colorIndex)
-                    let points = model.accessPoints.filter { $0.placeID == placeID }
-                    let networks = model.networks.filter { network in points.contains { $0.networkID == network.id } || place.expectedSSIDs.contains(network.ssid) }
-                    let names = place.expectedSSIDs + networks.map(\.ssid).filter { !place.expectedSSIDs.contains($0) }
-                    SectionHeading(title: "Wi-Fi networks", actionTitle: names.isEmpty ? "Add" : "Edit", actionIdentifier: "place-edit-wifi", action: { editor = .wifi })
-                    if names.isEmpty { Text("No Wi-Fi networks added.").font(BrandFont.body).foregroundStyle(Palette.muted) }
-                    else {
-                        VStack(alignment: .leading, spacing: Layout.compact) {
-                            ForEach(names, id: \.self) { name in
-                                if name != names.first { Divider() }
-                                if let network = networks.first(where: { $0.ssid == name }) {
-                                    NavigationLink {
-                                        ScrollView { WiFiClassificationPicker(network: network).padding(Layout.gutter) }
-                                            .background(Palette.background).navigationTitle("Network type").navigationBarTitleDisplayMode(.inline)
-                                    } label: {
-                                        HStack { WiFiNameLabel(name: name, subtitle: place.expectedSSIDs.contains(name) ? nil : "Learned here"); Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted) }
-                                    }.buttonStyle(.plain)
-                                } else { WiFiNameLabel(name: name) }
-                            }
-                        }.modifier(CardSurface())
-                    }
-                    Text("Coordinates are stored locally. Changing a place re-evaluates observations, while preserving your timeline corrections.").font(.footnote).foregroundStyle(Palette.muted)
-                    Button("Edit place") { editor = .place }.buttonStyle(PrimaryButton())
+                    PlaceRecognitionMap(place: place)
+                    PlaceDetailsContent(place: place, memoryContext: .place(place))
                 }.padding(Layout.gutter)
             }
-        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
-            .task(id: model.historyRevision) { tripIDs = (try? await model.store?.tripIDs(visiting: placeID)) ?? [] }
-            .sheet(item: $editor, onDismiss: { if place == nil { dismiss() } }) { target in
-                if let place { NavigationStack { PlaceEditor(place: place, wifiOnly: target == .wifi) } }
-            }
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink)
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: place == nil) { _, missing in if missing { dismiss() } }
     }
 }

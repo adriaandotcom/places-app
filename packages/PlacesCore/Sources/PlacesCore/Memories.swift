@@ -5,6 +5,15 @@ public enum PlaceTripRole: String, Codable, CaseIterable, Sendable {
     public var title: String {
         switch self { case .automatic: "Automatic"; case .home: "Home"; case .lodging: "Lodging"; case .regular: "Regular place" }
     }
+    public var explanation: String {
+        switch self {
+        case .automatic: "Uses the place icon and overnight stays away from home to find trips."
+        case .home: "Stays here count as home and help mark the beginning and end of trips."
+        case .lodging: "Overnight stays here can start a trip, even when you are close to home."
+        case .regular: "Stays here won’t start an automatic trip. Useful for work and other regular stops."
+        }
+    }
+
 }
 
 extension Place {

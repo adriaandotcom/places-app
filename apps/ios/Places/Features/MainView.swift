@@ -37,6 +37,8 @@ struct MainView: View {
 private struct MainNavigationIsland: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionShape
     var body: some View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases, id: \.self) { tab in
@@ -50,7 +52,13 @@ private struct MainNavigationIsland: View {
                         .frame(minWidth: Layout.touchTarget, minHeight: Layout.navigationItemHeight)
                         .padding(.horizontal, model.selectedTab == tab ? 10 : 0)
                         .foregroundStyle(model.selectedTab == tab ? Palette.navigationSelectedInk : Palette.navigationInk)
-                        .background(model.selectedTab == tab ? Palette.navigationSelected : .clear, in: Capsule())
+                        .background {
+                            if model.selectedTab == tab {
+                                Capsule().fill(Palette.navigationSelected)
+                                    .matchedGeometryEffect(id: "selected-tab", in: selectionShape)
+                            }
+                        }
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.2, extraBounce: 0), value: model.selectedTab)
                         .contentShape(Rectangle())
                         .fixedSize(horizontal: model.selectedTab == tab && !typeSize.isAccessibilitySize, vertical: false)
                 }.buttonStyle(.plain).accessibilityLabel(tab.title)
@@ -136,7 +144,7 @@ struct TimelineRow: View {
     var body: some View {
         if item.kind == .stay {
             HStack(alignment: .top, spacing: 14) {
-                PlaceIcon(symbol: place?.symbol ?? "mappin", colorIndex: place?.colorIndex ?? 4)
+                PlaceIcon(symbol: place?.symbol ?? "mappin", colorIndex: place?.colorIndex ?? 4, customColorHex: place?.customColorHex)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(place?.name ?? "Somewhere new").font(BrandFont.title).multilineTextAlignment(.leading)
                     Text(Display.range(item)).font(.subheadline).foregroundStyle(Palette.muted)
@@ -148,7 +156,7 @@ struct TimelineRow: View {
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(Palette.muted).padding(.top, 16)
             }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Palette.soft(place?.colorIndex ?? 4), in: RoundedRectangle(cornerRadius: Layout.cardRadius))
+                .background(Palette.soft(place?.colorIndex ?? 4, hex: place?.customColorHex), in: RoundedRectangle(cornerRadius: Layout.cardRadius))
                 .padding(.vertical, 4)
                 .accessibilityElement(children: .combine)
         } else {

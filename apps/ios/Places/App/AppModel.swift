@@ -330,7 +330,7 @@ final class AppModel {
         do { try await store.split(item, selecting: ids); await refresh(); return true }
         catch { fail("Could not split these entries. Please try again."); return false }
     }
-    func place(for item: TimelineItem) -> Place? { places.first { $0.id == item.placeID } }
+    func place(for item: TimelineItem) -> Place? { places.first { $0.id == item.placeID || ($0.mergedPlaceIDs ?? []).contains(item.placeID ?? "") } }
     func endpointName(_ endpoint: TimelineConnection.Endpoint, fallback: String) -> String {
         places.first { $0.id == endpoint.placeID }?.name ?? fallback
     }
@@ -505,6 +505,16 @@ final class AppModel {
         await pendingWrite?.value
         guard generation == epoch, !deleting else { throw CancellationError() }
         try await store.deletePlace(id: id)
+        guard generation == epoch, !deleting else { throw CancellationError() }
+        await refresh()
+        if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
+    }
+    func mergePlaces(_ edited: Place, with otherID: String, keeping keptID: String) async throws {
+        let epoch = generation
+        guard let store, !deleting else { throw CancellationError() }
+        await pendingWrite?.value
+        guard generation == epoch, !deleting else { throw CancellationError() }
+        _ = try await store.mergePlaces(edited: edited, with: otherID, keeping: keptID)
         guard generation == epoch, !deleting else { throw CancellationError() }
         await refresh()
         if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }

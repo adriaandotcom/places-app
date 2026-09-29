@@ -116,15 +116,19 @@ public struct Place: Codable, Identifiable, Hashable, Sendable {
     public var locality: PlaceLocality?
     public var tripRole: PlaceTripRole?
     public var area: PlaceArea?
+    public var customColorHex: String?
+    public var userEditedAt: Date?
+    public var mergedPlaceIDs: [String]?
     public init(id: String = UUID().uuidString, name: String, address: String = "", coordinate: Coordinate,
                 radius: Double = 100, symbol: String = "mappin", colorIndex: Int = 0,
-                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil, area: PlaceArea? = nil) {
+                expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil, area: PlaceArea? = nil, customColorHex: String? = nil, userEditedAt: Date? = nil, mergedPlaceIDs: [String]? = nil) {
         self.id = id; self.name = name; self.address = address; self.coordinate = coordinate
         self.radius = radius; self.symbol = symbol; self.colorIndex = colorIndex
         self.expectedSSIDs = expectedSSIDs; self.createdAt = createdAt
         self.catalogReference = catalogReference; self.locality = locality
         self.tripRole = tripRole
         self.area = area
+        self.customColorHex = customColorHex; self.userEditedAt = userEditedAt; self.mergedPlaceIDs = mergedPlaceIDs
     }
 }
 

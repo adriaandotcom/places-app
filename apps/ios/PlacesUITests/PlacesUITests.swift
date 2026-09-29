@@ -1,6 +1,55 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testPlaceMergeKeepsCurrentEditsAndSharedDetails() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10))
+        app.buttons["tab-map"].tap(); enableAppleMaps(in: app)
+        app.buttons["tab-places"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Home")).firstMatch.tap()
+        XCTAssertTrue(app.buttons["edit-place-details"].waitForExistence(timeout: 5))
+        let detail = XCTAttachment(screenshot: app.screenshot()); detail.name = "Shared place details with recognition area"; detail.lifetime = .keepAlways; add(detail)
+        app.buttons["edit-place-details"].tap()
+        let name = app.textFields["place-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5)); name.tap(); name.typeText(" edited")
+        app.buttons["dismiss-keyboard"].tap()
+        reveal(app.buttons["choose-place-icon"], in: app); app.buttons["choose-place-icon"].tap()
+        XCTAssertTrue(app.buttons["place-color-4"].waitForExistence(timeout: 5)); app.buttons["place-color-4"].tap()
+        app.buttons["save-place-appearance"].tap()
+        reveal(app.buttons["merge-place"], in: app); app.buttons["merge-place"].tap()
+        XCTAssertTrue(app.buttons["merge-with-demo-cafe"].waitForExistence(timeout: 5)); app.buttons["merge-with-demo-cafe"].tap()
+        XCTAssertTrue(app.buttons["confirm-place-merge"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["confirm-place-merge"].firstMatch.label.contains("Home edited"))
+        let merge = XCTAttachment(screenshot: app.screenshot()); merge.name = "Merge keeps current edits"; merge.lifetime = .keepAlways; add(merge)
+        app.buttons["confirm-place-merge"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["edit-place-details"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Home edited"].firstMatch.exists)
+        app.buttons["tab-places"].tap()
+        XCTAssertFalse(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "A little coffee stop")).firstMatch.exists)
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Home edited")).firstMatch.exists)
+    }
+
+    func testCustomPlaceColorFavoritesCanBeReusedAndRemoved() {
+        let app = launch(fixture: true)
+        app.buttons["tab-places"].tap(); app.buttons["add-place"].tap()
+        reveal(app.buttons["choose-place-icon"], in: app); app.buttons["choose-place-icon"].tap()
+        XCTAssertTrue(app.colorWells["custom-place-color"].waitForExistence(timeout: 5))
+        app.colorWells["custom-place-color"].coordinate(withNormalizedOffset: CGVector(dx: 0.96, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["Spectrum"].waitForExistence(timeout: 5)); app.buttons["Spectrum"].tap()
+        let picker = XCTAttachment(screenshot: app.screenshot()); picker.name = "Native color spectrum"; picker.lifetime = .keepAlways; add(picker)
+        app.buttons["Grid"].tap(); app.otherElements["white 100"].tap(); app.buttons["close"].tap()
+        XCTAssertTrue(app.buttons["favorite-place-color"].isEnabled); app.buttons["favorite-place-color"].tap()
+        app.buttons["save-place-appearance"].tap()
+        app.buttons["choose-place-icon"].tap()
+        app.scrollViews["place-color-swatches"].swipeLeft()
+        let favorite = app.buttons["Favorite color FFFFFF"]
+        XCTAssertTrue(favorite.waitForExistence(timeout: 5)); favorite.tap()
+        let colors = XCTAttachment(screenshot: app.screenshot()); colors.name = "Reusable custom color favorite"; colors.lifetime = .keepAlways; add(colors)
+        XCTAssertEqual(app.buttons["favorite-place-color"].label, "Remove favorite")
+        app.buttons["favorite-place-color"].tap()
+        XCTAssertTrue(favorite.waitForNonExistence(timeout: 5))
+    }
+
     func testPastVisitsReviewCancellationAndConfirmedAdditionBeforeHistory() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-past-visits"]
@@ -1275,6 +1324,7 @@ import XCTest
         search.tap(); search.typeText("work")
         XCTAssertTrue(app.buttons["icon-briefcase.fill"].waitForExistence(timeout: 5))
         app.buttons["icon-briefcase.fill"].tap()
+        app.buttons["save-place-appearance"].tap()
         XCTAssertTrue(app.staticTexts["Work"].waitForExistence(timeout: 5))
         name.tap(); name.typeText(" market")
         app.buttons["dismiss-keyboard"].tap()
