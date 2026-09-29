@@ -25,8 +25,8 @@ public enum ObservationSource: String, Codable, Sendable {
 }
 public enum TransportMode: String, Codable, CaseIterable, Sendable {
     // Keep the existing raw values so saved journeys and corrections remain readable.
-    case unknown, walking, cycling, driving, train, plane, ferry
-    public static let choiceOrder: [Self] = [.walking, .cycling, .driving, .train, .ferry, .plane, .unknown]
+    case unknown, walking, cycling, scooter, driving, train, plane, ferry
+    public static let choiceOrder: [Self] = [.walking, .cycling, .scooter, .driving, .train, .ferry, .plane, .unknown]
     public var choiceTitle: String {
         switch self {
         case .unknown: "Not sure"
@@ -40,6 +40,7 @@ public enum TransportMode: String, Codable, CaseIterable, Sendable {
         case .unknown: "Travelled"
         case .walking: "Walked"
         case .cycling: "Cycled"
+        case .scooter: "Scooter"
         case .driving: "Car"
         case .train: "Public transport"
         case .plane: "Plane"
@@ -51,6 +52,7 @@ public enum TransportMode: String, Codable, CaseIterable, Sendable {
         case .unknown: "point.topleft.down.to.point.bottomright.curvepath"
         case .walking: "figure.walk"
         case .cycling: "bicycle"
+        case .scooter: "scooter"
         case .driving: "car.fill"
         case .train: "tram.fill"
         case .plane: "airplane"

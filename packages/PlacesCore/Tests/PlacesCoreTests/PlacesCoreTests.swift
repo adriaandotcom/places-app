@@ -208,6 +208,24 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
     #expect(output.reduce(0) { $0 + $1.duration() } == 100)
 }
 
+@Test func partialStopInsideGapKeepsUnknownTimeAndRawEvidence() async throws {
+    let store = try PlacesStore()
+    let samples = [fix(0), fix(9000, coordinate: Coordinate(latitude: 0, longitude: 0.02), speed: 5)]
+    try await store.append(samples)
+    let place = Place(name: "Fixture Garden", coordinate: Coordinate(latitude: 0, longitude: 0.01))
+    var edit = UserOverride(start: epoch.addingTimeInterval(1800), end: epoch.addingTimeInterval(6000), kind: .stay, placeID: place.id)
+    edit.coordinate = place.coordinate
+    try await store.savePlace(place, assigning: edit)
+    try await store.append([fix(9060, coordinate: Coordinate(latitude: 0, longitude: 0.03), speed: 5)])
+    let items = try await store.timeline(on: epoch)
+    let stay = try #require(items.first { $0.placeID == place.id })
+    #expect(stay.start == edit.start && stay.end == edit.end && stay.isUserEdited)
+    #expect(stay.coordinate == place.coordinate)
+    #expect(items.contains { $0.kind == .gap && $0.end == edit.start })
+    #expect(items.contains { $0.kind == .gap && $0.start == edit.end })
+    #expect(try await store.observations().count == 3)
+}
+
 @Test func incrementalRebuildMatchesFullInference() async throws {
     let store = try PlacesStore(); try await store.savePlace(home())
     let samples = [fix(0), fix(60), fix(400, coordinate: Coordinate(latitude: 0, longitude: 0.01), speed: 4),

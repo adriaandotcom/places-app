@@ -124,13 +124,6 @@ struct MapScreen: View {
     @State private var periodHeight: CGFloat = 60
     var body: some View {
         GeometryReader { geometry in
-        ZStack {
-            if model.selectedTab == .map {
-                PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints, focusRequest: model.mapFocusRequest,
-                    chromeInsets: EdgeInsets(top: geometry.safeAreaInsets.top + Layout.touchTarget + Layout.spacing,
-                        leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing, trailing: 0))
-                    .ignoresSafeArea()
-            }
             VStack {
                 HStack {
                     Spacer()
@@ -146,7 +139,15 @@ struct MapScreen: View {
                 }
             }
             .padding(.bottom, Layout.navigationIslandHeight + Layout.compact)
-        }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                if model.selectedTab == .map {
+                    PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints, focusRequest: model.mapFocusRequest,
+                        chromeInsets: EdgeInsets(top: geometry.safeAreaInsets.top + Layout.touchTarget + Layout.spacing,
+                            leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing, trailing: 0))
+                        .ignoresSafeArea()
+                }
+            }
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }

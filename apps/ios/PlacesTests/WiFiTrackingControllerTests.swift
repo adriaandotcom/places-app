@@ -17,9 +17,10 @@ import PlacesCore
     private var connection: ConnectedWiFi { ConnectedWiFi(ssid: network.ssid, bssid: points[0].bssid) }
 
     private func makeTracker(timeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90),
+                             settlingDelay: Duration = .seconds(TrackingPolicy.stationaryDuration),
                              device: UIDevice = DeviceSpy()) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
         let live = LocationSpy(), passive = LocationSpy(), reader = WiFiReaderSpy()
-        let tracker = TrackingController(live: live, passive: passive, device: device, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, monitorSystemChanges: false,
+        let tracker = TrackingController(live: live, passive: passive, device: device, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, settlingDelay: settlingDelay, monitorSystemChanges: false,
                                          wifiReader: { reader.callbacks.append($0) })
         tracker.updateWiFiKnowledge(places: [home], networks: [network], accessPoints: points)
         tracker.configure(places: [home], enabled: true)
@@ -60,6 +61,40 @@ import PlacesCore
         try await Task.sleep(for: .milliseconds(70))
         XCTAssertEqual(tracker.state, .lowPowerFallback)
         XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testQuietStopRequestsFreshEvidenceBeforeRecoveryExpires() async throws {
+        let (tracker, live, _, reader) = makeTracker(recoveryTimeout: .milliseconds(80), settlingDelay: .milliseconds(180))
+        reader.complete(0, nil)
+        let fix = CLLocation(coordinate: .init(latitude: 2, longitude: 2), altitude: 0,
+                             horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: Date())
+        tracker.locationManager(live, didUpdateLocations: [fix])
+        tracker.receivedMotion(.walking, at: Date()); reader.complete(1, nil)
+        XCTAssertEqual(tracker.state, .moving)
+        tracker.receivedMotion(.stationary, at: Date())
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertEqual(tracker.state, .stationaryCandidate, "The shorter recovery timeout must not cancel stop confirmation")
+        XCTAssertEqual(live.requests, 0)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(live.requests, 1)
+        XCTAssertNotEqual(tracker.state, .stationaryUnknown, "Silence is not evidence of a stay")
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertEqual(live.requests, 1, "No periodic GPS polling when confirmation fails")
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testMovementCancelsPendingStopConfirmation() async throws {
+        let (tracker, live, _, reader) = makeTracker(recoveryTimeout: .milliseconds(80), settlingDelay: .milliseconds(180))
+        reader.complete(0, nil)
+        tracker.locationManager(live, didUpdateLocations: [CLLocation(coordinate: .init(latitude: 2, longitude: 2), altitude: 0,
+            horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: Date())])
+        tracker.receivedMotion(.walking, at: Date()); reader.complete(1, nil)
+        try await Task.sleep(for: .milliseconds(240))
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertEqual(live.requests, 0)
         tracker.configure(places: [], enabled: false)
     }
 
@@ -401,6 +436,7 @@ import PlacesCore
 
 private final class LocationSpy: CLLocationManager {
     var starts = 0
+    var requests = 0
     var updating = false
     var visits = false
     var significantChanges = false
@@ -416,7 +452,7 @@ private final class LocationSpy: CLLocationManager {
     override var maximumRegionMonitoringDistance: CLLocationDistance { 100_000 }
     override func startUpdatingLocation() { starts += 1; updating = true }
     override func stopUpdatingLocation() { updating = false }
-    override func requestLocation() {}
+    override func requestLocation() { requests += 1 }
     override func startMonitoringVisits() { visits = true }
     override func stopMonitoringVisits() { visits = false }
     override func startMonitoringSignificantLocationChanges() { significantChanges = true }

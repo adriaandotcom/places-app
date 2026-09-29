@@ -490,8 +490,10 @@ final class AppModel {
         guard let store else { fail("Your history is not available yet. Please try again."); return false }
         do {
             let edit = item.map {
-                UserOverride(start: $0.start, end: max($0.end ?? Date(), $0.start.addingTimeInterval(1)),
-                             kind: .stay, placeID: place.id)
+                var edit = UserOverride(start: $0.start, end: max($0.end ?? Date(), $0.start.addingTimeInterval(1)),
+                                        kind: .stay, placeID: place.id)
+                edit.coordinate = place.coordinate
+                return edit
             }
             try await store.savePlace(place, assigning: edit); await refresh(); enrichRegions()
             if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }

@@ -124,8 +124,8 @@ struct TimelineView: View {
                     Button { showDate = true } label: { Image(systemName: "calendar").frame(width: 44, height: 44) }
                         .accessibilityLabel("Choose date")
                 }
-                TimelineDayStrip(progress: dayProgress)
             }.padding(.horizontal, Layout.gutter).padding(.top, Layout.compact)
+            TimelineDayStrip(progress: dayProgress)
             TimelinePager(progress: $dayProgress, select: { selected = $0 }, addPlace: { addPlace = true },
                 addPastVisits: { day in pastVisits = PastVisitsRequest(day: day) })
         }.background(Palette.background).foregroundStyle(Palette.ink)

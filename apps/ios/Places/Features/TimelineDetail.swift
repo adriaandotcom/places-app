@@ -48,7 +48,7 @@ struct TimelineDetail: View {
                     Text(Display.duration(item.duration())).font(.subheadline).foregroundStyle(Palette.muted)
                 }
                 if isUnnamedStay || item.kind == .gap {
-                    Button(isUnnamedStay ? "Name this place" : item.kind == .gap ? "I was at a place" : "Change place") {
+                    Button(isUnnamedStay ? "Name this place" : "Add a missing visit") {
                         namingDraft = NamingDraft(suggestion: nil)
                     }.buttonStyle(PrimaryButton()).accessibilityIdentifier("assign-place")
                 }
@@ -157,7 +157,7 @@ struct TimelineDetail: View {
             }
             .sheet(item: $namingDraft, onDismiss: { if createdPlace { dismiss() } }) { draft in
                 NavigationStack {
-                    PlaceEditor(coordinate: item.coordinate, assigning: item, suggestion: draft.suggestion) {
+                    PlaceEditor(coordinate: item.kind == .stay ? item.coordinate : nil, assigning: item, suggestion: draft.suggestion) {
                         createdPlace = true; namingDraft = nil
                     }
                 }

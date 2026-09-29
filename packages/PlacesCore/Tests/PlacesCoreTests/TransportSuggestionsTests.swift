@@ -84,7 +84,7 @@ func transportChoicesRankByRecordedDistanceAndTime(speed: Double, first: Transpo
     }
 }
 
-@Test(arguments: [TransportMode.plane, .ferry])
+@Test(arguments: [TransportMode.plane, .ferry, .scooter])
 func newTransportCorrectionsPersistAndOutrankSuggestions(mode: TransportMode) async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

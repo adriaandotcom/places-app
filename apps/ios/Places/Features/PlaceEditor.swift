@@ -8,6 +8,8 @@ struct PlaceEditor: View {
     private let assigning: TimelineItem?
     private let onSave: (() -> Void)?
     private let wifiOnly: Bool
+    @State private var visitArrival: Date
+    @State private var visitDeparture: Date
     @State private var name: String
     @State private var city: String
     @State private var country: String
@@ -39,7 +41,7 @@ struct PlaceEditor: View {
     @State private var catalogName: String?
     @State private var nearbyPlaces: [CatalogPlace] = []
     @State private var recentSearchAnchor: Coordinate?
-    private var searchAnchor: Coordinate? { coordinate ?? recentSearchAnchor }
+    private var searchAnchor: Coordinate? { coordinate ?? assigning?.coordinate ?? recentSearchAnchor }
     @State private var catalogMessage: String?
     @State private var existingSuggestion: Place?
     @State private var pendingSavedSuggestion: Place?
@@ -69,6 +71,8 @@ struct PlaceEditor: View {
         self.assigning = assigning
         self.onSave = onSave
         self.wifiOnly = wifiOnly
+        _visitArrival = State(initialValue: assigning?.start ?? Date())
+        _visitDeparture = State(initialValue: assigning?.end ?? Date())
         let point = place?.coordinate ?? suggestion?.coordinate ?? coordinate
         _name = State(initialValue: place?.name ?? suggestion?.name ?? suggestedName)
         _city = State(initialValue: place?.locality?.city ?? "")
@@ -95,6 +99,15 @@ struct PlaceEditor: View {
         ScrollViewReader { scroll in
         Form {
             if !wifiOnly {
+            if let assigning, assigning.kind != .stay {
+                Section {
+                    DatePicker("Arrival", selection: $visitArrival, in: assigning.start...(assigning.end ?? Date()))
+                        .accessibilityIdentifier("visit-arrival")
+                    DatePicker("Departure", selection: $visitDeparture, in: assigning.start...(assigning.end ?? Date()))
+                        .accessibilityIdentifier("visit-departure")
+                } header: { Text("When were you here?") }
+                footer: { Text("Choose the part of this interval you spent here. The rest of your timeline is kept.") }
+            }
             Section("Name") {
                 TextField("Name", text: $name).accessibilityIdentifier("place-name").focused($focusedField, equals: .name)
             }
@@ -245,7 +258,7 @@ struct PlaceEditor: View {
                     withAnimation { scroll.scrollTo("place-wifi-entry", anchor: .bottom) }
                 }
             }
-            .navigationTitle(wifiOnly ? "Wi-Fi networks" : original != nil ? "Edit place" : assigning != nil ? "Name this place" : "Add a place").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(wifiOnly ? "Wi-Fi networks" : original != nil ? "Edit place" : assigning?.kind == .stay ? "Name this place" : assigning != nil ? "Add a visit" : "Add a place").navigationBarTitleDisplayMode(.inline)
             .modifier(EditorControls(saving: saving, error: $validation, errorTitle: "Couldn’t save this place",
                 saveIdentifier: "save-place", cancel: { dismiss() }, save: save))
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -360,9 +373,10 @@ struct PlaceEditor: View {
     private func useSavedPlace(_ place: Place) {
         existingSuggestion = nil
         guard assigning != nil else { dismiss(); return }
+        guard validVisitInterval else { return }
         saving = true
         Task {
-            if await model.save(place, assigning: assigning) {
+            if await model.save(place, assigning: assignment) {
                 if let onSave { onSave() } else { dismiss() }
             }
             saving = false
@@ -391,17 +405,32 @@ struct PlaceEditor: View {
         return PlaceLocality(city: city, country: country)
     }
     private func save() {
+        guard validVisitInterval else { return }
         if let catalogReference, let saved = catalogReference.savedPlace(in: model.places), saved.id != original?.id {
             useSavedPlace(saved); return
         }
         guard let place = preparedPlace() else { return }
         saving = true; focusedField = nil; wifiFocused = false
         Task {
-            if await model.save(place, assigning: assigning) {
+            if await model.save(place, assigning: assignment) {
                 if let onSave { onSave() } else { dismiss() }
             }
             saving = false
         }
+    }
+    private var assignment: TimelineItem? {
+        guard var item = assigning else { return nil }
+        if item.kind != .stay { item.start = visitArrival; item.end = visitDeparture }
+        return item
+    }
+    private var validVisitInterval: Bool {
+        guard let assigning, assigning.kind != .stay else { return true }
+        guard visitDeparture > visitArrival, visitArrival >= assigning.start,
+              visitDeparture <= (assigning.end ?? Date()) else {
+            validation = "Choose an arrival and a later departure within this interval."
+            return false
+        }
+        return true
     }
     private func preparedPlace() -> Place? {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

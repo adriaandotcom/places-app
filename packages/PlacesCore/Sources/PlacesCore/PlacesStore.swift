@@ -73,6 +73,10 @@ public actor PlacesStore {
         }
         migrator.registerMigration("v5-nearby-wifi-suggestions", migrate: WiFiSuggestionIndex.migrate)
         migrator.registerMigration("v6-private-memories", migrate: MemorySQL.migrate)
+        migrator.registerMigration("v7-system-visit-arrivals") { db in
+            try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
         try migrator.migrate(queue)
     }
 

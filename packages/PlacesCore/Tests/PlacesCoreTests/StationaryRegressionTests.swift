@@ -9,6 +9,41 @@ private func sample(_ seconds: Double, metres: Double = 0, speed: Double = -1, s
                       coordinate: Coordinate(latitude: 0, longitude: metres / 111_195), horizontalAccuracy: 30, speed: speed)
 }
 
+@Test func systemArrivalAtAnotherUnnamedStopIsNotDiscardedAsTravel() {
+    let observations = [sample(0, source: .visitArrival), sample(180),
+                        sample(900, metres: 330, speed: 0, source: .visitArrival),
+                        sample(1130, metres: 330, speed: 0.4), sample(1170, metres: 333),
+                        sample(9882, metres: 925, speed: 4),
+                        SensorObservation(timestamp: start.addingTimeInterval(9900), source: .recovery)]
+    let items = InferenceEngine.infer(observations: observations, places: [])
+    #expect(items.map(\.kind) == [.stay, .stay, .gap])
+    #expect(items[1].start == start.addingTimeInterval(900))
+    #expect(items[1].end == start.addingTimeInterval(1170))
+    #expect(items[2].start == start.addingTimeInterval(1170), "The unrecorded hours must remain unknown")
+}
+
+@Test func arrivalMigrationRebuildsHistoryAndPreservesEvidenceAndCorrections() async throws {
+    let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let store = try PlacesStore(path: path)
+    let observations = [sample(0, source: .visitArrival), sample(180),
+                        sample(900, metres: 330, source: .visitArrival), sample(1170, metres: 330),
+                        SensorObservation(timestamp: start.addingTimeInterval(9900), source: .recovery)]
+    try await store.append(observations)
+    try await store.correct(UserOverride(start: start.addingTimeInterval(1800), end: start.addingTimeInterval(5400), kind: .stay))
+    let expected = try await store.exportTestCase()
+    let queue = try DatabaseQueue(path: path)
+    try await queue.write { db in
+        try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = 'v7-system-visit-arrivals'")
+        // Simulate the previous derived cache without modifying raw observations.
+        try db.execute(sql: "DELETE FROM timeline")
+    }
+    let reopened = try PlacesStore(path: path)
+    #expect(try await reopened.exportTestCase() == expected)
+    #expect(try await reopened.observations().count == observations.count)
+    #expect(try await queue.read { try Row.fetchAll($0, sql: "PRAGMA foreign_key_check").isEmpty })
+}
+
 @Test func stationaryWiFiAndGPSJitterStayInOneUnnamedEntry() async throws {
     var observations: [SensorObservation] = []
     for second in stride(from: 0, through: 900, by: 30) {

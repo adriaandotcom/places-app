@@ -74,6 +74,17 @@ public enum InferenceEngine {
             let wifiPlace = TrackingPolicy.connectedPlace(for: observation, places: places, networks: networks, accessPoints: accessPoints)
             guard observation.usableCoordinate != nil || wifiPlace != nil else { continue }
 
+            if let item = current, item.kind == .stay, item.placeID == nil,
+               time.timeIntervalSince(item.lastEvidenceAt) > TrackingPolicy.evidenceGap,
+               let anchor = stationaryAnchor, !TrackingPolicy.sameStationaryArea(anchor, observation) {
+                // A fix somewhere else after a long silence cannot establish when
+                // the unnamed stop ended. Retain the unrecorded interval as a gap.
+                let boundary = item.lastEvidenceAt
+                close(at: boundary)
+                start(.gap, at: boundary, observation: observation, reason: "No observations establish this interval.")
+                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+            }
+
             if let item = current, item.kind != .stay,
                time.timeIntervalSince(item.lastEvidenceAt) > TrackingPolicy.evidenceGap {
                 // Keep one gap open while the next fix is still unconfirmed.
@@ -106,6 +117,21 @@ public enum InferenceEngine {
             }
             guard let coordinate = observation.usableCoordinate else { continue }
 
+            if observation.source == .visitArrival {
+                // A system-reported arrival establishes a stop even when it is
+                // displaced from the previous unnamed stop. Do not turn it into
+                // travel while waiting for a second displaced GPS sample.
+                let sameStop = current?.kind == .stay && current?.placeID == nil
+                    && stationaryAnchor.map { TrackingPolicy.sameStationaryArea($0, observation) } == true
+                if sameStop { addEvidence(observation) }
+                else {
+                    close(at: time)
+                    start(.stay, at: time, observation: observation, reason: "iOS reported an arrival at this location. This place has not been named.")
+                }
+                stationaryAnchor = observation; stationaryEvidence = [observation]; departureCandidate = nil
+                continue
+            }
+
             if let item = current, item.kind == .stay, item.placeID != nil,
                let previous = item.coordinate, previous.distance(to: coordinate) > 250,
                observation.speed.map({ $0 >= 0.8 }) == true || [.walking, .running, .cycling, .automotive].contains(motion) {
@@ -128,7 +154,7 @@ public enum InferenceEngine {
                 departureCandidate = nil
                 stationaryEvidence.append(observation)
                 let duration = (observation.coordinateTimestamp ?? time).timeIntervalSince(anchor.coordinateTimestamp ?? anchor.timestamp)
-                let stationary = observation.source == .visitArrival || duration >= TrackingPolicy.stationaryDuration
+                let stationary = duration >= TrackingPolicy.stationaryDuration
                 if current?.kind == .stay && current?.placeID == nil {
                     addEvidence(observation)
                 } else if stationary {

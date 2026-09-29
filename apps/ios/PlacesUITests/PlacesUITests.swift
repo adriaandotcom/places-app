@@ -1,6 +1,38 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testGapCanBePartiallyAssignedToSavedPlace() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-grouped-history"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-")).firstMatch.tap()
+        app.buttons["assign-place"].tap()
+        let arrival = app.datePickers["visit-arrival"]
+        XCTAssertTrue(arrival.waitForExistence(timeout: 5))
+        arrival.buttons.element(boundBy: 2).tap()
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "10")
+        app.buttons["PopoverDismissRegion"].tap()
+        app.datePickers["visit-departure"].buttons.element(boundBy: 2).tap()
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "20")
+        app.buttons["PopoverDismissRegion"].tap()
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Choose missing visit times"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["choose-saved-place"].tap()
+        let home = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "saved-place-", "Home")).firstMatch
+        XCTAssertTrue(home.waitForExistence(timeout: 5)); home.tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 8))
+        let gaps = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-gap-"))
+        XCTAssertTrue(gaps.firstMatch.label.contains("10 min"))
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-stay-")).firstMatch.tap()
+        app.buttons["edit-entry"].tap(); app.buttons["split-entries"].tap()
+        // Same-place grouping retains the actual correction and the untouched gap.
+        let originals = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "original-entry-"))
+        XCTAssertTrue(originals.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(originals.element(boundBy: 0).label.contains("0:10 – 0:20"))
+        XCTAssertTrue(originals.element(boundBy: 1).label.contains("0:20 – 0:30"))
+        XCTAssertTrue(originals.element(boundBy: 1).label.contains("Unrecorded interval"))
+    }
+
     func testExistingPlaceAppearanceSearchSelectionPersists() {
         let app = launch(fixture: true)
         app.buttons["tab-places"].tap()
@@ -597,6 +629,8 @@ import XCTest
         app.launch()
         let days = app.scrollViews["timeline-days"]
         XCTAssertTrue(days.waitForExistence(timeout: 10))
+        XCTAssertEqual(days.frame.minX, app.frame.minX, accuracy: 1)
+        XCTAssertEqual(days.frame.maxX, app.frame.maxX, accuracy: 1)
         let left = app.buttons["timeline-day--6"]
         XCTAssertTrue(left.isHittable); left.tap()
         let pager = app.scrollViews["timeline-pager"]
@@ -633,6 +667,16 @@ import XCTest
             XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10)); app.buttons["tab-map"].tap()
             if !offline { enableAppleMaps(in: app) }
             let picker = app.buttons["map-period-picker"]
+            let mapSurface = app.descendants(matching: .any).matching(identifier: offline ? "on-device-map" : "apple-map").firstMatch
+            XCTAssertTrue(mapSurface.waitForExistence(timeout: 10))
+            XCTAssertEqual(mapSurface.frame.minX, app.frame.minX, accuracy: 1)
+            XCTAssertEqual(mapSurface.frame.maxX, app.frame.maxX, accuracy: 1)
+            // MapKit reports its unobscured viewport to accessibility, not its
+            // rendered bounds. Screenshots below verify its edge-to-edge drawing.
+            if offline {
+                XCTAssertEqual(mapSurface.frame.minY, app.frame.minY, accuracy: 1)
+                XCTAssertEqual(mapSurface.frame.maxY, app.frame.maxY, accuracy: 1)
+            }
             let names = ["Fixture Kos West", "Fixture Kos East"]
             func checkVisible(_ expected: [String]) {
                 for name in expected {
@@ -1196,6 +1240,11 @@ import XCTest
         XCTAssertTrue(app.staticTexts["Earlier location"].exists)
         XCTAssertTrue(app.staticTexts["Home"].exists)
         XCTAssertFalse(app.maps.firstMatch.exists)
+        app.buttons["assign-place"].tap()
+        XCTAssertTrue(app.datePickers["visit-arrival"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.datePickers["visit-departure"].exists)
+        XCTAssertFalse(app.staticTexts["Using this visit’s location"].exists, "A gap endpoint is not the missing stop's location")
+        app.buttons["Cancel"].tap()
         app.buttons["Done"].tap()
         app.buttons["tab-map"].tap(); enableAppleMaps(in: app)
         XCTAssertTrue(app.maps.firstMatch.waitForExistence(timeout: 10))
@@ -1629,6 +1678,7 @@ import XCTest
         XCTAssertTrue(app.buttons["Car"].exists)
         XCTAssertTrue(app.buttons["Public transport"].exists)
         XCTAssertTrue(app.buttons["Plane"].exists)
+        XCTAssertTrue(app.buttons["transport-scooter"].exists)
         XCTAssertFalse(app.buttons["Drove"].exists)
         XCTAssertFalse(app.buttons["Took the train"].exists)
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Suggested")).firstMatch.exists)

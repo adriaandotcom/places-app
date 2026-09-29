@@ -75,7 +75,7 @@ struct TimelineDayStrip: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var position = ScrollPosition(x: 0)
-    @State private var scrollOffset: CGFloat = 0
+    @State private var scrollGeometry: ScrollGeometry?
     let progress: CGFloat
     private let calendar = Calendar.current
     private var cellHeight: CGFloat { typeSize.isAccessibilitySize ? 104 : 72 }
@@ -94,7 +94,7 @@ struct TimelineDayStrip: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let width = max(typeSize.isAccessibilitySize ? 72 : 48, (geometry.size.width - 6 * spacing) / 7)
+            let width = max(typeSize.isAccessibilitySize ? 72 : 48, (geometry.size.width - 2 * Layout.gutter - 6 * spacing) / 7)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: spacing) {
                     ForEach(days, id: \.self) { day in
@@ -127,7 +127,8 @@ struct TimelineDayStrip: View {
                     }
                 }.scrollTargetLayout()
             }.scrollPosition($position)
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, offset in scrollOffset = offset }
+                .contentMargins(.horizontal, Layout.gutter, for: .scrollContent)
+                .onScrollGeometryChange(for: ScrollGeometry.self) { $0 } action: { _, value in scrollGeometry = value }
                 .accessibilityIdentifier("timeline-days")
                 .accessibilityLabel("Timeline date")
                 .accessibilityValue(model.selectedDay.formatted(date: .complete, time: .omitted))
@@ -144,7 +145,8 @@ struct TimelineDayStrip: View {
         }.frame(height: cellHeight)
     }
     private func revealSelection(width: CGFloat, viewportWidth: CGFloat, progress: CGFloat, settled: Bool = false) {
-        guard let index = days.firstIndex(of: calendar.startOfDay(for: model.selectedDay)) else { return }
+        guard let scrollGeometry, let index = days.firstIndex(of: calendar.startOfDay(for: model.selectedDay)) else { return }
+        let scrollOffset = scrollGeometry.contentOffset.x
         let left = (CGFloat(index) + progress) * (width + spacing)
         if settled {
             // Resolve the actual lazy-cell bounds at rest instead of relying on
@@ -153,10 +155,11 @@ struct TimelineDayStrip: View {
             else if left + width >= scrollOffset + viewportWidth - spacing { position.scrollTo(id: days[index], anchor: .trailing) }
             return
         }
-        let maximum = max(0, CGFloat(days.count) * (width + spacing) - spacing - viewportWidth)
+        let minimum = -scrollGeometry.contentInsets.leading
+        let maximum = max(minimum, scrollGeometry.contentSize.width - viewportWidth + scrollGeometry.contentInsets.trailing)
         // Follow the moving highlight only at an edge. Ordinary horizontal browsing
         // keeps its native momentum and visible dates stay still during a day swipe.
-        let target = min(maximum, max(0, min(left - spacing, max(scrollOffset, left + width + spacing - viewportWidth))))
+        let target = min(maximum, max(minimum, min(left - spacing, max(scrollOffset, left + width + spacing - viewportWidth))))
         if abs(target - scrollOffset) > 0.5 { position.scrollTo(x: target) }
     }
     private func dayLabel(_ day: Date, count: Int) -> some View {
