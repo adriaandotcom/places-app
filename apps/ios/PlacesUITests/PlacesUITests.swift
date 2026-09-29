@@ -1,6 +1,35 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testExistingPlaceAppearanceSearchSelectionPersists() {
+        let app = launch(fixture: true)
+        app.buttons["tab-places"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Home")).firstMatch.tap()
+        app.buttons["edit-place-details"].tap()
+        reveal(app.buttons["choose-place-icon"], in: app); app.buttons["choose-place-icon"].tap()
+        let search = app.textFields["place-icon-search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Park")
+        let park = app.buttons["icon-tree.fill"]
+        XCTAssertTrue(park.waitForExistence(timeout: 5)); XCTAssertTrue(park.isHittable)
+        // Tap the pictogram itself, not just the text or the accessibility activation point.
+        park.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        XCTAssertTrue(park.isSelected)
+        XCTAssertEqual(search.value as? String, "Park", "Selecting must not exit search and rebuild the unfiltered picker")
+        XCTAssertTrue(app.buttons["save-place-appearance"].isHittable)
+        let selected = XCTAttachment(screenshot: app.screenshot()); selected.name = "Park selected from icon search"; selected.lifetime = .keepAlways; add(selected)
+        app.buttons["save-place-appearance"].tap()
+        XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Park"))
+        app.buttons["save-place"].tap()
+        XCTAssertTrue(app.buttons["edit-place-details"].waitForExistence(timeout: 8)); app.buttons["edit-place-details"].tap()
+        XCTAssertTrue(app.buttons["choose-place-icon"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Park"), "The appearance must survive saving and reopening an existing place")
+        app.buttons["choose-place-icon"].tap()
+        app.textFields["place-icon-search"].tap(); app.textFields["place-icon-search"].typeText("work")
+        app.buttons["icon-briefcase.fill"].tap()
+        app.navigationBars["Appearance"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Park"), "Cancelling must retain the saved appearance")
+    }
+
     func testPlaceMergeKeepsCurrentEditsAndSharedDetails() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10))
@@ -1367,7 +1396,7 @@ import XCTest
         app.buttons["dismiss-keyboard"].tap()
         XCTAssertTrue(app.buttons["choose-place-icon"].label.contains("Café"))
         app.buttons["choose-place-icon"].tap()
-        let search = app.searchFields.firstMatch
+        let search = app.textFields["place-icon-search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         let iconShot = XCTAttachment(screenshot: app.screenshot()); iconShot.name = "Native icon catalog"; iconShot.lifetime = .keepAlways; add(iconShot)
         search.tap(); search.typeText("work")

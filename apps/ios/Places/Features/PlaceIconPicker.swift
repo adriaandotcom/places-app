@@ -10,10 +10,11 @@ struct PlaceIconPicker: View {
     var photoIDs: [String] = []
     let apply: (String, Int, String?, Data?) -> Void
     @State private var query = ""
-    @State private var searching = false
+    @FocusState private var searchFocused: Bool
     @State private var revealed: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
+        ScrollViewReader { scroll in
         ScrollView {
             VStack(spacing: Layout.spacing) {
                 CroppedPhotoField(photo: $photoJPEG, photoIDs: photoIDs, identifier: "choose-place-photo") {
@@ -21,10 +22,24 @@ struct PlaceIconPicker: View {
                 }
                 PlaceColorPicker(colorIndex: $colorIndex, customColorHex: $customColorHex)
             }.padding(Layout.gutter)
+            HStack(spacing: Layout.compact) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Palette.muted).accessibilityHidden(true)
+                TextField("Work, coffee, gym…", text: $query)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
+                    .focused($searchFocused).submitLabel(.search).onSubmit { searchFocused = false }
+                    .accessibilityLabel("Search icons").accessibilityIdentifier("place-icon-search")
+                if !query.isEmpty {
+                    Button("Clear icon search", systemImage: "xmark.circle.fill") { query = "" }
+                        .labelStyle(.iconOnly).foregroundStyle(Palette.muted)
+                        .frame(width: Layout.touchTarget, height: Layout.touchTarget)
+                }
+            }.frame(minHeight: Layout.touchTarget).padding(.horizontal, Layout.spacing)
+                .background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.spacing))
+                .padding(.horizontal, Layout.gutter).id("icon-search")
             LazyVGrid(columns: [GridItem(.adaptive(minimum: Layout.iconTile), spacing: Layout.compact)], spacing: Layout.spacing) {
                 ForEach(PlaceIconCatalog.search(query)) { icon in
                     Button {
-                        symbol = icon.symbol; photoJPEG = nil; searching = false
+                        symbol = icon.symbol; photoJPEG = nil; searchFocused = false
                     } label: {
                         VStack(spacing: Layout.compact) {
                             ZStack {
@@ -36,15 +51,16 @@ struct PlaceIconPicker: View {
                             Text(icon.title).font(.caption).multilineTextAlignment(.center)
                         }.frame(maxWidth: .infinity, minHeight: Layout.iconTile)
                             .padding(Layout.compact)
+                            .contentShape(Rectangle())
                             .foregroundStyle(Palette.ink)
-                            .background(PlaceIconCatalog.canonicalSymbol(symbol) == icon.symbol ? Palette.soft(colorIndex, hex: customColorHex) : Palette.paper,
+                            .background(photoJPEG == nil && PlaceIconCatalog.canonicalSymbol(symbol) == icon.symbol ? Palette.soft(colorIndex, hex: customColorHex) : Palette.paper,
                                         in: RoundedRectangle(cornerRadius: Layout.spacing))
                             .overlay(alignment: .topTrailing) {
-                                if PlaceIconCatalog.canonicalSymbol(symbol) == icon.symbol { Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.green) }
+                                if photoJPEG == nil && PlaceIconCatalog.canonicalSymbol(symbol) == icon.symbol { Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.green) }
                             }
                     }.buttonStyle(.plain).accessibilityLabel(icon.title)
                         .accessibilityIdentifier("icon-\(icon.symbol)")
-                        .accessibilityAddTraits(PlaceIconCatalog.canonicalSymbol(symbol) == icon.symbol ? .isSelected : [])
+                        .accessibilityAddTraits(photoJPEG == nil && PlaceIconCatalog.canonicalSymbol(symbol) == icon.symbol ? .isSelected : [])
                         .onScrollVisibilityChange(threshold: 0.3) { visible in
                             guard visible, !revealed.contains(icon.symbol) else { return }
                             if reduceMotion { revealed.insert(icon.symbol) }
@@ -56,7 +72,7 @@ struct PlaceIconPicker: View {
                 Text("No icons found. Try a place or activity.").foregroundStyle(Palette.muted).padding(Layout.gutter)
             }
         }.background(Palette.background).navigationTitle("Appearance").navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always), prompt: "Work, coffee, gym…")
+            .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -64,9 +80,14 @@ struct PlaceIconPicker: View {
                         .accessibilityIdentifier("save-place-appearance")
                 }
             }
+            .onChange(of: searchFocused) { _, focused in
+                if focused { scroll.scrollTo("icon-search", anchor: .top) }
+            }
             .onChange(of: query) { _, value in
                 // Typing is immediate; drawing is only a once-per-visit browse effect.
                 revealed.formUnion(PlaceIconCatalog.search(value).map(\.symbol))
+                if searchFocused { scroll.scrollTo("icon-search", anchor: .top) }
             }
+        }
     }
 }
