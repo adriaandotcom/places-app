@@ -24,6 +24,7 @@ struct MainView: View {
             MainNavigationIsland()
         }
         .background(Palette.background)
+        .modifier(DeleteUndoPresentation(undo: model.deleteUndo))
         .environment(\.hasMainNavigation, true)
         .sheet(item: Binding(get: { model.rewindRequest }, set: { model.rewindRequest = $0 })) { request in
             NavigationStack {
@@ -77,7 +78,7 @@ struct SettingsToolbar: ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Button("Settings", systemImage: "slider.horizontal.3") { open = true }
                 .labelStyle(.iconOnly).foregroundStyle(Palette.ink).accessibilityIdentifier("open-settings")
-                .sheet(isPresented: $open) { NavigationStack { SettingsView() } }
+                .sheet(isPresented: $open) { NavigationStack { SettingsView() }.environment(\.hasMainNavigation, false) }
         }
     }
 }
@@ -130,7 +131,7 @@ struct TimelineView: View {
                 addPastVisits: { day in pastVisits = PastVisitsRequest(day: day) })
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
+            .sheet(isPresented: $settings) { NavigationStack { SettingsView() }.environment(\.hasMainNavigation, false) }
             .sheet(item: $selected) { item in NavigationStack { TimelineDetail(item: item) }.environment(\.hasMainNavigation, false) }
             .sheet(isPresented: $addPlace) { NavigationStack { PlaceEditor() } }
             .sheet(item: $pastVisits) { request in AppleSuggestionsFlow(day: request.day) }

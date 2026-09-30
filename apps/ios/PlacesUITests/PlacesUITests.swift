@@ -1,6 +1,65 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testPhotoSuggestionDeletionUndoAndDirectMemoryCreation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]
+        app.launch()
+        let create = app.buttons["suggestion-create-memory-suggestion-photo-0"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["more-photo-suggestions"].exists)
+        XCTAssertFalse(app.staticTexts["From your photos"].exists)
+        let card = app.descendants(matching: .any).matching(identifier: "photo-suggestion-suggestion-photo-0").firstMatch
+        card.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.18)).press(forDuration: 0.05,
+            thenDragTo: card.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.18)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        app.buttons["Delete"].tap()
+        XCTAssertTrue(app.buttons["undo-delete"].waitForExistence(timeout: 4)); app.buttons["undo-delete"].tap()
+        XCTAssertTrue(create.waitForExistence(timeout: 4))
+        card.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.18)).press(forDuration: 0.05,
+            thenDragTo: card.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.18)), withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(app.buttons["undo-delete"].waitForExistence(timeout: 4)); app.buttons["undo-delete"].tap()
+        XCTAssertTrue(create.waitForExistence(timeout: 4))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Ranked photo suggestion and connected review link"; shot.lifetime = .keepAlways; add(shot)
+        create.tap()
+        XCTAssertTrue(app.navigationBars["Add a memory"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.navigationBars["Photo suggestion"].exists)
+        let photos = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "draft-photo-"))
+        reveal(photos.firstMatch, in: app)
+        XCTAssertEqual(photos.count, 3)
+        photos.firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["1 of 3"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        photos.firstMatch.press(forDuration: 1)
+        app.buttons["Delete photo"].tap()
+        app.buttons["Delete photo"].tap()
+        XCTAssertEqual(photos.count, 2)
+        app.buttons["undo-delete"].tap()
+        XCTAssertEqual(photos.count, 3)
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-memory-")).firstMatch.waitForExistence(timeout: 8))
+        let saved = XCTAttachment(screenshot: app.screenshot()); saved.name = "Memory indented beneath its visit"; saved.lifetime = .keepAlways; add(saved)
+    }
+
+    func testPhotoSuggestionReviewKeepsPlaceOptionsCollapsedAndLastActionVisible() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]
+        app.launch()
+        let review = app.buttons["suggestion-review-suggestion-photo-0"]
+        XCTAssertTrue(review.waitForExistence(timeout: 10)); review.tap()
+        XCTAssertTrue(app.navigationBars["Photo suggestion"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Choose a saved place"].exists)
+        let place = app.buttons["selected-place-options"]
+        reveal(place, in: app); place.tap()
+        XCTAssertTrue(app.buttons["Choose a saved place"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Choose a different nearby place"].exists)
+        let remove = app.buttons["Delete suggestion"]
+        reveal(remove, in: app)
+        XCTAssertTrue(remove.isHittable)
+        XCTAssertLessThanOrEqual(remove.frame.maxY, app.buttons["tab-timeline"].frame.minY)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Photo review place disclosure and bottom clearance"; shot.lifetime = .keepAlways; add(shot)
+    }
+
     func testPhotoLibraryOptInUsesSystemPermissionAndCanTurnOff() {
         let app = launch(fixture: true)
         app.buttons["open-settings"].tap()

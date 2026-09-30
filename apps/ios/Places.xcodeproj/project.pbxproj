@@ -55,6 +55,7 @@
 		796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 763BB8E666C49E7CFF673E53 /* AppIcon.icon */; };
 		7AA6D9C4DC1869C7A358DC4E /* WatchCompanionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48647B64E63104ACE3991E42 /* WatchCompanionModel.swift */; };
 		7AA7FB50A703F3FFA8973FAD /* SharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45130BF15D65319CD26697F /* SharedComponents.swift */; };
+		7B0170A069E140F024D421C4 /* DeleteControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB7A5D87F02787A86AD38B0 /* DeleteControls.swift */; };
 		7B2D84DCA1569B16E4B18C3A /* WatchLocationSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1B8DCA0C7287DCD5F87347 /* WatchLocationSnapshot.swift */; };
 		7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */; };
 		7D8274BFBC6054B26A47EEBB /* ProtectedStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B116AB54E14230415ABC727 /* ProtectedStorage.swift */; };
@@ -222,6 +223,7 @@
 		85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceIconPicker.swift; sourceTree = "<group>"; };
 		8683E4F2F033E292992D7CAC /* AddPastVisits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPastVisits.swift; sourceTree = "<group>"; };
 		87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindNotificationTests.swift; sourceTree = "<group>"; };
+		8BB7A5D87F02787A86AD38B0 /* DeleteControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteControls.swift; sourceTree = "<group>"; };
 		8DCB060063689EC2C469CE9E /* PlacesCompanion */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PlacesCompanion; path = ../../packages/PlacesCompanion; sourceTree = SOURCE_ROOT; };
 		8F06208AFD18F34A46C0FC60 /* PlacesMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlacesMac.entitlements; sourceTree = "<group>"; };
 		943131F4A6EC985998F4F312 /* MapParkCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapParkCatalog.swift; sourceTree = "<group>"; };
@@ -510,6 +512,7 @@
 		C1EC964E7974ADC779C6A41C /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				8BB7A5D87F02787A86AD38B0 /* DeleteControls.swift */,
 				F135F35535FF26FED0627E38 /* DesignSystem.swift */,
 				E45130BF15D65319CD26697F /* SharedComponents.swift */,
 			);
@@ -883,6 +886,7 @@
 				8812FE1C51F71A4A1F71B860 /* CompanionSettings.swift in Sources */,
 				EBA6498DE6D9CA6175EDF7F4 /* CroppedPhotoEditor.swift in Sources */,
 				623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */,
+				7B0170A069E140F024D421C4 /* DeleteControls.swift in Sources */,
 				A94B210A5F4EC76421EDF598 /* DemoFixtures.swift in Sources */,
 				033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */,
 				8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */,

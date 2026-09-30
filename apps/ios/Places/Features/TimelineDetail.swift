@@ -126,6 +126,7 @@ struct TimelineDetail: View {
                 }
             }.padding(Layout.gutter)
         }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink).navigationBarTitleDisplayMode(.inline)
+            .modifier(DeleteUndoPresentation(undo: model.deleteUndo))
             .task(id: item) {
                 adjacent = (try? await model.store?.adjacentPlaces(for: item)) ?? []
                 transportSuggestions = (try? await model.store?.transportSuggestions(for: item)) ?? .none

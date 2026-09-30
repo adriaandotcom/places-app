@@ -28,7 +28,7 @@ struct PhotoEvidenceSettings: View {
                 }
             }
             Section("What happens when you enable it") {
-                Text("iOS grants access to your whole library. Places limits its checks to photos from the last 30 days, reading their dates, saved locations and camera models on this iPhone.")
+                Text("iOS grants access to your whole library. Places limits its checks to photos from the last 30 days, reading their dates, saved locations and camera models on this iPhone. It counts faces on-device to suggest people-filled moments first; it does not identify anyone.")
                 Text("Only photos matching this iPhone model are used. Another iPhone of the same model can also match; this cannot prove which device took a photo.")
                 Text("Checks run when you open Places and when iOS allows background refresh. Automatic checks only read originals already on this iPhone; they don’t download photos from iCloud.")
             }.font(.subheadline)
@@ -84,54 +84,68 @@ struct PhotoLocationTip: View {
 
 struct PhotoSuggestionsOverview: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.hasMainNavigation) private var hasMainNavigation
     var day: Date?
+    var item: TimelineItem?
+    var placeID: String?
+    var excludingID: String?
     private var groups: [PhotoVisitSuggestion] {
-        model.photoLibrary.suggestions.filter { group in day.map { Calendar.current.isDate($0, inSameDayAs: group.start) } ?? true }
+        photoSuggestions(model, day: day, item: item, placeID: placeID).filter { $0.id != excludingID }
     }
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Layout.spacing) {
-                Text("Remember a missing place, or turn a few photos into a memory. Locations come from photos matching your iPhone model.")
-                    .font(.subheadline).foregroundStyle(Palette.muted)
                 if !model.photoLibrary.canRead {
                     NavigationLink("Set up photo locations") { PhotoEvidenceSettings() }
                 } else if groups.isEmpty {
                     EmptyState(symbol: "photo.on.rectangle.angled", title: "No suggestions yet",
-                        message: "Photos need a date, a location and a matching camera model. Reviewed photos won’t appear again.")
+                        message: "Reviewed photos won’t appear again. New suggestions appear as you take more photos.")
                 }
                 ForEach(groups) { group in
-                    NavigationLink { PhotoSuggestionReview(group: group) } label: { PhotoSuggestionCard(group: group) }.buttonStyle(.plain)
+                    PhotoSuggestionCard(group: group).modifier(CardSurface())
+                        .modifier(SwipeToDelete { Task { await model.photoLibrary.deleteSuggestion(group.photos, undo: model.deleteUndo) } })
                 }
             }.padding(Layout.gutter)
         }.background(Palette.background).modifier(MainNavigationClearance()).navigationTitle("Photo suggestions")
+            .modifier(DeleteUndoPresentation(undo: model.deleteUndo, enabled: !hasMainNavigation))
             .refreshable { await model.photoLibrary.sync() }
             .task { model.photoLibrary.updateAuthorization(); model.photoLibrary.requestScan() }
     }
 }
 
-/// Shared by timeline gaps, known-place details and the import overview.
+@MainActor private func photoSuggestions(_ model: AppModel, day: Date?, item: TimelineItem?, placeID: String?) -> [PhotoVisitSuggestion] {
+    model.photoLibrary.suggestions.filter { group in
+        if let item { return group.relates(to: item) }
+        if let placeID { return group.place(in: model.places)?.id == placeID }
+        return day.map { Calendar.current.isDate($0, inSameDayAs: group.start) } ?? true
+    }
+}
+
+/// One ranked suggestion, with the remaining suggestions attached to the same card.
 struct PhotoSuggestionSection: View {
     @Environment(AppModel.self) private var model
     var item: TimelineItem?
     var placeID: String?
     var day: Date?
-    private var groups: [PhotoVisitSuggestion] {
-        model.photoLibrary.suggestions.filter { group in
-            if let item { return group.relates(to: item) }
-            if let placeID { return group.place(in: model.places)?.id == placeID }
-            return day.map { Calendar.current.isDate($0, inSameDayAs: group.start) } ?? true
-        }
-    }
+    private var groups: [PhotoVisitSuggestion] { photoSuggestions(model, day: day, item: item, placeID: placeID) }
     var body: some View {
-        if !groups.isEmpty {
-            VStack(alignment: .leading, spacing: Layout.spacing) {
-                SectionHeading(title: "From your photos")
-                ForEach(Array(groups.prefix(3))) { group in
-                    NavigationLink { PhotoSuggestionReview(group: group) } label: { PhotoSuggestionCard(group: group) }.buttonStyle(.plain)
+        if let group = groups.first {
+            VStack(spacing: 0) {
+                PhotoSuggestionCard(group: group).padding(Layout.spacing)
+                if groups.count > 1 {
+                    Divider().padding(.horizontal, Layout.spacing)
+                    NavigationLink {
+                        PhotoSuggestionsOverview(day: day, item: item, placeID: placeID, excludingID: group.id)
+                    } label: {
+                        HStack {
+                            Text("Review \(groups.count - 1) more \(groups.count == 2 ? "suggestion" : "suggestions")")
+                            Spacer(); Image(systemName: "chevron.right").font(.caption)
+                        }.font(.subheadline).frame(minHeight: Layout.touchTarget).padding(.horizontal, Layout.spacing)
+                    }.foregroundStyle(Palette.green).accessibilityIdentifier("more-photo-suggestions")
                 }
-                NavigationLink("Review all photo suggestions") { PhotoSuggestionsOverview(day: day) }
-                    .frame(minHeight: Layout.touchTarget)
-            }.padding(.top, Layout.spacing)
+            }.modifier(CardSurface(padding: 0))
+                .modifier(SwipeToDelete { Task { await model.photoLibrary.deleteSuggestion(group.photos, undo: model.deleteUndo) } })
+                .padding(.top, Layout.spacing)
         }
     }
 }
@@ -139,21 +153,30 @@ struct PhotoSuggestionSection: View {
 private struct PhotoSuggestionCard: View {
     @Environment(AppModel.self) private var model
     let group: PhotoVisitSuggestion
+    @State private var creatingMemory = false
+    @State private var preview: PhotoReference?
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.compact) {
-            HStack {
-                VStack(alignment: .leading, spacing: Layout.compact) {
-                    Text(group.place(in: model.places)?.name ?? "Remember this place?").font(BrandFont.title)
-                    Text(group.start.formatted(date: .abbreviated, time: .shortened)).font(.footnote).foregroundStyle(Palette.muted)
-                }
-                Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+            NavigationLink { PhotoSuggestionReview(group: group) } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: Layout.compact) {
+                        Text(group.place(in: model.places)?.name ?? "Remember this place?").font(BrandFont.title)
+                        Text(group.start.formatted(date: .abbreviated, time: .shortened)).font(.footnote).foregroundStyle(Palette.muted)
+                    }
+                    Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                }.frame(minHeight: Layout.touchTarget).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier("suggestion-review-\(group.id)")
+            PhotoGrid(items: Array(group.previewPhotos.prefix(3)), open: { preview = PhotoReference(id: $0.id) }) { photo in
+                LibraryPhotoThumbnail(photo: photo)
             }
-            HStack(spacing: Layout.compact) {
-                ForEach(Array(group.photos.prefix(3))) { photo in LibraryPhotoThumbnail(photo: photo).frame(height: 84).clipShape(RoundedRectangle(cornerRadius: Layout.compact)) }
+            Button("Create memory with these photos") { creatingMemory = true }
+                .font(.subheadline).foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget)
+                .accessibilityIdentifier("suggestion-create-memory-\(group.id)")
+        }.accessibilityElement(children: .contain).accessibilityIdentifier("photo-suggestion-\(group.id)")
+            .sheet(isPresented: $creatingMemory) {
+                PhotoMemoryComposer(group: group).environment(\.hasMainNavigation, false)
             }
-            Text(group.place(in: model.places) == nil ? "Name the place and create a memory" : "Create a memory with these photos")
-                .font(.subheadline).foregroundStyle(Palette.green)
-        }.modifier(CardSurface()).accessibilityIdentifier("photo-suggestion-\(group.id)")
+            .fullScreenCover(item: $preview) { photo in LibraryPhotoBrowser(photos: group.photos, initialID: photo.id) }
     }
 }
 
@@ -173,113 +196,137 @@ struct LibraryPhotoThumbnail: View {
     }
 }
 
+private struct LibraryPhotoBrowser: View {
+    @Environment(AppModel.self) private var model
+    let photos: [PhotoLocationEvidence]
+    let initialID: String
+    var body: some View {
+        MemoryPhotoBrowser(photoIDs: photos.map(\.id), initialID: initialID,
+            details: Dictionary(uniqueKeysWithValues: photos.map { ($0.id, MemoryPhotoDetails(createdAt: $0.capturedAt, coordinate: $0.coordinate)) }),
+            load: { id in
+                guard let photo = photos.first(where: { $0.id == id }) else { return nil }
+                return try await model.photoLibrary.importPhoto(photo).jpeg
+            })
+    }
+}
+
+/// Directly opens the memory editor, including place selection for unknown locations.
+private struct PhotoMemoryComposer: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let group: PhotoVisitSuggestion
+    var selectedPlace: Place?
+    @State private var draft: PlaceMemory?
+    @State private var files: [MemoryPhotoFile] = []
+    @State private var photoDraft = MemoryPhotoDraft()
+    @State private var error: String?
+    @State private var preparationID = UUID()
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let draft {
+                    MemoryEditor(memory: draft, importing: files, suggestedCoordinate: group.coordinate, onSaved: {
+                        Task { await model.photoLibrary.dismiss(group.photos); dismiss() }
+                    })
+                } else {
+                    VStack(spacing: Layout.spacing) {
+                        if let error { Text(error); Button("Try again") { preparationID = UUID() } }
+                        else { ProgressView("Preparing photos…") }
+                    }.padding(Layout.gutter).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .navigationTitle("Add a memory").navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+                }
+            }.background(Palette.background)
+        }.task(id: preparationID) { if draft == nil { await prepare() } }
+    }
+    private func prepare() async {
+        error = nil; photoDraft.discard(); files = []
+        let epoch = model.memoryEpoch
+        do {
+            for photo in group.photos {
+                let imported = try await model.photoLibrary.importPhoto(photo)
+                try Task.checkCancellation()
+                guard epoch == model.memoryEpoch else { throw CancellationError() }
+                files.append(try photoDraft.append(imported))
+            }
+            var memory = PlaceMemory(date: group.start, placeID: (selectedPlace ?? group.place(in: model.places))?.id, photoIDs: files.map(\.id))
+            memory.photoDetails = Dictionary(uniqueKeysWithValues: files.compactMap { file in file.details.map { (file.id, $0) } })
+            draft = memory
+        } catch is CancellationError { photoDraft.discard() }
+        catch { self.error = "Couldn’t load these photos. Check Photos access and try again." }
+    }
+}
+
 private struct PhotoSuggestionReview: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let group: PhotoVisitSuggestion
     @State private var selected: Set<String> = []
     @State private var initialized = false
-    @State private var importTask: Task<Void, Never>?
     @State private var place: Place?
     @State private var addPlace = false
     @State private var choosePlace = false
-    @State private var importing = false
-    @State private var error: String?
-    @State private var draftFiles = MemoryPhotoDraft()
-    @State private var memory: PlaceMemory?
-    @State private var files: [MemoryPhotoFile] = []
+    @State private var creatingMemory = false
+    @State private var preview: PhotoReference?
     @State private var visit: AppleSuggestionSelection?
+    @State private var undo = DeleteUndo()
+    private var photos: [PhotoLocationEvidence] { group.photos.filter { selected.contains($0.id) } }
     var body: some View {
-        Form {
-            if !model.photoLibrary.canRead {
-                Section { Text("Automatic photo access is off. Your saved memories and selective photo picker still work.") }
-            } else {
-                Section {
-                    Text(group.start.formatted(date: .complete, time: .shortened)).font(BrandFont.title)
-                    Text("Photo times are points of evidence, not confirmed arrival or departure times.").font(.footnote).foregroundStyle(Palette.muted)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Layout.spacing) {
+                if !model.photoLibrary.canRead {
+                    Text("Automatic photo access is off. Your saved memories and selective photo picker still work.")
+                } else {
+                    VStack(alignment: .leading, spacing: Layout.compact) {
+                        PhotoGrid(items: photos, open: { preview = PhotoReference(id: $0.id) }, remove: { photo in
+                            selected.remove(photo.id)
+                            undo.register("Photo removed") { selected.insert(photo.id) }
+                        }) { LibraryPhotoThumbnail(photo: $0) }
+                        Button("Create memory", systemImage: "photo.badge.plus") { creatingMemory = true }
+                            .foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget).disabled(photos.isEmpty)
+                            .accessibilityIdentifier("photo-create-memory")
+                    }.modifier(CardSurface())
                     if model.mapsAvailable {
                         PrivacyMapView(customPresentation: MapPresentation(pins: [MapPin(id: group.id, name: place?.name ?? "Photo location", coordinate: group.coordinate, symbol: "photo", colorIndex: 4)]))
                             .frame(height: Layout.mapHeight).clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
                     }
-                }
-                Section("Place") {
-                    if let place { SavedPlaceRow(place: place) }
-                    Button("Choose a saved place") { choosePlace = true }
-                    Button(place == nil ? "Name this place" : "Choose a different nearby place", systemImage: "mappin.and.ellipse") { addPlace = true }
-                }
-                Section("Choose photos for your memory") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: Layout.compact) {
-                        ForEach(group.photos) { photo in
-                            Button {
-                                if selected.contains(photo.id) { selected.remove(photo.id) } else { selected.insert(photo.id) }
-                            } label: {
-                                LibraryPhotoThumbnail(photo: photo).frame(height: 96)
-                                    .clipShape(RoundedRectangle(cornerRadius: Layout.compact))
-                                    .overlay(alignment: .bottomTrailing) {
-                                        Image(systemName: selected.contains(photo.id) ? "checkmark.circle.fill" : "circle")
-                                            .foregroundStyle(selected.contains(photo.id) ? Palette.green : .white)
-                                            .background(.white, in: Circle()).padding(Layout.compact)
-                                    }
-                            }.buttonStyle(.plain).accessibilityAddTraits(selected.contains(photo.id) ? .isSelected : [])
-                        }
+                    PlaceSelectionField(place: place, chooseSaved: { choosePlace = true }, chooseDifferent: { addPlace = true })
+                        .modifier(CardSurface())
+                    VStack(alignment: .leading, spacing: Layout.compact) {
+                        Text(group.start.formatted(date: .complete, time: .shortened)).font(.subheadline).foregroundStyle(Palette.muted)
+                        Button("Add to timeline", systemImage: "clock.badge.plus") { addVisit() }
+                            .buttonStyle(PrimaryButton()).disabled(place == nil).accessibilityIdentifier("photo-add-visit")
                     }
+                    Button("Delete suggestion", role: .destructive) {
+                        Task { await model.photoLibrary.deleteSuggestion(group.photos, undo: model.deleteUndo); dismiss() }
+                    }.foregroundStyle(.red).frame(maxWidth: .infinity, minHeight: Layout.touchTarget)
                 }
-                Section {
-                    Button("Create memory", systemImage: "photo.badge.plus") { importTask = Task { await prepare(addVisit: false) } }
-                        .disabled(place == nil || selected.isEmpty || importing).accessibilityIdentifier("photo-create-memory")
-                    Button("Review a missing visit", systemImage: "clock.badge.plus") { importTask = Task { await prepare(addVisit: true) } }
-                        .disabled(place == nil || importing).accessibilityIdentifier("photo-add-visit")
-                    if place == nil { Text("Choose or name the place first.").font(.footnote).foregroundStyle(Palette.muted) }
-                    if importing { ProgressView("Preparing selected photos…") }
-                } footer: { Text("Creating a memory copies only your selected photos. It may download those photos from your iCloud library. Adding a visit separately lets you review times and overlaps.") }
-                Section { Button("Dismiss this suggestion") { Task { await model.photoLibrary.dismiss(group.photos); dismiss() } } }
-            }
-            if let error { Section { Text(error).foregroundStyle(Palette.warning) } }
-        }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("From your photos")
-            .navigationBarTitleDisplayMode(.inline).interactiveDismissDisabled(importing)
+            }.padding(Layout.gutter)
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink)
+            .navigationTitle("Photo suggestion").navigationBarTitleDisplayMode(.inline)
+            .modifier(DeleteUndoPresentation(undo: undo))
             .task { if !initialized { initialized = true; selected = Set(group.photos.map(\.id)); place = group.place(in: model.places) } }
-            .onDisappear { importTask?.cancel() }
             .sheet(isPresented: $choosePlace) {
-                NavigationStack { SavedPlacePicker(anchor: group.coordinate) { place = $0; choosePlace = false } }
+                NavigationStack { SavedPlacePicker(anchor: group.coordinate) { place = $0; choosePlace = false } }.environment(\.hasMainNavigation, false)
             }
             .sheet(isPresented: $addPlace) {
-                NavigationStack { PlaceEditor(coordinate: group.coordinate, onSavedPlace: { saved in place = saved; addPlace = false }) }
+                NavigationStack { PlaceEditor(coordinate: group.coordinate, onSavedPlace: { saved in place = saved; addPlace = false }) }.environment(\.hasMainNavigation, false)
             }
-            .sheet(item: $memory, onDismiss: { draftFiles.discard(); files = [] }) { memory in
-                NavigationStack { MemoryEditor(memory: memory, importing: files, onSaved: {
-                    self.memory = nil
-                    Task { await model.photoLibrary.dismiss(group.photos.filter { selected.contains($0.id) }); dismiss() }
-                }) }
+            .sheet(isPresented: $creatingMemory) {
+                PhotoMemoryComposer(group: PhotoVisitSuggestion(photos: photos), selectedPlace: place).environment(\.hasMainNavigation, false)
             }
-            .sheet(item: $visit, onDismiss: { draftFiles.discard(); files = [] }) { selection in
+            .fullScreenCover(item: $preview) { photo in LibraryPhotoBrowser(photos: photos, initialID: photo.id) }
+            .sheet(item: $visit) { selection in
                 NavigationStack { PastVisitReview(selection: selection, day: group.start, onSaved: { _ in
-                    visit = nil; Task { await model.photoLibrary.dismiss(group.photos); dismiss() }
-                }, chooseNext: { visit = nil }) }
+                    visit = nil; dismiss()
+                }, chooseNext: { visit = nil }) }.environment(\.hasMainNavigation, false)
             }
     }
-    private func prepare(addVisit: Bool) async {
-        guard let place, model.photoLibrary.canRead else { return }
-        importing = true; error = nil; draftFiles.discard(); files = []
-        let epoch = model.memoryEpoch
-        do {
-            for photo in group.photos where selected.contains(photo.id) {
-                let imported = try await model.photoLibrary.importPhoto(photo)
-                guard epoch == model.memoryEpoch else { throw CancellationError() }
-                files.append(try draftFiles.append(imported))
-            }
-            try Task.checkCancellation()
-            guard model.photoLibrary.canRead else { throw CancellationError() }
-            if addVisit {
-                visit = AppleSuggestionSelection(id: "photo-" + group.id, title: "Photos at \(place.name)",
-                    date: group.end > group.start ? DateInterval(start: group.start, end: group.end) : nil,
-                    candidates: [PastVisitCandidate(id: "photo-" + group.id, name: place.name, coordinate: place.coordinate, date: group.start)],
-                    photos: files, photoDraft: draftFiles, sourceName: "Photo")
-            } else {
-                var draft = PlaceMemory(date: group.start, placeID: place.id, photoIDs: files.map(\.id))
-                draft.photoDetails = Dictionary(uniqueKeysWithValues: files.compactMap { file in file.details.map { (file.id, $0) } })
-                memory = draft
-            }
-        } catch { draftFiles.discard(); files = []; self.error = "Couldn’t load the selected photos. Check Photos access and try again." }
-        importing = false
+    private func addVisit() {
+        guard let place else { return }
+        visit = AppleSuggestionSelection(id: "photo-" + group.id, title: place.name,
+            date: group.end > group.start ? DateInterval(start: group.start, end: group.end) : nil,
+            candidates: [PastVisitCandidate(id: "photo-" + group.id, name: place.name, coordinate: place.coordinate, date: group.start)],
+            photos: [], photoDraft: MemoryPhotoDraft(), sourceName: "Photo")
     }
 }

@@ -37,12 +37,9 @@ struct MapsSettings: View {
                             } else { packLabel(pack, opensDetail: false) }
                             packState(pack)
                         }.padding(.vertical, Layout.compact).buttonStyle(.borderless)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                if let installed = downloads.installedPacks[pack.id] {
-                                    Button(role: .destructive) { deletingPack = installed } label: { Label("Delete", systemImage: "trash") }
-                                        .tint(.red)
-                                }
-                            }
+                            .modifier(SwipeToDelete(nativeRow: true, allowsFullSwipe: false, enabled: downloads.installedPacks[pack.id] != nil) {
+                                deletingPack = downloads.installedPacks[pack.id]
+                            })
                     }
                 } header: { Text("On-device maps") } footer: {
                     Text("Map downloads come from Bunny.net servers. We disabled their IP logging.")

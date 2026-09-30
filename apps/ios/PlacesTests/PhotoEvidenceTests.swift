@@ -64,6 +64,39 @@ import PlacesCore
         XCTAssertEqual(saved.memories.first?.id, memory.id, "Opting out must preserve confirmed memories")
     }
     #endif
+    func testDeletionUndoRestoresInReverseOrderAndKeepsFailedActions() async {
+        let undo = DeleteUndo()
+        var values: [Int] = []
+        undo.register("First") { values.append(1) }
+        undo.register("Second") { values.append(2) }
+        undo.hideToast()
+        XCTAssertTrue(undo.canUndo, "Shake can still undo after the toast disappears")
+        await undo.undo(); await undo.undo()
+        XCTAssertEqual(values, [2, 1]); XCTAssertFalse(undo.canUndo)
+        undo.register("Failure") { throw CancellationError() }
+        await undo.undo()
+        XCTAssertTrue(undo.canUndo); XCTAssertNotNil(undo.error)
+        undo.clear(); XCTAssertFalse(undo.canUndo)
+    }
+
+    func testShakeUndoUsesTheResponderAndOnlyHandlesShakeWhenEnabled() throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        let controller = UndoShakeReceiver.Controller()
+        var requests = 0
+        controller.enabled = true; controller.shake = { requests += 1 }
+        window.rootViewController = controller; window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKey() }
+        controller.claimWhenVisible()
+        XCTAssertTrue(controller.isFirstResponder)
+        controller.motionEnded(.motionShake, with: nil)
+        XCTAssertEqual(requests, 1)
+        controller.enabled = false
+        controller.motionEnded(.motionShake, with: nil)
+        XCTAssertEqual(requests, 1)
+    }
+
     func testOriginalCameraMetadataMatchesExactModel() throws {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).image { context in
             UIColor.systemGreen.setFill(); context.fill(CGRect(x: 0, y: 0, width: 20, height: 20))

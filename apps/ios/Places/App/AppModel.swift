@@ -10,6 +10,7 @@ import PlacesCompanion
 final class AppModel {
     static let shared = AppModel()
     let tracking = TrackingController()
+    let deleteUndo = DeleteUndo()
     private(set) var store: PlacesStore?
     private(set) var ready = false
     private(set) var waitingForUnlock = false
@@ -106,7 +107,14 @@ final class AppModel {
     var showExporter = false
     private var pendingWrite: Task<Void, Never>?
     let companions = PhoneCompanions()
-    let photoLibrary = PhotoLibraryEvidence()
+    let photoLibrary: PhotoLibraryEvidence = {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-testing") && ProcessInfo.processInfo.arguments.contains("--ui-photo-suggestions") {
+            return PhotoLibraryEvidence(currentModel: "Preview iPhone")
+        }
+        #endif
+        return PhotoLibraryEvidence()
+    }()
     private var retryObservations: [SensorObservation] = []
     private var generation = 0
     private var deleting = false
@@ -212,6 +220,13 @@ final class AppModel {
                     enrichRegions()
                     ready = true; starting = false
                     await photoLibrary.start(store: opened)
+                    #if DEBUG
+                    if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-photo-suggestions") {
+                        try await DemoFixtures.seedPhotoSuggestions(opened, library: photoLibrary)
+                        onboardingComplete = true
+                        await refresh()
+                    }
+                    #endif
                     if !uiTesting {
                         tracking.configure(places: places, enabled: trackingEnabled)
                         companions.start { [weak self] batch in
@@ -606,6 +621,7 @@ final class AppModel {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
         photoLibrary.reset()
+        deleteUndo.clear()
         rewindNotifications.update([])
         monthlyRewindReminders = false; weeklyReviewReminders = false; rewindRequest = nil
         mapPreference = UUID(); mapProvider = .off; trackingEnabled = false

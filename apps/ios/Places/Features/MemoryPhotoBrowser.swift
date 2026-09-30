@@ -74,7 +74,7 @@ struct MemoryPhotoBrowser: View {
     let photoIDs: [String]
     let details: [String: MemoryPhotoDetails]
     let load: (String) async throws -> Data?
-    let saveCaption: (String, String) async throws -> Void
+    let saveCaption: ((String, String) async throws -> Void)?
     @State private var selectedID: String
     private enum Detail: Identifiable {
         case caption(String), location(String)
@@ -86,7 +86,7 @@ struct MemoryPhotoBrowser: View {
     @State private var exporting = false
     @State private var exportError: String?
     init(photoIDs: [String], initialID: String, details: [String: MemoryPhotoDetails],
-         load: @escaping (String) async throws -> Data?, saveCaption: @escaping (String, String) async throws -> Void) {
+         load: @escaping (String) async throws -> Data?, saveCaption: ((String, String) async throws -> Void)? = nil) {
         self.photoIDs = photoIDs; self.details = details; self.load = load; self.saveCaption = saveCaption
         _selectedID = State(initialValue: initialID)
     }
@@ -97,10 +97,10 @@ struct MemoryPhotoBrowser: View {
                 MemoryPhotoPager(photoIDs: photoIDs, selectedID: $selectedID, load: load)
                 VStack(spacing: Layout.compact) {
                     if let date = PhotoDate.label(details[selectedID]) { Text(date).font(.caption).foregroundStyle(Palette.muted).accessibilityIdentifier("photo-created-at") }
-                    Button { presentedDetail = .caption(selectedID) } label: {
+                    if saveCaption != nil { Button { presentedDetail = .caption(selectedID) } label: {
                         Text(details[selectedID]?.caption.isEmpty == false ? details[selectedID]!.caption : "Add a caption…")
                             .font(.subheadline).lineLimit(3).frame(maxWidth: .infinity, minHeight: Layout.touchTarget)
-                    }.accessibilityIdentifier("photo-caption")
+                    }.accessibilityIdentifier("photo-caption") }
                 }.padding(.horizontal, Layout.gutter).padding(.bottom, Layout.compact)
             }.background(Palette.background).foregroundStyle(Palette.ink)
                 .navigationTitle("\(index + 1) of \(photoIDs.count)").navigationBarTitleDisplayMode(.inline)
@@ -144,7 +144,7 @@ struct MemoryPhotoBrowser: View {
                 switch detail {
                 case .caption(let id):
                     PhotoCaptionEditor(caption: details[id]?.caption ?? "", cancel: { presentedDetail = nil }, save: { caption in
-                        try await saveCaption(id, caption)
+                        try await saveCaption?(id, caption)
                         presentedDetail = nil
                     })
                 case .location(let id):

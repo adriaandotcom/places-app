@@ -136,15 +136,26 @@ struct MemoryEditor: View {
     @State private var reordering = false
     @State private var selectedPhoto: PhotoReference?
     private let addPhotos: Bool
+    private let suggestedCoordinate: Coordinate?
     private let onSaved: (() -> Void)?
+    @State private var choosePlace = false
+    @State private var addPlace = false
+    @State private var undo = DeleteUndo()
     @State private var offeredPhotos = false
-    init(memory: PlaceMemory, addPhotos: Bool = false, importing photos: [MemoryPhotoFile] = [], onSaved: (() -> Void)? = nil) {
+    init(memory: PlaceMemory, addPhotos: Bool = false, importing photos: [MemoryPhotoFile] = [], suggestedCoordinate: Coordinate? = nil, onSaved: (() -> Void)? = nil) {
         _draft = State(initialValue: memory); self.addPhotos = addPhotos
+        self.suggestedCoordinate = suggestedCoordinate
         _photos = State(initialValue: photos); self.onSaved = onSaved
     }
     private var exists: Bool { model.memories.memories.contains { $0.id == draft.id } }
     var body: some View {
         Form {
+            if suggestedCoordinate != nil || draft.placeID != nil {
+                Section {
+                    PlaceSelectionField(place: model.places.first { $0.id == draft.placeID },
+                        chooseSaved: { choosePlace = true }, chooseDifferent: { addPlace = true })
+                }
+            }
             Section {
                 PersonMentionEditor(text: $draft.text, mentions: Binding(get: { draft.mentions ?? [] }, set: { draft.mentions = $0 }), label: "Write a note…", identifier: "memory-note")
             }
@@ -154,9 +165,16 @@ struct MemoryEditor: View {
             }
             Section("Photos") {
                     PhotoGrid(items: draft.orderedPhotoIDs.map { PhotoReference(id: $0) }, open: { selectedPhoto = $0 }, remove: { reference in
-                        if let photo = photos.first(where: { $0.id == reference.id }) { photoDraft.remove(photo) }
+                        let index = draft.photoIDs.firstIndex(of: reference.id) ?? 0
+                        let file = photos.first { $0.id == reference.id }
+                        let details = draft.photoDetails?[reference.id]
                         draft.photoIDs.removeAll { $0 == reference.id }; photos.removeAll { $0.id == reference.id }
                         draft.photoDetails?.removeValue(forKey: reference.id)
+                        undo.register("Photo removed") {
+                            draft.photoIDs.insert(reference.id, at: min(index, draft.photoIDs.count))
+                            if let file { photos.append(file) }
+                            if let details { draft.photoDetails = (draft.photoDetails ?? [:]).merging([reference.id: details]) { _, restored in restored } }
+                        }
                     }, reorder: draft.photoIDs.count > 1 ? { reordering = true } : nil,
                     add: { choosingPhotos = true }, addIdentifier: "add-memory-photos", addingDisabled: importing, photoIdentifierPrefix: "draft-photo-") { reference in
                         DraftPhotoThumbnail(id: reference.id, files: photos)
@@ -167,6 +185,8 @@ struct MemoryEditor: View {
                 Section { Button("Delete memory", role: .destructive) { confirmDelete = true } }
             }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
+            .modifier(DeleteUndoPresentation(undo: undo))
+            .environment(\.hasMainNavigation, false)
             .navigationTitle(exists ? "Memory" : "Add a memory").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
             .task {
@@ -179,6 +199,12 @@ struct MemoryEditor: View {
             .onChange(of: selection) { importSelectionIfReady() }
             .onChange(of: choosingPhotos) { importSelectionIfReady() }
             .sheet(isPresented: $reordering) { NavigationStack { MemoryPhotoOrderEditor(memory: $draft, files: photos) } }
+            .sheet(isPresented: $choosePlace) {
+                NavigationStack { SavedPlacePicker(anchor: suggestedCoordinate) { draft.placeID = $0.id; draft.visitStart = nil; choosePlace = false } }
+            }
+            .sheet(isPresented: $addPlace) {
+                NavigationStack { PlaceEditor(coordinate: suggestedCoordinate, onSavedPlace: { draft.placeID = $0.id; draft.visitStart = nil; addPlace = false }) }
+            }
             .fullScreenCover(item: $selectedPhoto) { photo in
                 MemoryPhotoBrowser(photoIDs: draft.orderedPhotoIDs, initialID: photo.id, details: draft.photoDetails ?? [:], load: { id in
                     if let file = photos.first(where: { $0.id == id }) { return try Data(contentsOf: file.jpegURL) }
@@ -190,7 +216,7 @@ struct MemoryEditor: View {
                 })
             }
             .modifier(EditorControls(saving: saving,
-                canSave: !importing && (!draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.photoIDs.isEmpty || !draft.personIDs.isEmpty),
+                canSave: !importing && (suggestedCoordinate == nil || draft.placeID != nil) && (!draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.photoIDs.isEmpty || !draft.personIDs.isEmpty),
                 dismissalBlocked: importing, error: $error, errorTitle: "Couldn’t save memory", saveIdentifier: "save-memory",
                 cancel: { importTask?.cancel(); photoDraft.discard(); dismiss() }, save: { save() }))
             .confirmationDialog("Delete this memory and its photos?", isPresented: $confirmDelete, titleVisibility: .visible) {

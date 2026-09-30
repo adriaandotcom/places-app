@@ -40,9 +40,7 @@ struct PlaceWiFiEditor: View {
         Section {
             ForEach(draft.names, id: \.self) { name in
                 WiFiNameLabel(name: name).accessibilityIdentifier("saved-wifi-\(name)")
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button("Remove", systemImage: "trash") { removing = name }.tint(.red)
-                    }
+                    .modifier(SwipeToDelete(nativeRow: true, allowsFullSwipe: false, title: "Remove") { removing = name })
             }
             HStack(spacing: Layout.compact) {
                 TextField("Network name", text: $draft.entry)

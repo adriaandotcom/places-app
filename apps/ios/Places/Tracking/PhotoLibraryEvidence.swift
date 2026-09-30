@@ -5,6 +5,7 @@ import UIKit
 import ImageIO
 import CryptoKit
 import BackgroundTasks
+import Vision
 import PlacesCore
 
 @MainActor @Observable final class PhotoLibraryEvidence: NSObject, PHPhotoLibraryChangeObserver {
@@ -24,6 +25,9 @@ import PlacesCore
         self.currentModel = currentModel
         super.init()
     }
+    #if DEBUG
+    private var previewPhotos: [String: MemoryPhoto] = [:]
+    #endif
     var canRead: Bool { enabled && authorization == .authorized }
     var suggestions: [PhotoVisitSuggestion] { canRead ? PhotoEvidence.suggestions(evidence) : [] }
     private var permitted: Bool { enabled && PHPhotoLibrary.authorizationStatus(for: .readWrite) == .authorized }
@@ -49,6 +53,9 @@ import PlacesCore
         else { BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskID) }
     }
     func updateAuthorization() {
+        #if DEBUG
+        if !previewPhotos.isEmpty { return }
+        #endif
         authorization = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         if permitted {
             if !registered { PHPhotoLibrary.shared().register(self); registered = true }
@@ -125,9 +132,12 @@ import PlacesCore
                 try Task.checkCancellation()
                 guard permitted, epoch == revision else { throw CancellationError() }
                 let matches = PhotoEvidence.matches(cameraMake: camera.make, cameraModel: camera.model, currentModel: currentModel)
+                let faces = matches ? await Task.detached(priority: .utility) { Self.faceCount(url) }.value : nil
+                try Task.checkCancellation()
+                guard permitted, epoch == revision else { throw CancellationError() }
                 let point = Coordinate(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
                 let value = matches && point.isValid ? PhotoLocationEvidence(id: Self.digest(asset.localIdentifier + fingerprint),
-                    assetID: asset.localIdentifier, capturedAt: date, coordinate: point, cameraModel: currentModel) : nil
+                    assetID: asset.localIdentifier, capturedAt: date, coordinate: point, cameraModel: currentModel, faceCount: faces) : nil
                 try await store.indexPhoto(assetID: asset.localIdentifier, fingerprint: fingerprint, evidence: value)
             }
             guard permitted, epoch == revision else { throw CancellationError() }
@@ -149,6 +159,23 @@ import PlacesCore
             let ids = Set(photos.map(\.assetID)); evidence.removeAll { ids.contains($0.assetID) }
         } catch { status = "Couldn’t save your review. Please try again." }
     }
+    func deleteSuggestion(_ photos: [PhotoLocationEvidence], undo: DeleteUndo) async {
+        guard let store, canRead else { return }
+        let epoch = revision
+        let ids = photos.map(\.assetID)
+        do {
+            try await store.dismissPhotoSuggestions(assetIDs: ids)
+            guard epoch == revision else { return }
+            evidence.removeAll { ids.contains($0.assetID) }
+            undo.register("Suggestion deleted") { [weak self] in
+                guard let self, epoch == self.revision else { throw CancellationError() }
+                try await store.restorePhotoSuggestions(assetIDs: ids)
+                let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+                let restored = try await store.photoEvidence(since: cutoff)
+                if self.canRead, epoch == self.revision { self.evidence = restored.filter { $0.cameraModel == self.currentModel } }
+            }
+        } catch { status = "Couldn’t delete this suggestion. Please try again." }
+    }
     func erase() async {
         await setEnabled(false)
         do {
@@ -164,6 +191,9 @@ import PlacesCore
         updateAuthorization()
     }
     func thumbnail(_ id: String) async -> UIImage? {
+        #if DEBUG
+        if canRead, let photo = previewPhotos[id] { return UIImage(data: photo.thumbnail) }
+        #endif
         guard permitted, let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject else { return nil }
         let options = PHImageRequestOptions(); options.deliveryMode = .highQualityFormat
         options.isNetworkAccessAllowed = false
@@ -175,6 +205,9 @@ import PlacesCore
         return permitted ? image : nil
     }
     func importPhoto(_ value: PhotoLocationEvidence) async throws -> MemoryPhoto {
+        #if DEBUG
+        if canRead, let photo = previewPhotos[value.assetID] { return photo }
+        #endif
         guard permitted, let currentModel,
               let asset = PHAsset.fetchAssets(withLocalIdentifiers: [value.assetID], options: nil).firstObject,
               Self.digest(value.assetID + Self.fingerprint(asset, model: currentModel)) == value.id,
@@ -188,6 +221,14 @@ import PlacesCore
         photo.details = MemoryPhotoDetails(createdAt: value.capturedAt, coordinate: value.coordinate)
         return photo
     }
+    #if DEBUG
+    func loadPreviewForTesting(_ values: [PhotoLocationEvidence], photos: [String: MemoryPhoto]) async throws {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-testing"), let store else { return }
+        try await store.setSetting("photoEvidenceEnabled", value: "true")
+        for value in values { try await store.indexPhoto(assetID: value.assetID, fingerprint: value.id, evidence: value) }
+        previewPhotos = photos; enabled = true; authorization = .authorized; evidence = values
+    }
+    #endif
     private static func originalURL(_ asset: PHAsset, network: Bool) async -> URL? {
         let request = PhotoInputRequest(asset: asset)
         return await withTaskCancellationHandler { await request.load(network: network) }
@@ -199,8 +240,20 @@ import PlacesCore
               let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] else { return (nil, nil) }
         return (tiff[kCGImagePropertyTIFFMake] as? String, tiff[kCGImagePropertyTIFFModel] as? String)
     }
+    nonisolated private static func faceCount(_ url: URL) -> Int? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 640] as CFDictionary) else { return nil }
+        let request = VNDetectFaceRectanglesRequest()
+        do {
+            try VNImageRequestHandler(cgImage: image).perform([request])
+            return request.results?.count ?? 0
+        } catch { return nil }
+    }
     private static func fingerprint(_ asset: PHAsset, model: String) -> String {
-        digest([model, String(describing: asset.creationDate), String(describing: asset.modificationDate),
+        digest(["faces-v1", model, String(describing: asset.creationDate), String(describing: asset.modificationDate),
                 String(describing: asset.location?.coordinate.latitude), String(describing: asset.location?.coordinate.longitude)].joined(separator: "|"))
     }
     private static func digest(_ value: String) -> String { SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined() }

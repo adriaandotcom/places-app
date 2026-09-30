@@ -22,7 +22,8 @@ struct TimelinePager: UIViewControllerRepresentable {
             Task { @MainActor in if progress != value { progress = value } }
         }
         controller.makePage = { day in
-            AnyView(TimelineDayPage(day: day, select: select, addPlace: addPlace, addPastVisits: addPastVisits).environment(model))
+            AnyView(TimelineDayPage(day: day, select: select, addPlace: addPlace, addPastVisits: addPastVisits)
+                .environment(model).environment(\.hasMainNavigation, true))
         }
         controller.scroll.bounces = !reduceMotion
         controller.show(model.selectedDay)
@@ -187,6 +188,12 @@ private struct TimelineDayPage: View {
                     ForEach(items) { item in
                         Button { select(item) } label: { TimelineRow(item: item, place: model.place(for: item)) }
                             .buttonStyle(.plain).accessibilityIdentifier("timeline-\(item.kind.rawValue)-\(item.id)")
+                        if item.kind == .stay {
+                            ForEach(memories(for: item)) { memory in
+                                TimelineMemoryRow(memory: memory).padding(.leading, Layout.iconTile)
+                                    .padding(.top, Layout.compact).padding(.bottom, Layout.compact)
+                            }
+                        }
                     }
                 }
                 if loaded, !failed, items.isEmpty || items.contains(where: {
@@ -205,7 +212,7 @@ private struct TimelineDayPage: View {
                 if loaded, !failed, !(items.isEmpty && model.offersPastVisits(on: day)) {
                     Button { addPastVisits(day) } label: {
                         Label("Add visits from on-device Apple Memories", systemImage: "sparkles")
-                            .frame(maxWidth: .infinity, minHeight: Layout.touchTarget, alignment: .leading)
+                            .multilineTextAlignment(.center).frame(maxWidth: .infinity, minHeight: Layout.touchTarget)
                     }.foregroundStyle(Palette.green).padding(.top, Layout.spacing)
                         .accessibilityIdentifier("apple-memory-suggestions")
                 }
@@ -220,5 +227,48 @@ private struct TimelineDayPage: View {
                 } catch is CancellationError { }
                 catch { failed = true }
             }
+    }
+    private func memories(for item: TimelineItem) -> [PlaceMemory] {
+        model.memories.memories.filter { memory in
+            guard Calendar.current.isDate(memory.date, inSameDayAs: day) else { return false }
+            let visits = items.filter { visit in
+                visit.kind == .stay && (memory.placeID == nil ? memory.belongs(to: visit) : model.place(for: visit)?.id == memory.placeID)
+            }
+            // A memory's date need not fall inside the measured visit. Pick one
+            // related visit that day, preferring the explicit link, then proximity.
+            let related = visits.min { left, right in
+                if memory.belongs(to: left) != memory.belongs(to: right) { return memory.belongs(to: left) }
+                func distance(_ visit: TimelineItem) -> TimeInterval {
+                    max(visit.start.timeIntervalSince(memory.date), memory.date.timeIntervalSince(visit.end ?? Date()), 0)
+                }
+                if distance(left) != distance(right) { return distance(left) < distance(right) }
+                return left.start < right.start
+            }
+            return related?.id == item.id
+        }
+    }
+}
+
+private struct TimelineMemoryRow: View {
+    let memory: PlaceMemory
+    @State private var editing = false
+    var body: some View {
+        Button { editing = true } label: {
+            HStack(spacing: Layout.compact) {
+                if let photo = memory.orderedPhotoIDs.first {
+                    StoredPhoto(id: photo, thumbnail: true).frame(width: Layout.avatarSize, height: Layout.avatarSize)
+                        .clipShape(RoundedRectangle(cornerRadius: Layout.compact))
+                } else { Image(systemName: "text.bubble").foregroundStyle(Palette.green) }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(memory.text.isEmpty ? "Memory" : memory.text).font(.subheadline).lineLimit(2).multilineTextAlignment(.leading)
+                    if !memory.photoIDs.isEmpty {
+                        Text("\(memory.photoIDs.count) \(memory.photoIDs.count == 1 ? "photo" : "photos")").font(.caption).foregroundStyle(Palette.muted)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+            }.frame(minHeight: Layout.touchTarget).modifier(CardSurface(padding: Layout.compact))
+        }.buttonStyle(.plain).accessibilityIdentifier("timeline-memory-\(memory.id)")
+            .sheet(isPresented: $editing) { NavigationStack { MemoryEditor(memory: memory) }.environment(\.hasMainNavigation, false) }
     }
 }

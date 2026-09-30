@@ -15,3 +15,22 @@ struct SavedPlaceRow: View {
             .foregroundStyle(Palette.ink).contentShape(Rectangle())
     }
 }
+
+/// Keep the selected place prominent, with alternatives behind its chevron.
+/// Used by photo review and the memory editor, including unnamed suggestions.
+struct PlaceSelectionField: View {
+    let place: Place?
+    let chooseSaved: () -> Void
+    let chooseDifferent: () -> Void
+    @State private var expanded = false
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            Button("Choose a saved place", action: chooseSaved).foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget)
+            Button(place == nil ? "Name this place" : "Choose a different nearby place", action: chooseDifferent)
+                .foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget)
+        } label: {
+            if let place { SavedPlaceRow(place: place) }
+            else { Label("Choose a place", systemImage: "mappin.and.ellipse").frame(minHeight: Layout.touchTarget) }
+        }.disclosureGroupStyle(SelectionDisclosureStyle()).tint(Palette.green).accessibilityIdentifier("selected-place-options")
+    }
+}

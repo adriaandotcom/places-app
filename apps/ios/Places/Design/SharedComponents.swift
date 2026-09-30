@@ -31,6 +31,29 @@ struct SectionHeading: View {
     }
 }
 
+/// A settled selection with secondary choices underneath, shared by forms/cards.
+struct SelectionDisclosureStyle: DisclosureGroupStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: Layout.compact) {
+            Button {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { configuration.isExpanded.toggle() }
+            } label: {
+                HStack(spacing: Layout.compact) {
+                    configuration.label
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
+                        .rotationEffect(.degrees(configuration.isExpanded ? 180 : 0)).foregroundStyle(Palette.muted)
+                }.contentShape(Rectangle()).frame(minHeight: Layout.touchTarget)
+            }.buttonStyle(.plain).accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
+            if configuration.isExpanded {
+                Divider()
+                configuration.content.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
 struct EmptyState: View {
     enum Style { case page, card }
     let symbol: String

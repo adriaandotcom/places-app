@@ -9,18 +9,31 @@ public struct PhotoLocationEvidence: Codable, Hashable, Identifiable, Sendable {
     public var capturedAt: Date
     public var coordinate: Coordinate
     public var cameraModel: String
-    public init(id: String, assetID: String, capturedAt: Date, coordinate: Coordinate, cameraModel: String) {
+    /// A count from on-device detection, never face identities or embeddings.
+    public var faceCount: Int?
+    public init(id: String, assetID: String, capturedAt: Date, coordinate: Coordinate, cameraModel: String, faceCount: Int? = nil) {
         self.id = id; self.assetID = assetID; self.capturedAt = capturedAt
         self.coordinate = coordinate; self.cameraModel = cameraModel
+        self.faceCount = faceCount
     }
 }
 
 public struct PhotoVisitSuggestion: Identifiable, Hashable, Sendable {
     public var photos: [PhotoLocationEvidence]
+    public init(photos: [PhotoLocationEvidence]) {
+        precondition(!photos.isEmpty)
+        self.photos = photos
+    }
     public var id: String { photos[0].assetID }
     public var coordinate: Coordinate { photos[0].coordinate }
     public var start: Date { photos[0].capturedAt }
     public var end: Date { photos.last!.capturedAt }
+    public var previewPhotos: [PhotoLocationEvidence] {
+        photos.sorted {
+            if ($0.faceCount ?? 0) != ($1.faceCount ?? 0) { return ($0.faceCount ?? 0) > ($1.faceCount ?? 0) }
+            return ($0.capturedAt, $0.assetID) < ($1.capturedAt, $1.assetID)
+        }
+    }
     public func place(in places: [Place]) -> Place? {
         places.filter { place in photos.allSatisfy { place.contains($0.coordinate) && (place.area != nil || place.coordinate.distance(to: $0.coordinate) <= 200) } }
             .min { $0.coordinate.distance(to: coordinate) < $1.coordinate.distance(to: coordinate) }
@@ -49,7 +62,15 @@ public enum PhotoEvidence {
                 groups[groups.count - 1].photos.append(photo)
             } else { groups.append(PhotoVisitSuggestion(photos: [photo])) }
         }
-        return groups.reversed()
+        // The same ranking feeds every surface. Keep the chronological photo order
+        // inside each group so ranking cannot change the evidence's times.
+        return groups.sorted {
+            let left = ($0.photos.compactMap(\.faceCount).max() ?? 0, $0.photos.count)
+            let right = ($1.photos.compactMap(\.faceCount).max() ?? 0, $1.photos.count)
+            if left != right { return left > right }
+            if $0.start != $1.start { return $0.start > $1.start }
+            return $0.id < $1.id
+        }
     }
 }
 
@@ -95,6 +116,11 @@ extension PlacesStore {
     public func dismissPhotoSuggestions(assetIDs: [String]) throws {
         try queue.write { db in
             for id in assetIDs { try db.execute(sql: "INSERT OR IGNORE INTO photoReview(assetID) VALUES (?)", arguments: [id]) }
+        }
+    }
+    public func restorePhotoSuggestions(assetIDs: [String]) throws {
+        try queue.write { db in
+            for id in assetIDs { try db.execute(sql: "DELETE FROM photoReview WHERE assetID = ?", arguments: [id]) }
         }
     }
     public func erasePhotoEvidence() throws {

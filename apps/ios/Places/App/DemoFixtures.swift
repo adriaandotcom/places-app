@@ -4,6 +4,33 @@ import UIKit
 import PlacesCore
 
 enum DemoFixtures {
+    @MainActor static func seedPhotoSuggestions(_ store: PlacesStore, library: PhotoLibraryEvidence) async throws {
+        let date = Date().addingTimeInterval(-7200)
+        let park = Place(id: "photo-park", name: "Little park", coordinate: Coordinate(latitude: 12, longitude: 34), symbol: "tree.fill")
+        try await store.savePlace(park)
+        try await store.append([
+            SensorObservation(timestamp: date.addingTimeInterval(-60), source: .visitArrival, coordinate: park.coordinate, horizontalAccuracy: 10),
+            SensorObservation(timestamp: date.addingTimeInterval(600), source: .visitDeparture, coordinate: park.coordinate, horizontalAccuracy: 10)
+        ])
+        try await store.correct(UserOverride(start: date.addingTimeInterval(-60), end: date.addingTimeInterval(600), kind: .stay, placeID: park.id))
+        var values: [PhotoLocationEvidence] = [], photos: [String: MemoryPhoto] = [:]
+        for index in 0..<6 {
+            let id = "suggestion-photo-\(index)"
+            let coordinate = index < 3 ? park.coordinate : Coordinate(latitude: 12.01, longitude: 34)
+            let time = date.addingTimeInterval(Double(index) * 60)
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 300, height: 300)).image { context in
+                UIColor(hue: CGFloat(index) / 7, saturation: 0.4, brightness: 0.8, alpha: 1).setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 300, height: 300))
+                ("Photo \(index + 1)" as NSString).draw(at: CGPoint(x: 30, y: 130), withAttributes: [.font: UIFont.systemFont(ofSize: 35), .foregroundColor: UIColor.white])
+            }
+            var photo = try MemoryPhotoImport.make(image.jpegData(compressionQuality: 0.8)!)
+            photo.details = MemoryPhotoDetails(createdAt: time, coordinate: coordinate)
+            photos[id] = photo
+            values.append(PhotoLocationEvidence(id: id, assetID: id, capturedAt: time, coordinate: coordinate, cameraModel: "Preview iPhone", faceCount: index < 3 ? 3 : 0))
+        }
+        try await library.loadPreviewForTesting(values, photos: photos)
+    }
+
     static func seedRewind(_ store: PlacesStore) async throws {
         let calendar = Calendar.current
         let current = calendar.dateInterval(of: .month, for: Date())!.start
