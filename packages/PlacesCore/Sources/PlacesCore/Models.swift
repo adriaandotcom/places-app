@@ -61,6 +61,7 @@ public enum TransportMode: String, Codable, CaseIterable, Sendable {
     }
 }
 public enum MotionKind: String, Codable, Sendable { case unknown, stationary, walking, running, cycling, automotive }
+public enum ObservationDevice: String, Codable, Sendable { case watch, mac }
 
 public struct SensorObservation: Codable, Identifiable, Hashable, Sendable {
     public var id: String
@@ -76,25 +77,31 @@ public struct SensorObservation: Codable, Identifiable, Hashable, Sendable {
     public var bssid: String?
     public var timezoneIdentifier: String
     public var policyVersion: String
+    public var companionDevice: ObservationDevice?
+    public var companionDeviceID: String?
 
     public init(id: String = UUID().uuidString, timestamp: Date, source: ObservationSource,
                 coordinate: Coordinate? = nil, coordinateTimestamp: Date? = nil,
                 horizontalAccuracy: Double? = nil, speed: Double? = nil, motion: MotionKind? = nil,
                 monitoredPlaceID: String? = nil, ssid: String? = nil, bssid: String? = nil,
-                timezoneIdentifier: String = TimeZone.current.identifier) {
+                timezoneIdentifier: String = TimeZone.current.identifier,
+                companionDevice: ObservationDevice? = nil, companionDeviceID: String? = nil) {
         self.id = id; self.timestamp = timestamp; self.source = source
         self.coordinate = coordinate; self.coordinateTimestamp = coordinateTimestamp ?? (coordinate == nil ? nil : timestamp)
         self.horizontalAccuracy = horizontalAccuracy; self.speed = speed; self.motion = motion
         self.monitoredPlaceID = monitoredPlaceID; self.ssid = ssid; self.bssid = bssid?.lowercased()
         self.timezoneIdentifier = timezoneIdentifier; self.policyVersion = TrackingPolicy.version
+        self.companionDevice = companionDevice; self.companionDeviceID = companionDeviceID
     }
 
     // A platform callback may deliver the same sample more than once, with a different local UUID.
     public var deduplicationKey: String {
-        [source.rawValue, String(timestamp.timeIntervalSince1970),
+        let original = [source.rawValue, String(timestamp.timeIntervalSince1970),
          coordinate.map { "\($0.latitude),\($0.longitude)" } ?? "", horizontalAccuracy.map(String.init(describing:)) ?? "",
          speed.map(String.init(describing:)) ?? "", motion?.rawValue ?? "", monitoredPlaceID ?? "", ssid ?? "", bssid ?? ""]
             .joined(separator: "|")
+        // Keep existing phone deduplication keys unchanged across the upgrade.
+        return companionDevice.map { original + "|" + $0.rawValue + "|" + (companionDeviceID ?? "") } ?? original
     }
     public var usableCoordinate: Coordinate? {
         guard let coordinate, coordinate.isValid, let accuracy = horizontalAccuracy,

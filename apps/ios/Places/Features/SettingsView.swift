@@ -23,6 +23,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("tracking-toggle")
                 LabeledContent("Status", value: model.tracking.state.title)
                 NavigationLink("Battery & recording activity") { BatteryActivityView() }.accessibilityIdentifier("battery-activity")
+                NavigationLink("Mac & Apple Watch") { CompanionSettings() }
                 if model.storageNeedsRetry {
                     Text("Recording is paused until your history can be saved.").foregroundStyle(Palette.muted)
                     Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }
@@ -71,7 +72,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("nerd-toggle")
                 if model.nerdMode { NavigationLink("Local diagnostics") { DiagnosticsView() } }
             } header: { Text("A little more detail") } footer: {
-                Text("Nerd mode reveals observations, tracking policy, and local counters. Nothing is uploaded.")
+                Text("Nerd mode reveals observations, tracking policy, and local counters. Diagnostics stay on this iPhone.")
             }
             Section("Your data") {
                 Button("Export full history…", systemImage: "square.and.arrow.up") { confirmExport = true }

@@ -16,6 +16,20 @@ spec.loader.exec_module(release)
 
 
 class TestFlightSmokeTests(unittest.TestCase):
+    def test_distribution_profile_checks_companion_capabilities(self):
+        profile = {'TeamIdentifier': ['TEAM'], 'UUID': '12345678-ABCD-1234-ABCD-123456789ABC',
+                   'ExpirationDate': datetime(2030, 1, 1), 'Entitlements': {
+                       'application-identifier': 'TEAM.com.adriaan.places', 'beta-reports-active': True,
+                       'com.apple.developer.icloud-container-identifiers': ['iCloud.com.adriaan.places'],
+                       'aps-environment': 'production'}}
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        self.assertEqual(release.validate_distribution_profile(profile, 'TEAM', 'com.adriaan.places', now), profile['UUID'])
+        del profile['Entitlements']['aps-environment']
+        with self.assertRaisesRegex(ValueError, 'Push Notifications'):
+            release.validate_distribution_profile(profile, 'TEAM', 'com.adriaan.places', now)
+        with self.assertRaisesRegex(ValueError, 'different team or app'):
+            release.validate_distribution_profile(profile, 'OTHER', 'com.adriaan.places.watch', now)
+
     def test_cache_report_uses_xcode_totals_without_double_counting(self):
         log = ('note: Replay cache hit\nCache hit\n'
                'CompilationCacheMetrics\nnote: 285 hits / 290 cacheable tasks (98%)\n')
@@ -79,12 +93,19 @@ class TestFlightSmokeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'together'):
             release.authentication({'ASC_KEY_ID': 'fixture'})
 
+    def test_missing_watch_distribution_profiles_fail_before_build(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(release.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'Manual signing also requires'):
+                release.execute(self.options(directory), {'PLACES_PROFILE_UUID': '12345678-ABCD-1234-ABCD-123456789ABC'})
+            run.assert_not_called()
+
     def test_distribution_profile_uses_manual_signing_for_archive_and_export(self):
         profile = '12345678-ABCD-1234-ABCD-123456789ABC'
         with tempfile.TemporaryDirectory() as directory, \
              patch.object(release, 'clean_revision', return_value='fixture'), \
              patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
-            release.execute(self.options(directory), {'PLACES_PROFILE_UUID': profile})
+            release.execute(self.options(directory), {'PLACES_PROFILE_UUID': profile,
+                'PLACES_WATCH_PROFILE_UUID': profile, 'PLACES_COMPLICATION_PROFILE_UUID': profile})
             archive = next(call.args[0] for call in run.call_args_list if 'archive' in call.args[0])
             self.assertIn('PLACES_CODE_SIGN_IDENTITY=Apple Distribution', archive)
             self.assertIn('PLACES_CODE_SIGN_STYLE=Manual', archive)
@@ -93,7 +114,8 @@ class TestFlightSmokeTests(unittest.TestCase):
                 self.assertFalse(any(argument.startswith(setting) for argument in archive))
             options = plistlib.loads((Path(directory) / 'ExportOptions.plist').read_bytes())
             self.assertEqual(options['signingStyle'], 'manual')
-            self.assertEqual(options['provisioningProfiles'], {'com.adriaan.places': profile})
+            self.assertEqual(options['provisioningProfiles'], {bundle: profile for bundle in
+                ['com.adriaan.places', 'com.adriaan.places.watch', 'com.adriaan.places.watch.complication']})
 
     @unittest.skipUnless(sys.platform == 'darwin', 'Xcode project validation uses macOS plutil')
     def test_profile_settings_are_scoped_to_the_app_release_target(self):
@@ -102,6 +124,8 @@ class TestFlightSmokeTests(unittest.TestCase):
         settings = plistlib.loads(subprocess.check_output(['plutil', '-convert', 'xml1', '-o', '-', str(project)]))
         objects = settings['objects']
         configured = []
+        expected = {'Places': 'PLACES_PROFILE_UUID', 'PlacesWatch': 'PLACES_WATCH_PROFILE_UUID',
+                    'PlacesComplication': 'PLACES_COMPLICATION_PROFILE_UUID'}
         for target in objects.values():
             if target.get('isa') not in ('PBXNativeTarget', 'PBXProject'):
                 continue
@@ -110,10 +134,10 @@ class TestFlightSmokeTests(unittest.TestCase):
                 values = config['buildSettings']
                 if 'PROVISIONING_PROFILE_SPECIFIER' in values:
                     configured.append((target.get('name'), config['name']))
-                    self.assertEqual(values['PROVISIONING_PROFILE_SPECIFIER'], '$(PLACES_PROFILE_UUID)')
+                    self.assertEqual(values['PROVISIONING_PROFILE_SPECIFIER'], '$(' + expected[target['name']] + ')')
                     self.assertEqual(values['CODE_SIGN_STYLE'], '$(PLACES_CODE_SIGN_STYLE)')
                     self.assertEqual(values['PLACES_CODE_SIGN_STYLE'], 'Automatic')
-        self.assertEqual(configured, [('Places', 'Release')])
+        self.assertEqual(sorted(configured), sorted((target, 'Release') for target in expected))
 
     def test_generated_build_numbers_are_ordered_and_valid(self):
         before = release.build_number(datetime(2026, 9, 25, 10, 59, tzinfo=timezone.utc))

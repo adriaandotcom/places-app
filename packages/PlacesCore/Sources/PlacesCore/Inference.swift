@@ -3,7 +3,7 @@ import Foundation
 public enum InferenceEngine {
     public static func infer(observations: [SensorObservation], places: [Place], networks: [WiFiNetwork] = [],
                              accessPoints: [WiFiAccessPoint] = []) -> [TimelineItem] {
-        let sorted = observations.sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+        let sorted = CompanionEvidence.selected(observations, places: places, networks: networks, accessPoints: accessPoints)
         var result: [TimelineItem] = []
         var current: TimelineItem?
         var stationaryAnchor: SensorObservation?
@@ -11,6 +11,7 @@ public enum InferenceEngine {
         var stationaryEvidence: [SensorObservation] = []
         var latestMotion: MotionKind = .unknown
         var motionTime = Date.distantPast
+        var activeDevice: String?
 
         func close(at time: Date) {
             guard var item = current else { return }
@@ -37,6 +38,25 @@ public enum InferenceEngine {
             // Resolve a merged region ID in memory; never rewrite raw evidence.
             if let id = observation.monitoredPlaceID, let target = aliases[id] { observation.monitoredPlaceID = target }
             let time = observation.timestamp
+            let wifiPlace = TrackingPolicy.connectedPlace(for: observation, places: places, networks: networks, accessPoints: accessPoints)
+            let device = observation.companionDevice.map { $0.rawValue + ":" + (observation.companionDeviceID ?? "") } ?? "iphone"
+            if observation.usableCoordinate != nil || wifiPlace != nil {
+                if let previous = activeDevice, previous != device {
+                    // Locations from different physical devices cannot establish a connecting route.
+                    if let item = current {
+                        let boundary = item.lastEvidenceAt
+                        close(at: boundary)
+                        start(.gap, at: boundary, observation: observation,
+                              reason: "The evidence changes device; no route establishes this interval.")
+                    }
+                    stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+                    latestMotion = .unknown; motionTime = .distantPast
+                }
+                activeDevice = device
+            }
+            // Phone motion does not describe a Mac or Watch location.
+            if observation.usableCoordinate == nil && wifiPlace == nil && observation.companionDevice == nil,
+               activeDevice != nil && activeDevice != "iphone" { continue }
             if let motion = observation.motion { latestMotion = motion; motionTime = time }
             let motion = time.timeIntervalSince(motionTime) <= 300 ? latestMotion : .unknown
 
@@ -71,7 +91,6 @@ public enum InferenceEngine {
                 continue
             }
 
-            let wifiPlace = TrackingPolicy.connectedPlace(for: observation, places: places, networks: networks, accessPoints: accessPoints)
             guard observation.usableCoordinate != nil || wifiPlace != nil else { continue }
 
             if let item = current, item.kind == .stay, item.placeID == nil,

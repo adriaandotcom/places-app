@@ -4,12 +4,22 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check_privacy import ResourceParser, check_css, check_resource, check_map_manifest, has_remote_url
+from check_privacy import ResourceParser, check_css, check_resource, check_map_manifest, has_remote_url, check_companion_cloud
 import json
 from copy import deepcopy
 
 
 class PrivacySmokeTests(unittest.TestCase):
+    def test_cloud_inbox_rejects_plain_fields_public_database_and_missing_consent(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / 'packages/PlacesCompanion/Sources/PlacesCompanion/CloudInbox.swift').read_text()
+        self.assertEqual(check_companion_cloud(source), [])
+        for changed in [source.replace('guard consented else', 'if false'),
+                        source.replace('privateCloudDatabase', 'publicCloudDatabase'),
+                        source + '\nrecord["latitude"] = sample.latitude',
+                        source.replace('CompanionCipher.seal(', 'JSONEncoder().encode(')]:
+            self.assertTrue(check_companion_cloud(changed))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

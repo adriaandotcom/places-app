@@ -1349,6 +1349,22 @@ import XCTest
         XCTAssertTrue(app.buttons["Offline place data"].exists)
     }
 
+    func testCompanionsRequireSeparateOptIn() {
+        let app = launch(fixture: true)
+        app.buttons["open-settings"].tap()
+        let companions = app.buttons["Mac & Apple Watch"]
+        reveal(companions, in: app); companions.tap()
+        let watch = app.switches["Receive Watch locations"]
+        XCTAssertTrue(watch.waitForExistence(timeout: 5))
+        XCTAssertEqual(watch.value as? String, "0")
+        let mac = app.switches["Receive Mac locations through iCloud"]
+        XCTAssertEqual(mac.value as? String, "0")
+        XCTAssertFalse(app.buttons["Check for Mac observations"].exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Companions stay off until chosen"; shot.lifetime = .keepAlways; add(shot)
+    }
+
     func testEveryOnboardingPermissionCanBeSkipped() {
         let app = XCUIApplication()
         app.resetAuthorizationStatus(for: .location)

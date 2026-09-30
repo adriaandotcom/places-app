@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/ci/SourcePackages
-          key: places-packages-v2-ios-simulator-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('**/Package.resolved', '**/Package.swift') }}
+          key: places-packages-v3-apple-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ hashFiles('**/Package.resolved', '**/Package.swift') }}
       - name: Cache compiled code
         id: compiled
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -43,14 +43,24 @@ jobs:
           # Xcode's content-addressed compiler results, not signed archives,
           # provisioning profiles, credentials, build logs or whole DerivedData.
           path: build/ci/CompilationCache.noindex
-          key: places-compiled-v1-ios-simulator-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: places-compiled-v2-apple-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            places-compiled-v1-ios-simulator-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-
-      - name: Compile iPhone simulator app
+            places-compiled-v2-apple-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-
+      - name: Compile iPhone and embedded Watch simulator apps
         run: |
           xcodebuild -project apps/ios/Places.xcodeproj -scheme Places \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$GITHUB_WORKSPACE/build/ci/DerivedData" \
+            -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/ci/SourcePackages" \
+            -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
+            COMPILATION_CACHE_CAS_PATH="$GITHUB_WORKSPACE/build/ci/CompilationCache.noindex" build
+      - name: Compile Mac companion
+        run: |
+          xcodebuild -project apps/ios/Places.xcodeproj -scheme PlacesMac \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/ci/MacDerivedData" \
             -clonedSourcePackagesDirPath "$GITHUB_WORKSPACE/build/ci/SourcePackages" \
             -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO \
             COMPILATION_CACHE_ENABLE_CACHING=YES \

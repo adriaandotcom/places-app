@@ -20,8 +20,30 @@ import re
 import subprocess
 import sys
 import time
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def validate_distribution_profile(profile, team, bundle, now=None):
+    entitlements = profile.get('Entitlements', {})
+    if profile.get('TeamIdentifier') != [team] or entitlements.get('application-identifier') != team + '.' + bundle:
+        raise ValueError('Signing profile belongs to a different team or app.')
+    if entitlements.get('get-task-allow') or profile.get('ProvisionedDevices') or not entitlements.get('beta-reports-active'):
+        raise ValueError('An App Store distribution profile is required.')
+    if profile['ExpirationDate'].replace(tzinfo=timezone.utc) <= (now or datetime.now(timezone.utc)):
+        raise ValueError('Signing profile has expired.')
+    if bundle == 'com.adriaan.places':
+        if 'iCloud.com.adriaan.places' not in entitlements.get('com.apple.developer.icloud-container-identifiers', []):
+            raise ValueError('Regenerate the iPhone profile with the Places CloudKit container enabled.')
+        if entitlements.get('aps-environment') != 'production':
+            raise ValueError('Regenerate the iPhone profile with Push Notifications enabled.')
+    elif bundle.startswith('com.adriaan.places.watch'):
+        if 'group.com.adriaan.places.watch' not in entitlements.get('com.apple.security.application-groups', []):
+            raise ValueError('Regenerate the Watch profile with the Places Watch app group enabled.')
+    value = profile['UUID']
+    uuid.UUID(value)
+    return value
 
 
 def build_number(now=None):
@@ -46,7 +68,7 @@ def authentication(env):
             '-authenticationKeyIssuerID', values[2]]
 
 
-def export_options(team, profile=None):
+def export_options(team, profile=None, watch_profile=None, complication_profile=None):
     options = {'method': 'app-store-connect', 'destination': 'upload',
             'signingStyle': 'automatic', 'teamID': team,
             'testFlightInternalTestingOnly': True,
@@ -54,6 +76,10 @@ def export_options(team, profile=None):
     if profile:
         options.update(signingStyle='manual', signingCertificate='Apple Distribution',
                        provisioningProfiles={'com.adriaan.places': profile})
+        if watch_profile:
+            options['provisioningProfiles']['com.adriaan.places.watch'] = watch_profile
+        if complication_profile:
+            options['provisioningProfiles']['com.adriaan.places.watch.complication'] = complication_profile
     return options
 
 
@@ -81,12 +107,20 @@ def execute(args, env=os.environ):
         raise ValueError('Use a build number such as 2460.10.25 (up to 4.2.2 digits).')
     auth = authentication(env)
     profile = env.get('PLACES_PROFILE_UUID')
+    watch_profile = env.get('PLACES_WATCH_PROFILE_UUID')
+    complication_profile = env.get('PLACES_COMPLICATION_PROFILE_UUID')
     if profile and not re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}', profile):
         raise ValueError('PLACES_PROFILE_UUID must identify the installed Places distribution profile.')
+    for name, value in [('PLACES_WATCH_PROFILE_UUID', watch_profile), ('PLACES_COMPLICATION_PROFILE_UUID', complication_profile)]:
+        if value and not re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}', value):
+            raise ValueError(name + ' must identify an installed distribution profile.')
+    if profile and not (watch_profile and complication_profile):
+        raise ValueError('Manual signing also requires PLACES_WATCH_PROFILE_UUID and PLACES_COMPLICATION_PROFILE_UUID.')
     # Only the Places Release target consumes these custom settings. Global
     # signing overrides also reach Swift package resource bundles, which cannot
     # accept an app provisioning profile.
     signing = ([f'PLACES_PROFILE_UUID={profile}', 'PLACES_CODE_SIGN_STYLE=Manual',
+                f'PLACES_WATCH_PROFILE_UUID={watch_profile}', f'PLACES_COMPLICATION_PROFILE_UUID={complication_profile}',
                 'PLACES_CODE_SIGN_IDENTITY=Apple Distribution'] if profile else [])
     work = args.work_dir.expanduser().resolve()
     work.mkdir(parents=True, exist_ok=True)
@@ -99,7 +133,7 @@ def execute(args, env=os.environ):
         revision = None if args.archive_only or args.dry_run else clean_revision()
         archive = work / 'Places.xcarchive'
         options = work / 'ExportOptions.plist'
-        options.write_bytes(plistlib.dumps(export_options(args.team, profile)))
+        options.write_bytes(plistlib.dumps(export_options(args.team, profile, watch_profile, complication_profile)))
         phases = [
             ('Privacy checks', [sys.executable, 'scripts/check_privacy.py']),
         ]

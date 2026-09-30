@@ -14,6 +14,15 @@ private func fix(_ seconds: Double, source: ObservationSource = .location,
                       coordinate: coordinate, horizontalAccuracy: accuracy)
 }
 
+@Test func gpxNeverConnectsDifferentPhysicalDevices() throws {
+    var watch = fix(30); watch.companionDevice = .watch; watch.companionDeviceID = "watch-one"
+    var mac = fix(60); mac.companionDevice = .mac; mac.companionDeviceID = "mac-one"
+    var otherMac = fix(90); otherMac.companionDevice = .mac; otherMac.companionDeviceID = "mac-two"
+    let xml = try XMLDocument(data: GPXExport.encode(places: [], observations: [fix(0), watch, mac, otherMac]))
+    #expect(try xml.nodes(forXPath: "//trkseg").count == 4)
+    #expect(try xml.nodes(forXPath: "//trkpt").count == 4)
+}
+
 @Test func gpxPreservesCoordinatesAndTimesWithoutPrivateExtras() async throws {
     let store = try PlacesStore(path: ":memory:")
     let name = "Café & <Park> \"West\" 🏞"

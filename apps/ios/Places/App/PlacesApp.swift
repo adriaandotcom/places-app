@@ -3,6 +3,9 @@ import UIKit
 import UserNotifications
 
 @MainActor final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+        await AppModel.shared.receiveCompanionDelivery() ? .newData : .noData
+    }
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
         guard identifier.hasPrefix(MapDownloads.sessionID) else { completionHandler(); return }
@@ -39,7 +42,7 @@ import UserNotifications
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in model.start() }
             .onChange(of: scenePhase) { _, phase in
                 if !model.uiTesting { model.tracking.sceneChanged(isForeground: phase != .background) }
-                if phase == .active { Task { await model.refresh() } }
+                if phase == .active { Task { await model.refresh(); if !model.uiTesting { await model.companions.sync() } } }
             }
             .alert("Places needs your attention", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
                 if !model.ready { Button("Retry") { model.errorMessage = nil; model.start() } }

@@ -552,7 +552,7 @@ enum StoreSQL {
         }
         // Associate measured route samples with inferred journeys, never manufacture coordinates.
         var itemIndex = 0
-        for observation in observations {
+        for observation in CompanionEvidence.selected(observations, places: places, networks: networks, accessPoints: accessPoints) {
             guard let coordinate = observation.usableCoordinate, [.location, .significantChange].contains(observation.source), !items.isEmpty else { continue }
             while itemIndex + 1 < items.count, items[itemIndex + 1].start <= observation.timestamp { itemIndex += 1 }
             let item = items[itemIndex]

@@ -67,6 +67,7 @@ public struct InferenceTestCase: Codable, Sendable {
             + archive.timeline.compactMap(\.placeID) + archive.corrections.compactMap(\.placeID)
             + archive.accessPoints.compactMap(\.placeID), prefix: "place")
         let observationIDs = aliases(archive.observations.map(\.id), prefix: "observation")
+        let deviceIDs = aliases(archive.observations.compactMap(\.companionDeviceID), prefix: "device")
         let correctionIDs = aliases(archive.corrections.map(\.id), prefix: "correction")
         let networkIDs = aliases(archive.networks.map(\.id) + archive.accessPoints.map(\.networkID), prefix: "network")
         let pointIDs = aliases(archive.accessPoints.map(\.id), prefix: "access-point")
@@ -93,6 +94,7 @@ public struct InferenceTestCase: Codable, Sendable {
         let observations = archive.observations.map { value in
             var copy = value
             copy.id = observationIDs[value.id]!
+            copy.companionDeviceID = value.companionDeviceID.flatMap { deviceIDs[$0] }
             copy.timestamp = date(value.timestamp); copy.coordinateTimestamp = value.coordinateTimestamp.map(date)
             copy.coordinate = value.coordinate.map(rotation.apply)
             copy.monitoredPlaceID = value.monitoredPlaceID.flatMap { placeIDs[$0] }

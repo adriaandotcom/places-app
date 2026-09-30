@@ -4,6 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
 import PlacesCore
+import PlacesCompanion
 
 @MainActor @Observable
 final class AppModel {
@@ -104,10 +105,12 @@ final class AppModel {
     var exportFilename = "Places"
     var showExporter = false
     private var pendingWrite: Task<Void, Never>?
+    let companions = PhoneCompanions()
     private var retryObservations: [SensorObservation] = []
     private var generation = 0
     private var deleting = false
     private var starting = false
+    private var startupTask: Task<Void, Never>?
 
     var uiTesting: Bool {
         #if DEBUG
@@ -127,7 +130,7 @@ final class AppModel {
             store = opened; waitingForUnlock = false
             tracking.onObservations = { [weak self] values in self?.enqueue(values) }
             tracking.onEvent = { [weak self] event in self?.enqueue(event) }
-            Task {
+            startupTask = Task {
                 do {
                     let legacyMaps = try await opened.setting("mapsEnabled") == "true"
                     let savedProvider = try await opened.setting("mapProvider")
@@ -207,7 +210,13 @@ final class AppModel {
                     await refresh()
                     enrichRegions()
                     ready = true; starting = false
-                    if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
+                    if !uiTesting {
+                        tracking.configure(places: places, enabled: trackingEnabled)
+                        companions.start { [weak self] batch in
+                            guard let self else { throw CancellationError() }
+                            try await self.importCompanion(batch)
+                        }
+                    }
                     await tracking.refreshNotifications()
                     #if DEBUG
                     if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-memory-refresh") {
@@ -225,6 +234,15 @@ final class AppModel {
         } catch is ProtectedStorage.Locked {
             starting = false; waitingForUnlock = true
         } catch { starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
+    }
+
+    func receiveCompanionDelivery() async -> Bool {
+        start()
+        await startupTask?.value
+        guard ready, !uiTesting, !deleting else { return false }
+        let previous = companions.lastReceived
+        await companions.sync()
+        return previous != companions.lastReceived
     }
 
     func refresh() async {
@@ -345,6 +363,21 @@ final class AppModel {
         } catch { fail("Could not update these entries. Please try again."); return false }
     }
 
+    private func importCompanion(_ batch: CompanionBatch) async throws {
+        guard let store, !deleting else { throw CancellationError() }
+        let epoch = generation
+        await pendingWrite?.value
+        guard !deleting, generation == epoch else { throw CancellationError() }
+        let values = batch.samples.map { sample in
+            SensorObservation(id: sample.id.uuidString, timestamp: sample.timestamp, source: .location,
+                coordinate: Coordinate(latitude: sample.latitude, longitude: sample.longitude),
+                horizontalAccuracy: sample.accuracy, speed: sample.speed, timezoneIdentifier: sample.timezone,
+                companionDevice: sample.kind == .watch ? .watch : .mac, companionDeviceID: sample.deviceID.uuidString)
+        }
+        try await store.append(values)
+        guard !deleting, generation == epoch else { throw CancellationError() }
+        await refresh()
+    }
     private func enqueue(_ values: [SensorObservation]) {
         guard let store, !deleting, !values.isEmpty else { return }
         let previous = pendingWrite, expectedGeneration = generation
@@ -573,6 +606,7 @@ final class AppModel {
         tracking.configure(places: [], enabled: false)
         await pendingWrite?.value
         do {
+            if !uiTesting { try await companions.erase() }
             try mapDownloads.deleteAll()
             try MemoryPhotoDraft.clearAbandonedImports()
             try await store.eraseHistory(resetSettings: true)

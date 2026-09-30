@@ -8,7 +8,7 @@ public enum GPXExport {
         var xml = """
         <?xml version="1.0" encoding="UTF-8"?>
         <gpx version="1.1" creator="Places" xmlns="http://www.topografix.com/GPX/1/1">
-          <metadata><name>Places history</name><desc>Recorded location samples and saved places. Separate segments mark recording breaks or gaps longer than five minutes. No paths are estimated.</desc></metadata>
+          <metadata><name>Places history</name><desc>Recorded location samples and saved places. Separate segments mark device changes, recording breaks or gaps longer than five minutes. No paths are estimated.</desc></metadata>
 
         """
         func attributes(_ coordinate: Coordinate) -> String {
@@ -36,9 +36,11 @@ public enum GPXExport {
                 closeSegment(); continue
             }
             if let previous {
-                if previous.timestamp == observation.timestamp && previous.coordinate == coordinate { continue }
+                let sameDevice = previous.companionDevice == observation.companionDevice
+                    && previous.companionDeviceID == observation.companionDeviceID
+                if sameDevice && previous.timestamp == observation.timestamp && previous.coordinate == coordinate { continue }
                 let elapsed = observation.timestamp.timeIntervalSince(previous.timestamp)
-                if elapsed <= 0 || elapsed > 5 * 60 { closeSegment() }
+                if !sameDevice || elapsed <= 0 || elapsed > 5 * 60 { closeSegment() }
             }
             if !trackOpen { xml += "  <trk><name>Recorded locations</name>\n"; trackOpen = true }
             if !segmentOpen { xml += "    <trkseg>\n"; segmentOpen = true }

@@ -11,6 +11,8 @@ packages:
     exactVersion: 6.31.0
   PlacesCore:
     path: ../../packages/PlacesCore
+  PlacesCompanion:
+    path: ../../packages/PlacesCompanion
 settings:
   base:
     SWIFT_VERSION: '6.0'
@@ -33,6 +35,9 @@ targets:
     dependencies:
       - package: PlacesCore
       - package: MapLibre
+      - package: PlacesCompanion
+      - target: PlacesWatch
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places
@@ -50,6 +55,7 @@ targets:
       path: Places/Info.plist
       properties:
         CFBundleDisplayName: Places
+        CompanionKeychainGroup: $(AppIdentifierPrefix)com.adriaan.places.companions
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -57,7 +63,7 @@ targets:
         NSLocationWhenInUseUsageDescription: Places uses your location to build a private history on this iPhone.
         NSLocationAlwaysAndWhenInUseUsageDescription: Allow background location to record your journeys and recognize stops when you are not using Places. History stays on this iPhone.
         NSMotionUsageDescription: Movement helps Places recognize journeys and reduce unnecessary location work.
-        UIBackgroundModes: [location]
+        UIBackgroundModes: [location, remote-notification]
         UIAppFonts:
           - BricolageGrotesque-Regular.ttf
           - BricolageGrotesque-Bold.ttf
@@ -75,6 +81,116 @@ targets:
       properties:
         com.apple.developer.networking.wifi-info: true
         com.apple.developer.journal.allow: [suggestions]
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.adriaan.places]
+        com.apple.developer.icloud-services: [CloudKit]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.adriaan.places.companions]
+        aps-environment: development
+  PlacesMac:
+    type: application
+    platform: macOS
+    deploymentTarget: '15.0'
+    sources:
+      - path: ../macos/PlacesMac
+      - path: ../shared/PlacesMarker.swift
+    dependencies:
+      - package: PlacesCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.mac
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: ../macos/PlacesMac/Info.plist
+      properties:
+        CFBundleDisplayName: Places
+        LSUIElement: true
+        CompanionKeychainGroup: $(AppIdentifierPrefix)com.adriaan.places.companions
+        NSLocationUsageDescription: Places can contribute locations while you actively use this Mac. Locations are encrypted before delivery to your iPhone through your private iCloud.
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: ../macos/PlacesMac/PlacesMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.personal-information.location: true
+        com.apple.security.network.client: true
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.adriaan.places]
+        com.apple.developer.icloud-services: [CloudKit]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.adriaan.places.companions]
+  PlacesWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: '11.0'
+    sources:
+      - path: ../watch/PlacesWatch
+      - path: ../watch/Shared
+      - path: ../shared/PlacesMarker.swift
+    dependencies:
+      - package: PlacesCompanion
+      - target: PlacesComplication
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.watch
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: '4'
+      configs:
+        Release:
+          PLACES_CODE_SIGN_STYLE: Automatic
+          PLACES_CODE_SIGN_IDENTITY: iPhone Developer
+          PLACES_WATCH_PROFILE_UUID: ''
+          CODE_SIGN_STYLE: $(PLACES_CODE_SIGN_STYLE)
+          CODE_SIGN_IDENTITY: $(PLACES_CODE_SIGN_IDENTITY)
+          PROVISIONING_PROFILE_SPECIFIER: $(PLACES_WATCH_PROFILE_UUID)
+    info:
+      path: ../watch/PlacesWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Places
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.adriaan.places
+        WatchKeychainGroup: $(AppIdentifierPrefix)com.adriaan.places.watch
+        NSLocationWhenInUseUsageDescription: Places collects extra location evidence for your iPhone timeline. Automatic opportunities are controlled by watchOS; frequent tracking can continue in the background.
+        UIBackgroundModes: [location]
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: ../watch/PlacesWatch/PlacesWatch.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.adriaan.places.watch]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.adriaan.places.watch]
+  PlacesComplication:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: '11.0'
+    sources:
+      - path: ../watch/PlacesComplication
+      - path: ../watch/Shared
+      - path: ../shared/PlacesMarker.swift
+    dependencies:
+      - package: PlacesCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.watch.complication
+        TARGETED_DEVICE_FAMILY: '4'
+      configs:
+        Release:
+          PLACES_CODE_SIGN_STYLE: Automatic
+          PLACES_CODE_SIGN_IDENTITY: iPhone Developer
+          PLACES_COMPLICATION_PROFILE_UUID: ''
+          CODE_SIGN_STYLE: $(PLACES_CODE_SIGN_STYLE)
+          CODE_SIGN_IDENTITY: $(PLACES_CODE_SIGN_IDENTITY)
+          PROVISIONING_PROFILE_SPECIFIER: $(PLACES_COMPLICATION_PROFILE_UUID)
+    info:
+      path: ../watch/PlacesComplication/Info.plist
+      properties:
+        CFBundleDisplayName: Places
+        WatchKeychainGroup: $(AppIdentifierPrefix)com.adriaan.places.watch
+        NSWidgetWantsLocation: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: ../watch/PlacesComplication/PlacesComplication.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.adriaan.places.watch]
+        keychain-access-groups: [$(AppIdentifierPrefix)com.adriaan.places.watch]
   PlacesTests:
     type: bundle.unit-test
     platform: iOS
@@ -97,6 +213,14 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.uitests
 schemes:
+  PlacesMac:
+    build:
+      targets:
+        PlacesMac: all
+  PlacesWatch:
+    build:
+      targets:
+        PlacesWatch: all
   Places:
     build:
       targets:

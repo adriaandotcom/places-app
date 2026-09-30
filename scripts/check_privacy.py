@@ -66,6 +66,20 @@ def has_remote_url(text, gpx_export=False):
     return bool(re.search(r'https?://', text))
 
 
+def check_companion_cloud(text):
+    errors = []
+    for guard in ['guard consented else', 'container.privateCloudDatabase', 'CompanionCipher.seal(',
+                  'CompanionCipher.open(', 'try batch.validate(', 'try await checkAccount(account)']:
+        if guard not in text:
+            errors.append('Encrypted companion inbox missing safeguard: ' + guard)
+    if 'publicCloudDatabase' in text or 'sharedCloudDatabase' in text:
+        errors.append('Companion evidence must use the private database')
+    fields = set(re.findall(r'record\["([^"]+)"\]\s*=', text))
+    if fields != {'payload', 'keyID'}:
+        errors.append('Cloud records may contain only ciphertext and an opaque key identifier')
+    return errors
+
+
 def audit(root):
     errors = []
     website = root / 'apps/website'
@@ -79,16 +93,22 @@ def audit(root):
         errors += check_css(css.read_text(), css.parent, website)
     native = root / 'apps/ios/Places'
     sources = list(native.rglob('*.swift')) + list((root / 'packages/PlacesCore/Sources').rglob('*.swift'))
+    for path in ['apps/macos', 'apps/watch', 'apps/shared', 'packages/PlacesCompanion/Sources']:
+        sources += list((root / path).rglob('*.swift'))
+    cloud = root / 'packages/PlacesCompanion/Sources/PlacesCompanion/CloudInbox.swift'
     for source in sources:
         text = source.read_text()
-        if re.search(r'\b(WKWebView|AsyncImage|CKContainer|MKLocalSearch|CLGeocoder|MKMapSnapshotter)\b', text):
+        if re.search(r'\b(WKWebView|AsyncImage|MKLocalSearch|CLGeocoder|MKMapSnapshotter)\b', text):
             errors.append(f'{source.name}: unapproved runtime network entry point')
+        if re.search(r'\bCKContainer\b', text) and source != cloud:
+            errors.append(f'{source.name}: CloudKit must stay inside the encrypted, consent-gated adapter')
         if re.search(r'\bURLSession\b', text) and source != native / 'App/MapDownloads.swift':
             errors.append(f'{source.name}: downloads must stay in the approved map pack adapter')
         if ('import MapKit' in text or 'MKReverseGeocodingRequest(' in text) and source.name != 'AppleMapsView.swift':
             errors.append(f'{source.name}: Maps must stay inside the consent-gated adapter')
         if has_remote_url(text, source == root / 'packages/PlacesCore/Sources/PlacesCore/GPXExport.swift'):
             errors.append(f'{source.name}: native runtime must not use remote URLs')
+    errors += check_companion_cloud(cloud.read_text())
     maps = (native / 'Features/AppleMapsView.swift').read_text()
     if not re.search(r'if model\.mapsEnabled\s*\{\s*AppleMapSurface\(', maps):
         errors.append('MapKit surface is not behind the consent gate')
