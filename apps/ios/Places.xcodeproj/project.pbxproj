@@ -1193,7 +1193,7 @@
 				PLACES_CODE_SIGN_IDENTITY = "iPhone Developer";
 				PLACES_CODE_SIGN_STYLE = Automatic;
 				PLACES_COMPLICATION_PROFILE_UUID = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places.watch.complication;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places.watch.widgets;
 				PROVISIONING_PROFILE_SPECIFIER = "$(PLACES_COMPLICATION_PROFILE_UUID)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1290,7 +1290,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places.watch.complication;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places.watch.widgets;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;

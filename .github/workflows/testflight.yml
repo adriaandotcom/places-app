@@ -63,7 +63,7 @@ jobs:
           profile_dir.mkdir(parents=True, exist_ok=True)
           profile_values = []
           for prefix, bundle in [('PLACES', 'com.adriaan.places'), ('PLACES_WATCH', 'com.adriaan.places.watch'),
-                                 ('PLACES_COMPLICATION', 'com.adriaan.places.watch.complication')]:
+                                 ('PLACES_COMPLICATION', 'com.adriaan.places.watch.widgets')]:
               profile = temp / (prefix + '.mobileprovision')
               subprocess.run(['ruby', 'scripts/download_testflight_profile.rb', str(profile)],
                              env={**os.environ, 'ASC_KEY_PATH': str(key), 'PLACES_PROFILE_ID': os.environ[prefix + '_PROFILE_ID']}, check=True)

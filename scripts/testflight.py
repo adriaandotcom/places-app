@@ -79,7 +79,7 @@ def export_options(team, profile=None, watch_profile=None, complication_profile=
         if watch_profile:
             options['provisioningProfiles']['com.adriaan.places.watch'] = watch_profile
         if complication_profile:
-            options['provisioningProfiles']['com.adriaan.places.watch.complication'] = complication_profile
+            options['provisioningProfiles']['com.adriaan.places.watch.widgets'] = complication_profile
     return options
 
 

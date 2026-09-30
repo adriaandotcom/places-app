@@ -115,7 +115,7 @@ class TestFlightSmokeTests(unittest.TestCase):
             options = plistlib.loads((Path(directory) / 'ExportOptions.plist').read_bytes())
             self.assertEqual(options['signingStyle'], 'manual')
             self.assertEqual(options['provisioningProfiles'], {bundle: profile for bundle in
-                ['com.adriaan.places', 'com.adriaan.places.watch', 'com.adriaan.places.watch.complication']})
+                ['com.adriaan.places', 'com.adriaan.places.watch', 'com.adriaan.places.watch.widgets']})
 
     @unittest.skipUnless(sys.platform == 'darwin', 'Xcode project validation uses macOS plutil')
     def test_profile_settings_are_scoped_to_the_app_release_target(self):
