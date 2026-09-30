@@ -38,6 +38,7 @@ struct PlaceDetailsContent: View {
                 else { Button("Try location details again") { model.retryRegionLookup(for: place.id) }.accessibilityIdentifier("retry-city-lookup") }
             }
             MemorySection(context: memoryContext)
+            if case .place = memoryContext { PhotoSuggestionSection(placeID: place.id) }
             if !tripIDs.isEmpty {
                 SectionHeading(title: "Trips here")
                 ForEach(model.memories.trips.filter { tripIDs.contains($0.id) }) { trip in TripLink(trip: trip) }

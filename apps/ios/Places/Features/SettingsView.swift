@@ -24,6 +24,7 @@ struct SettingsView: View {
                 LabeledContent("Status", value: model.tracking.state.title)
                 NavigationLink("Battery & recording activity") { BatteryActivityView() }.accessibilityIdentifier("battery-activity")
                 NavigationLink("Mac & Apple Watch") { CompanionSettings() }
+                NavigationLink("Photo locations") { PhotoEvidenceSettings() }.accessibilityIdentifier("photo-evidence-settings")
                 if model.storageNeedsRetry {
                     Text("Recording is paused until your history can be saved.").foregroundStyle(Palette.muted)
                     Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retryStorage() } }

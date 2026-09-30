@@ -39,7 +39,7 @@ struct PastVisitReview: View {
                 ForEach($drafts) { $draft in
                     PastVisitReviewRow(draft: $draft, places: context.places,
                         resolution: plan?.visits.first { $0.id == draft.id },
-                        showIssues: showIssues)
+                        showIssues: showIssues, sourceName: selection.sourceName)
                 }
                 if let plan, !drafts.isEmpty {
                     Section("Ready to add") {
@@ -136,6 +136,7 @@ private struct PastVisitReviewRow: View {
     let places: [Place]
     let resolution: PastVisitResolution?
     let showIssues: Bool
+    let sourceName: String
     var body: some View {
         Section {
             Toggle(draft.candidate.name.isEmpty ? "Unnamed place" : draft.candidate.name, isOn: $draft.selected)
@@ -145,7 +146,7 @@ private struct PastVisitReviewRow: View {
                     Label("Already added", systemImage: "checkmark.circle").foregroundStyle(Palette.muted)
                 } else {
                     if let date = draft.candidate.date {
-                        Text("Apple recorded a visit: \(date.formatted(date: .abbreviated, time: .shortened))")
+                        Text("\(sourceName) recorded a location: \(date.formatted(date: .abbreviated, time: .shortened))")
                             .font(.footnote).foregroundStyle(Palette.muted)
                     }
                     Picker("Place", selection: $draft.placeID) {

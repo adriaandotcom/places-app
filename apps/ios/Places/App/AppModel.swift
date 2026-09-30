@@ -106,6 +106,7 @@ final class AppModel {
     var showExporter = false
     private var pendingWrite: Task<Void, Never>?
     let companions = PhoneCompanions()
+    let photoLibrary = PhotoLibraryEvidence()
     private var retryObservations: [SensorObservation] = []
     private var generation = 0
     private var deleting = false
@@ -210,6 +211,7 @@ final class AppModel {
                     await refresh()
                     enrichRegions()
                     ready = true; starting = false
+                    await photoLibrary.start(store: opened)
                     if !uiTesting {
                         tracking.configure(places: places, enabled: trackingEnabled)
                         companions.start { [weak self] batch in
@@ -243,6 +245,13 @@ final class AppModel {
         let previous = companions.lastReceived
         await companions.sync()
         return previous != companions.lastReceived
+    }
+
+    func preparePhotoBackgroundScan() async {
+        start()
+        await startupTask?.value
+        guard ready, !uiTesting, !deleting, !Task.isCancelled else { return }
+        await photoLibrary.finishBackgroundScan()
     }
 
     func refresh() async {
@@ -596,6 +605,7 @@ final class AppModel {
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
+        photoLibrary.reset()
         rewindNotifications.update([])
         monthlyRewindReminders = false; weeklyReviewReminders = false; rewindRequest = nil
         mapPreference = UUID(); mapProvider = .off; trackingEnabled = false

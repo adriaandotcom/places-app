@@ -77,6 +77,15 @@ public actor PlacesStore {
             try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
+        migrator.registerMigration("v8-photo-location-evidence") { db in
+            try db.execute(sql: """
+                CREATE TABLE photoEvidence (id TEXT PRIMARY KEY, assetID TEXT NOT NULL, capturedAt REAL NOT NULL, active INTEGER NOT NULL, payload BLOB NOT NULL);
+                CREATE INDEX photoEvidence_asset ON photoEvidence(assetID);
+                CREATE INDEX photoEvidence_date ON photoEvidence(capturedAt);
+                CREATE TABLE photoScan (assetID TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
+                CREATE TABLE photoReview (assetID TEXT PRIMARY KEY);
+                """)
+        }
         try migrator.migrate(queue)
     }
 
@@ -387,6 +396,7 @@ public actor PlacesStore {
     public func exportHistory() throws -> Data {
         var archive = try historyArchive()
         archive.memories = try memoryArchive()
+        archive.photoEvidence = try photoEvidence(includeHistory: true)
         return try StoreSQL.exportEncoder.encode(archive)
     }
     public func exportTestCase() throws -> Data {
@@ -422,6 +432,7 @@ public actor PlacesStore {
     public func eraseHistory(resetSettings: Bool = false) throws {
         try queue.write { db in
             try db.execute(sql: """
+                DELETE FROM photoEvidence; DELETE FROM photoScan; DELETE FROM photoReview;
                 DELETE FROM memoryPhotos; DELETE FROM memories; DELETE FROM trips; DELETE FROM people;
                 DELETE FROM evidenceLinks; DELETE FROM routePoints; DELETE FROM timeline; DELETE FROM overrides; DELETE FROM timelineSeparations;
                 DELETE FROM observations; DELETE FROM placeWifiLinks; DELETE FROM wifiAccessPoints;

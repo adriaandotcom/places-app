@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.adriaan.places.photo-evidence</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -30,6 +34,10 @@
 	<string>Places uses your location to build a private history on this iPhone.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Movement helps Places recognize journeys and reduce unnecessary location work.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>With your permission, Places checks recent photo locations and camera models on this iPhone to suggest missing visits and memories. Your photos are not uploaded by Places.</string>
+	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
+	<true/>
 	<key>UIAppFonts</key>
 	<array>
 		<string>BricolageGrotesque-Regular.ttf</string>
@@ -45,6 +53,7 @@
 	<array>
 		<string>location</string>
 		<string>remote-notification</string>
+		<string>fetch</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>

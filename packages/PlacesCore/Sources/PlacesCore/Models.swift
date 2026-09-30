@@ -276,6 +276,7 @@ public struct HistoryArchive: Codable, Sendable {
     public let trackingEvents: [TrackingEvent]
     public var separatedAt: [Date]? = nil
     public var memories: MemoryArchive? = nil
+    public var photoEvidence: [PhotoLocationEvidence]? = nil
 }
 
 public struct DiagnosticReport: Codable, Sendable {

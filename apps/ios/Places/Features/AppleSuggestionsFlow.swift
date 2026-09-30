@@ -13,6 +13,7 @@ struct AppleSuggestionSelection: Identifiable {
     var photos: [MemoryPhotoFile]
     // Own the protected files until the review is saved or dismissed.
     let photoDraft: MemoryPhotoDraft
+    var sourceName = "Apple"
 
     func memory(at place: Place) -> PlaceMemory {
         var memory = PlaceMemory(id: PlaceMemory.suggestionID(id, placeID: place.id), text: title,

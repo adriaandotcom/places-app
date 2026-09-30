@@ -7,6 +7,7 @@ struct PlaceEditor: View {
     private let original: Place?
     private let assigning: TimelineItem?
     private let onSave: (() -> Void)?
+    private let onSavedPlace: ((Place) -> Void)?
     private let wifiOnly: Bool
     @State private var visitArrival: Date
     @State private var visitDeparture: Date
@@ -66,10 +67,11 @@ struct PlaceEditor: View {
     }
 
     init(place: Place? = nil, suggestedName: String = "", coordinate: Coordinate? = nil,
-         assigning: TimelineItem? = nil, suggestion: CatalogPlace? = nil, wifiOnly: Bool = false, onSave: (() -> Void)? = nil) {
+         assigning: TimelineItem? = nil, suggestion: CatalogPlace? = nil, wifiOnly: Bool = false, onSave: (() -> Void)? = nil, onSavedPlace: ((Place) -> Void)? = nil) {
         original = place
         self.assigning = assigning
         self.onSave = onSave
+        self.onSavedPlace = onSavedPlace
         self.wifiOnly = wifiOnly
         _visitArrival = State(initialValue: assigning?.start ?? Date())
         _visitDeparture = State(initialValue: assigning?.end ?? Date())
@@ -372,11 +374,12 @@ struct PlaceEditor: View {
     }
     private func useSavedPlace(_ place: Place) {
         existingSuggestion = nil
-        guard assigning != nil else { dismiss(); return }
+        guard assigning != nil else { onSavedPlace?(place); dismiss(); return }
         guard validVisitInterval else { return }
         saving = true
         Task {
             if await model.save(place, assigning: assignment) {
+                onSavedPlace?(place)
                 if let onSave { onSave() } else { dismiss() }
             }
             saving = false
@@ -413,6 +416,7 @@ struct PlaceEditor: View {
         saving = true; focusedField = nil; wifiFocused = false
         Task {
             if await model.save(place, assigning: assignment) {
+                onSavedPlace?(place)
                 if let onSave { onSave() } else { dismiss() }
             }
             saving = false
@@ -456,7 +460,7 @@ struct PlaceEditor: View {
     }
 }
 
-private struct SavedPlacePicker: View {
+struct SavedPlacePicker: View {
     @Environment(AppModel.self) private var model
     let anchor: Coordinate?
     let select: (Place) -> Void

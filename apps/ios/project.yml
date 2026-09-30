@@ -63,7 +63,10 @@ targets:
         NSLocationWhenInUseUsageDescription: Places uses your location to build a private history on this iPhone.
         NSLocationAlwaysAndWhenInUseUsageDescription: Allow background location to record your journeys and recognize stops when you are not using Places. History stays on this iPhone.
         NSMotionUsageDescription: Movement helps Places recognize journeys and reduce unnecessary location work.
-        UIBackgroundModes: [location, remote-notification]
+        NSPhotoLibraryUsageDescription: With your permission, Places checks recent photo locations and camera models on this iPhone to suggest missing visits and memories. Your photos are not uploaded by Places.
+        PHPhotoLibraryPreventAutomaticLimitedAccessAlert: true
+        BGTaskSchedulerPermittedIdentifiers: [com.adriaan.places.photo-evidence]
+        UIBackgroundModes: [location, remote-notification, fetch]
         UIAppFonts:
           - BricolageGrotesque-Regular.ttf
           - BricolageGrotesque-Bold.ttf

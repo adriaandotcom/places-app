@@ -1,6 +1,32 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testPhotoLibraryOptInUsesSystemPermissionAndCanTurnOff() {
+        let app = launch(fixture: true)
+        app.buttons["open-settings"].tap()
+        app.buttons["photo-evidence-settings"].tap()
+        app.switches["photo-evidence-toggle"].coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let fullAccess = springboard.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Allow Full Access")).firstMatch
+        if fullAccess.waitForExistence(timeout: 5) { fullAccess.tap() }
+        XCTAssertTrue(app.buttons["Check recent photos"].waitForExistence(timeout: 10))
+        app.switches["photo-evidence-toggle"].coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertFalse(app.buttons["Check recent photos"].exists)
+    }
+
+    func testPhotoEvidenceIsOptionalAndSeparateFromSelectivePhotoPickers() {
+        let app = launch(fixture: true)
+        app.buttons["open-settings"].tap()
+        app.buttons["photo-evidence-settings"].tap()
+        let toggle = app.switches["photo-evidence-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "0")
+        XCTAssertFalse(app.buttons["Check recent photos"].exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Photo locations require explicit opt in"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
     func testGapCanBePartiallyAssignedToSavedPlace() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-grouped-history"]

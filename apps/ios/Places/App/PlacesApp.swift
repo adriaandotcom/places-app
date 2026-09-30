@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import BackgroundTasks
 
 @MainActor final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
@@ -13,6 +14,14 @@ import UserNotifications
         AppModel.shared.mapDownloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
     }
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: PhotoLibraryEvidence.taskID, using: nil) { task in
+            let work = Task { @MainActor in
+                let model = AppModel.shared
+                await model.preparePhotoBackgroundScan()
+                task.setTaskCompleted(success: !Task.isCancelled)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
         // Start from the lifecycle entry point too, including location-triggered background launches.
         UNUserNotificationCenter.current().delegate = AppModel.shared.rewindNotifications
         AppModel.shared.start()
@@ -42,7 +51,7 @@ import UserNotifications
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in model.start() }
             .onChange(of: scenePhase) { _, phase in
                 if !model.uiTesting { model.tracking.sceneChanged(isForeground: phase != .background) }
-                if phase == .active { Task { await model.refresh(); if !model.uiTesting { await model.companions.sync() } } }
+                if phase == .active { Task { await model.refresh(); if !model.uiTesting { model.photoLibrary.updateAuthorization(); model.photoLibrary.requestScan(); await model.companions.sync() } } }
             }
             .alert("Places needs your attention", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
                 if !model.ready { Button("Retry") { model.errorMessage = nil; model.start() } }

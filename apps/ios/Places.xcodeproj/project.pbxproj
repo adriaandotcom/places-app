@@ -50,6 +50,7 @@
 		6BE534398985AF0328AA92CD /* WatchStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FAB89CB7816AF999CCAE81 /* WatchStorage.swift */; };
 		6D35334C531006235285972A /* PlacesComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5EE937BF2598F99C9585DBB /* PlacesComplication.swift */; };
 		6F2A64643DF8EBE2C7D4255C /* OfflineMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D5BEBE17D2BE0926E0AE70 /* OfflineMapTests.swift */; };
+		7118A12859AD464CD14C4FD0 /* PhotoEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 537C540F26C2DF35BDB36808 /* PhotoEvidenceTests.swift */; };
 		78C26273A75963A1C910CEF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B68532DD126DBA8B7A9433BD /* Assets.xcassets */; };
 		796FE5D13E8828D6C58D23B9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 763BB8E666C49E7CFF673E53 /* AppIcon.icon */; };
 		7AA6D9C4DC1869C7A358DC4E /* WatchCompanionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48647B64E63104ACE3991E42 /* WatchCompanionModel.swift */; };
@@ -66,6 +67,7 @@
 		8BB1D71DC4F9F465A025CF86 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9F8FAD56FA5CF7F3EA25B16E /* Assets.xcassets */; };
 		8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738274611DA8F1F53B88808E /* HistoryCalendar.swift */; };
 		9162EEFC324833E93A1486AF /* OfflineMaps in Resources */ = {isa = PBXBuildFile; fileRef = 3D4D0C7A10D98A0969FDD33A /* OfflineMaps */; };
+		93D8C83BB9C93BFE1026E126 /* PhotoLibraryEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8F72C7C69401B63C982A1C /* PhotoLibraryEvidence.swift */; };
 		9612B46A325D2254206D4715 /* AppleMapsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */; };
 		A0149028523DCE2ECFAC8FF0 /* MapParkCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943131F4A6EC985998F4F312 /* MapParkCatalog.swift */; };
 		A3FB6C17CAEF0EE2EBFE79D6 /* BricolageGrotesque-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */; };
@@ -94,6 +96,7 @@
 		DC70013C8EECEAF7F2EF04C8 /* BricolageGrotesque-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */; };
 		E61DF0B8DB6F157ECE4AC694 /* PlacesWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4DFDBA047D9418E8CC566F /* PlacesWatchApp.swift */; };
 		E99EF9C7B7D61B58D2B7B6DF /* BricolageGrotesque-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8128F6BB84B25BE437EE88D2 /* BricolageGrotesque-Bold.ttf */; };
+		E9D7CA7D26BA0FAA0E8ADC7D /* PhotoSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 846E0099882E4A6B2B150021 /* PhotoSuggestions.swift */; };
 		EAB759C2F2A1F707220B3270 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 27C253FE1CDE30B2F3EC3D0A /* PrivacyInfo.xcprivacy */; };
 		EBA6498DE6D9CA6175EDF7F4 /* CroppedPhotoEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67FB75D8D21CAEF00D6A179C /* CroppedPhotoEditor.swift */; };
 		EF92AAD94347883388A2037F /* PhoneCompanions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4182BCBFD5ADB5FB51576601 /* PhoneCompanions.swift */; };
@@ -182,6 +185,7 @@
 		27C253FE1CDE30B2F3EC3D0A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		28EAB82AE40CC1AEC1590474 /* PlacesCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PlacesCore; path = ../../packages/PlacesCore; sourceTree = SOURCE_ROOT; };
 		2A9BFD85555F9A5A776D14F2 /* PlacesMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesMacApp.swift; sourceTree = "<group>"; };
+		2B8F72C7C69401B63C982A1C /* PhotoLibraryEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryEvidence.swift; sourceTree = "<group>"; };
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesApp.swift; sourceTree = "<group>"; };
@@ -197,6 +201,7 @@
 		4CF65AC60760C72109D6FE00 /* PersonComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonComponents.swift; sourceTree = "<group>"; };
 		4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Regular.ttf"; sourceTree = "<group>"; };
 		532E87FE14E3FE4D2DFE9994 /* MacCompanionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCompanionModel.swift; sourceTree = "<group>"; };
+		537C540F26C2DF35BDB36808 /* PhotoEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoEvidenceTests.swift; sourceTree = "<group>"; };
 		5712D6BB250F554AD0623178 /* RewindViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindViews.swift; sourceTree = "<group>"; };
 		5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapView.swift; sourceTree = "<group>"; };
 		5F4DFDBA047D9418E8CC566F /* PlacesWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesWatchApp.swift; sourceTree = "<group>"; };
@@ -213,6 +218,7 @@
 		7F1606887387E5B16905FC86 /* MapPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresentation.swift; sourceTree = "<group>"; };
 		8128F6BB84B25BE437EE88D2 /* BricolageGrotesque-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BricolageGrotesque-Bold.ttf"; sourceTree = "<group>"; };
 		82D6B89EC326F3FF03CBE23A /* AppleMapsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMapsView.swift; sourceTree = "<group>"; };
+		846E0099882E4A6B2B150021 /* PhotoSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSuggestions.swift; sourceTree = "<group>"; };
 		85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceIconPicker.swift; sourceTree = "<group>"; };
 		8683E4F2F033E292992D7CAC /* AddPastVisits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPastVisits.swift; sourceTree = "<group>"; };
 		87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindNotificationTests.swift; sourceTree = "<group>"; };
@@ -313,6 +319,7 @@
 			isa = PBXGroup;
 			children = (
 				D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */,
+				2B8F72C7C69401B63C982A1C /* PhotoLibraryEvidence.swift */,
 				074E8339AD3313BBFD04D7BA /* TrackingController.swift */,
 			);
 			path = Tracking;
@@ -345,6 +352,7 @@
 				0E0914E2F6C1361BCFAF40D5 /* PermissionAccessRow.swift */,
 				4CF65AC60760C72109D6FE00 /* PersonComponents.swift */,
 				E3572E6AA534B1A12C5149AD /* PhotoGrid.swift */,
+				846E0099882E4A6B2B150021 /* PhotoSuggestions.swift */,
 				1DC934B5FB2EF8487E979FE7 /* PlaceAreaEditor.swift */,
 				48A6DE9AD1B5DED22B021530 /* PlaceCatalogViews.swift */,
 				98868C4133FB96F6C4378A35 /* PlaceColorPicker.swift */,
@@ -448,6 +456,7 @@
 			children = (
 				F3B737EA8F8B1D81197E245F /* MemoryPhotoTests.swift */,
 				F8D5BEBE17D2BE0926E0AE70 /* OfflineMapTests.swift */,
+				537C540F26C2DF35BDB36808 /* PhotoEvidenceTests.swift */,
 				A972E8FFE2B816017FB3CFD6 /* PlaceColorTests.swift */,
 				06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */,
 				87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */,
@@ -853,6 +862,7 @@
 			files = (
 				53C9CE307FC18B883E9BA41A /* MemoryPhotoTests.swift in Sources */,
 				6F2A64643DF8EBE2C7D4255C /* OfflineMapTests.swift in Sources */,
+				7118A12859AD464CD14C4FD0 /* PhotoEvidenceTests.swift in Sources */,
 				327E8C072E72C9E24B046093 /* PlaceColorTests.swift in Sources */,
 				2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */,
 				CB030EB2FECF48BC78AE2A32 /* RewindNotificationTests.swift in Sources */,
@@ -897,6 +907,8 @@
 				D149052064DDEB622FD5B974 /* PersonComponents.swift in Sources */,
 				EF92AAD94347883388A2037F /* PhoneCompanions.swift in Sources */,
 				CFDD21A83C4FDC4B87238412 /* PhotoGrid.swift in Sources */,
+				93D8C83BB9C93BFE1026E126 /* PhotoLibraryEvidence.swift in Sources */,
+				E9D7CA7D26BA0FAA0E8ADC7D /* PhotoSuggestions.swift in Sources */,
 				C3C5E2D02AE0D27792664BA4 /* PlaceAreaEditor.swift in Sources */,
 				2609FF894CFA95E1129F2C6A /* PlaceCatalogViews.swift in Sources */,
 				C22CDA1BFE496A1803F43CAE /* PlaceColorPicker.swift in Sources */,
