@@ -78,6 +78,9 @@ struct TimelineDetail: View {
                          ? "There aren’t enough observations to say where you were. You can fill this interval yourself, or leave it unknown."
                          : "We know these two locations. The path and any stops between them weren’t recorded.").font(BrandFont.body)
                 }
+                if isUnnamedStay || item.kind == .gap {
+                    PhotoLocationTip(day: item.start)
+                }
                 if let connection = item.connection {
                     VStack(alignment: .leading, spacing: 10) {
                         Label(model.endpointName(connection.from, fallback: "Earlier location"), systemImage: "a.circle.fill")

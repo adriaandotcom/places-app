@@ -10,8 +10,10 @@ struct PhotoEvidenceSettings: View {
             Section {
                 Toggle("Use photo locations", isOn: Binding(get: { library.enabled }, set: { value in Task { await library.setEnabled(value) } }))
                     .accessibilityIdentifier("photo-evidence-toggle")
+            } header: {
+                Text("Remember missing places")
             } footer: {
-                Text("Opt in to check the last 30 days for photos with a location and the same camera model as this iPhone. Full Photos access is needed. Matching the model does not prove you took the photo.")
+                Text("Full Access lets Places find recent photos automatically, including new ones. Selected Photos only shares images you choose, so you would have to keep selecting photos yourself.")
             }
             if library.enabled {
                 Section {
@@ -23,22 +25,60 @@ struct PhotoEvidenceSettings: View {
                         Button("Check recent photos") { Task { await library.sync() } }.disabled(library.scanning)
                         NavigationLink("Review photo suggestions") { PhotoSuggestionsOverview() }
                     } else { Button("Manage Photos access in Settings") { model.tracking.openSettings() } }
-                } footer: {
-                    Text("Checks run when Places opens and when iOS allows background refresh. Only local originals are checked automatically; photos stored only in iCloud wait until available here. Review possible visits before adding them to your timeline.")
                 }
             }
-            Section {
-                Text("Automatic scans read dates, coordinates and camera metadata on this iPhone. Photo locations don’t create routes or overwrite your corrections. Photos are only copied into a memory after you choose them.")
-                Text("Avatars and manually added photos still use Apple’s selective picker, even when this feature is off or full-library access is removed.")
-            }.font(.footnote).foregroundStyle(Palette.muted)
+            Section("What happens when you enable it") {
+                Text("iOS grants access to your whole library. Places limits its checks to photos from the last 30 days, reading their dates, saved locations and camera models on this iPhone.")
+                Text("Only photos matching this iPhone model are used. Another iPhone of the same model can also match; this cannot prove which device took a photo.")
+                Text("Checks run when you open Places and when iOS allows background refresh. Automatic checks only read originals already on this iPhone; they don’t download photos from iCloud.")
+            }.font(.subheadline)
+            Section("You choose what to add") {
+                Text("Photo locations suggest missing places and memories. You review places and visit times before adding them. They don’t automatically create visits or routes, or overwrite your corrections.")
+                Text("Places does not upload your photos or their location metadata. Photos are only copied into a memory after you select them; selected iCloud photos may download at that point.")
+                Text("Turning this off stops checks and hides suggestions. Avatars and manually added photos keep working with Apple’s selective picker, even if you remove Full Access.")
+            }.font(.subheadline)
             Section {
                 Button("Remove imported photo evidence…", role: .destructive) { removing = true }
-            } footer: { Text("Turns this feature off and removes its imported metadata and review history. Memories and visits you confirmed are kept.") }
+            } footer: { Text("Imported metadata stays on this iPhone until you remove it here. This turns the feature off and removes that metadata and review history. Memories and visits you confirmed are kept.") }
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Photo locations")
             .task { library.updateAuthorization() }
             .confirmationDialog("Remove imported photo evidence?", isPresented: $removing, titleVisibility: .visible) {
                 Button("Remove and turn off", role: .destructive) { Task { await library.erase() } }
             }
+    }
+}
+
+/// A permission-free entry point shared by empty days and unknown locations.
+struct PhotoLocationTip: View {
+    @Environment(AppModel.self) private var model
+    let day: Date
+    @State private var showingSettings = false
+    private var isRecentDay: Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        guard let firstDay = calendar.date(byAdding: .day, value: -30, to: today) else { return false }
+        return (firstDay...today).contains(calendar.startOfDay(for: day))
+    }
+    var body: some View {
+        Group {
+            if !model.photoLibrary.canRead, isRecentDay {
+                Button { showingSettings = true } label: {
+                    InfoRow(symbol: "photo.on.rectangle.angled", title: "Find places in your photos",
+                        subtitle: "Photos from the last 30 days may help fill gaps in your timeline. Set up photo locations.",
+                        showsDisclosure: true)
+                }.buttonStyle(.plain).foregroundStyle(Palette.ink).padding(.top, Layout.spacing)
+                    .accessibilityIdentifier("photo-location-tip")
+            }
+        }.sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                PhotoEvidenceSettings().navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingSettings = false }
+                        }
+                    }
+            }.environment(\.hasMainNavigation, false)
+        }
     }
 }
 

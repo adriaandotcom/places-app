@@ -189,6 +189,11 @@ private struct TimelineDayPage: View {
                             .buttonStyle(.plain).accessibilityIdentifier("timeline-\(item.kind.rawValue)-\(item.id)")
                     }
                 }
+                if loaded, !failed, items.isEmpty || items.contains(where: {
+                    $0.kind == .gap || ($0.kind == .stay && model.place(for: $0) == nil)
+                }) {
+                    PhotoLocationTip(day: day)
+                }
                 PhotoSuggestionSection(day: day)
                 // A deleted place must not strand its notes or photos. Detached
                 // memories remain available on their date even without a visit.
