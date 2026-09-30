@@ -159,15 +159,15 @@ import PlacesCore
             let ids = Set(photos.map(\.assetID)); evidence.removeAll { ids.contains($0.assetID) }
         } catch { status = "Couldn’t save your review. Please try again." }
     }
-    func deleteSuggestion(_ photos: [PhotoLocationEvidence], undo: DeleteUndo) async {
+    func deleteSuggestions(_ suggestions: [PhotoVisitSuggestion], undo: DeleteUndo) async {
         guard let store, canRead else { return }
         let epoch = revision
-        let ids = photos.map(\.assetID)
+        let ids = suggestions.flatMap(\.photos).map(\.assetID)
         do {
             try await store.dismissPhotoSuggestions(assetIDs: ids)
             guard epoch == revision else { return }
             evidence.removeAll { ids.contains($0.assetID) }
-            undo.register("Suggestion deleted") { [weak self] in
+            undo.register(suggestions.count == 1 ? "Suggestion hidden" : "\(suggestions.count) suggestions hidden") { [weak self] in
                 guard let self, epoch == self.revision else { throw CancellationError() }
                 try await store.restorePhotoSuggestions(assetIDs: ids)
                 let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date())!

@@ -160,7 +160,9 @@ struct TimelineDayStrip: View {
         // Follow the moving highlight only at an edge. Ordinary horizontal browsing
         // keeps its native momentum and visible dates stay still during a day swipe.
         let target = min(maximum, max(minimum, min(left - spacing, max(scrollOffset, left + width + spacing - viewportWidth))))
-        if abs(target - scrollOffset) > 0.5 { position.scrollTo(x: target) }
+        // ScrollPosition includes the leading content margin; ScrollGeometry's
+        // contentOffset excludes it. Convert before moving the viewport.
+        if abs(target - scrollOffset) > 0.5 { position.scrollTo(x: target + scrollGeometry.contentInsets.leading) }
     }
     private func dayLabel(_ day: Date, count: Int) -> some View {
         VStack(spacing: 3) {

@@ -123,11 +123,13 @@ struct SwipeToDelete: ViewModifier {
             content.offset(x: offset)
                 .background(alignment: .trailing) {
                     if offset < 0 {
-                        Button(action: commit) {
-                            Label(title, systemImage: "trash").labelStyle(.iconOnly).font(.title3)
-                                .frame(width: max(actionWidth, -offset)).frame(maxHeight: .infinity)
-                                .foregroundStyle(.white).background(.red)
-                        }.buttonStyle(.plain).accessibilityLabel(title)
+                        Color.red.overlay(alignment: .trailing) {
+                            Button(action: commit) {
+                                Label(title, systemImage: "trash").labelStyle(.iconOnly).font(.title3)
+                                    .frame(width: max(actionWidth, -offset)).frame(maxHeight: .infinity)
+                                    .foregroundStyle(.white).contentShape(Rectangle())
+                            }.buttonStyle(.plain).accessibilityLabel(title)
+                        }
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))

@@ -102,8 +102,8 @@ struct PhotoSuggestionsOverview: View {
                         message: "Reviewed photos won’t appear again. New suggestions appear as you take more photos.")
                 }
                 ForEach(groups) { group in
-                    PhotoSuggestionCard(group: group).modifier(CardSurface())
-                        .modifier(SwipeToDelete { Task { await model.photoLibrary.deleteSuggestion(group.photos, undo: model.deleteUndo) } })
+                    PhotoSuggestionCard(group: group).modifier(CardSurface(padding: 0))
+                        .modifier(SwipeToDelete { Task { await model.photoLibrary.deleteSuggestions([group], undo: model.deleteUndo) } })
                 }
             }.padding(Layout.gutter)
         }.background(Palette.background).modifier(MainNavigationClearance()).navigationTitle("Photo suggestions")
@@ -129,24 +129,36 @@ struct PhotoSuggestionSection: View {
     var day: Date?
     private var groups: [PhotoVisitSuggestion] { photoSuggestions(model, day: day, item: item, placeID: placeID) }
     var body: some View {
+        let groups = groups
         if let group = groups.first {
             VStack(spacing: 0) {
-                PhotoSuggestionCard(group: group).padding(Layout.spacing)
+                PhotoSuggestionCard(group: group)
                 if groups.count > 1 {
                     Divider().padding(.horizontal, Layout.spacing)
                     NavigationLink {
                         PhotoSuggestionsOverview(day: day, item: item, placeID: placeID, excludingID: group.id)
                     } label: {
-                        HStack {
-                            Text("Review \(groups.count - 1) more \(groups.count == 2 ? "suggestion" : "suggestions")")
-                            Spacer(); Image(systemName: "chevron.right").font(.caption)
-                        }.font(.subheadline).frame(minHeight: Layout.touchTarget).padding(.horizontal, Layout.spacing)
+                        PhotoSuggestionActionLabel(title: "Review \(groups.count - 1) more \(groups.count == 2 ? "suggestion" : "suggestions")", disclosure: true)
                     }.foregroundStyle(Palette.green).accessibilityIdentifier("more-photo-suggestions")
                 }
             }.modifier(CardSurface(padding: 0))
-                .modifier(SwipeToDelete { Task { await model.photoLibrary.deleteSuggestion(group.photos, undo: model.deleteUndo) } })
+                .modifier(SwipeToDelete { Task { await model.photoLibrary.deleteSuggestions(groups, undo: model.deleteUndo) } })
                 .padding(.top, Layout.spacing)
         }
+    }
+}
+
+private struct PhotoSuggestionActionLabel: View {
+    let title: String
+    var disclosure = false
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer(minLength: Layout.compact)
+            if disclosure { Image(systemName: "chevron.right").font(.caption) }
+        }.font(.subheadline).foregroundStyle(Palette.green)
+            .frame(minHeight: Layout.touchTarget).padding(.horizontal, Layout.spacing)
+            .contentShape(Rectangle())
     }
 }
 
@@ -156,22 +168,24 @@ private struct PhotoSuggestionCard: View {
     @State private var creatingMemory = false
     @State private var preview: PhotoReference?
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.compact) {
-            NavigationLink { PhotoSuggestionReview(group: group) } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: Layout.compact) {
-                        Text(group.place(in: model.places)?.name ?? "Remember this place?").font(BrandFont.title)
-                        Text(group.start.formatted(date: .abbreviated, time: .shortened)).font(.footnote).foregroundStyle(Palette.muted)
-                    }
-                    Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
-                }.frame(minHeight: Layout.touchTarget).contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityIdentifier("suggestion-review-\(group.id)")
-            PhotoGrid(items: Array(group.previewPhotos.prefix(3)), open: { preview = PhotoReference(id: $0.id) }) { photo in
-                LibraryPhotoThumbnail(photo: photo)
-            }
-            Button("Create memory with these photos") { creatingMemory = true }
-                .font(.subheadline).foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget)
-                .accessibilityIdentifier("suggestion-create-memory-\(group.id)")
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Layout.compact) {
+                NavigationLink { PhotoSuggestionReview(group: group) } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: Layout.compact) {
+                            Text(group.place(in: model.places)?.name ?? "Remember this place?").font(BrandFont.title)
+                            Text(group.start.formatted(date: .abbreviated, time: .shortened)).font(.footnote).foregroundStyle(Palette.muted)
+                        }
+                        Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                    }.frame(minHeight: Layout.touchTarget).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityIdentifier("suggestion-review-\(group.id)")
+                PhotoGrid(items: Array(group.previewPhotos.prefix(3)), open: { preview = PhotoReference(id: $0.id) }) { photo in
+                    LibraryPhotoThumbnail(photo: photo)
+                }
+            }.padding(Layout.spacing)
+            Button { creatingMemory = true } label: {
+                PhotoSuggestionActionLabel(title: "Create memory with these photos")
+            }.buttonStyle(.plain).accessibilityIdentifier("suggestion-create-memory-\(group.id)")
         }.accessibilityElement(children: .contain).accessibilityIdentifier("photo-suggestion-\(group.id)")
             .sheet(isPresented: $creatingMemory) {
                 PhotoMemoryComposer(group: group).environment(\.hasMainNavigation, false)
@@ -298,7 +312,7 @@ private struct PhotoSuggestionReview: View {
                             .buttonStyle(PrimaryButton()).disabled(place == nil).accessibilityIdentifier("photo-add-visit")
                     }
                     Button("Delete suggestion", role: .destructive) {
-                        Task { await model.photoLibrary.deleteSuggestion(group.photos, undo: model.deleteUndo); dismiss() }
+                        Task { await model.photoLibrary.deleteSuggestions([group], undo: model.deleteUndo); dismiss() }
                     }.foregroundStyle(.red).frame(maxWidth: .infinity, minHeight: Layout.touchTarget)
                 }
             }.padding(Layout.gutter)
