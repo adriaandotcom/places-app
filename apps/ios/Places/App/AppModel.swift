@@ -45,6 +45,7 @@ final class AppModel {
     private(set) var replayingOnboarding = false
     private var mapSelectionRequest = UUID()
     private(set) var mapFocusRequest = UUID()
+    private(set) var mapViewport: MapViewport?
     private(set) var mapPeriod: HistoryPeriod?
     private(set) var mapTimeline: [TimelineItem] = []
     private(set) var mapRoutePoints: [RoutePoint] = []
@@ -301,6 +302,7 @@ final class AppModel {
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
             if day == selectedDay && period == mapPeriod && selectionRequest == mapSelectionRequest {
+                if mapFocusRequest != selectionRequest { mapViewport = nil }
                 mapTimeline = mapItems; mapRoutePoints = mapPoints
                 // Commit the framing request together with the loaded period, never
                 // while the map still contains the previous selection's places.
@@ -353,6 +355,11 @@ final class AppModel {
             rewindNotifications.update(RewindReminder.plan(now: now, monthly: monthlyRewindReminders,
                 weekly: weeklyReviewReminders, recordedMonths: recordedMonths, missingPlaces: missing))
         } catch { rewindNotifications.update([]) }
+    }
+
+    func rememberMapViewport(_ viewport: MapViewport?, for request: UUID) {
+        guard request == mapFocusRequest, !deleting else { return }
+        mapViewport = viewport
     }
 
     func selectDay(_ day: Date) {
@@ -628,7 +635,7 @@ final class AppModel {
         lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
         placeLookupExplained = false; regionLookupIssues = [:]
         regionRun = UUID(); regionTask?.cancel(); regionTask = nil; regionAttempts = []; lookingUpRegions = false
-        mapPeriod = nil; mapTimeline = []; mapRoutePoints = []
+        mapPeriod = nil; mapTimeline = []; mapRoutePoints = []; mapViewport = nil
         tracking.configure(places: [], enabled: false)
         await pendingWrite?.value
         do {

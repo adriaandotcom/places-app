@@ -208,7 +208,9 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
     let text = "🌴 With @Ren"
     let query = try #require(PersonMentions.query(in: text, selection: NSRange(location: text.utf16.count, length: 0), mentions: []))
     let tagged = PersonMentions.inserting(a, in: text, mentions: [], replacing: query.range)
-    #expect(tagged.text == "🌴 With @Renée Smith ")
+    #expect(tagged.text == "🌴 With @Renée ")
+    #expect(a.name == "Renée Smith")
+    #expect(MemoryPerson(name: "  Anne-Marie  van Dijk ").firstName == "Anne-Marie")
     #expect(tagged.mentions.first?.personID == a.id)
     #expect(tagged.mentions.first?.personID != b.id)
     let shifted = PersonMentions.adjusted(tagged.mentions, replacing: NSRange(location: 0, length: 0), with: "Hello ")

@@ -58,7 +58,7 @@ public enum PersonMentions {
 
     public static func inserting(_ person: MemoryPerson, in text: String, mentions: [PersonMention], replacing range: NSRange) -> (text: String, mentions: [PersonMention], caret: Int) {
         guard let swiftRange = Range(range, in: text) else { return (text, mentions, text.utf16.count) }
-        let label = "@" + person.name
+        let label = "@" + person.firstName
         let replacement = label + " "
         var updated = adjusted(mentions, replacing: range, with: replacement)
         updated.append(PersonMention(personID: person.id, location: range.location, length: label.utf16.count))

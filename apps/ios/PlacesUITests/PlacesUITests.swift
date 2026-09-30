@@ -204,6 +204,39 @@ import XCTest
         XCTAssertTrue(favorite.waitForNonExistence(timeout: 5))
     }
 
+    func testAppleSuggestionPickerCanCancelReopenAndChooseNext() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]
+        app.launch()
+        let entry = app.buttons["apple-memory-suggestions"]
+        reveal(entry, in: app); entry.tap()
+        let cancelPicker = app.buttons["cancel-fixture-suggestion"]
+        XCTAssertTrue(cancelPicker.waitForExistence(timeout: 5))
+        cancelPicker.tap()
+        let choose = app.buttons["choose-apple-suggestion"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 5)); choose.tap()
+        selectSampleSuggestion(in: app)
+        XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
+        app.buttons["confirm-past-visits"].tap()
+        XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
+        app.buttons["next-suggestion"].tap()
+        XCTAssertTrue(cancelPicker.waitForExistence(timeout: 5)); cancelPicker.tap()
+        XCTAssertTrue(choose.waitForExistence(timeout: 5)); choose.tap()
+        selectSampleSuggestion(in: app)
+        XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        reveal(entry, in: app); entry.tap()
+        XCTAssertTrue(cancelPicker.waitForExistence(timeout: 5)); cancelPicker.tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+    }
+
+    private func selectSampleSuggestion(in app: XCUIApplication) {
+        let sample = app.buttons["select-fixture-suggestion"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5))
+        sample.tap()
+    }
+
     func testPastVisitsReviewCancellationAndConfirmedAdditionBeforeHistory() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-past-visits"]
@@ -212,12 +245,14 @@ import XCTest
         XCTAssertTrue(addPast.waitForExistence(timeout: 10))
         let entry = XCTAttachment(screenshot: app.screenshot()); entry.name = "Add past visits before recorded history"; entry.lifetime = .keepAlways; add(entry)
         addPast.tap()
+        selectSampleSuggestion(in: app)
         XCTAssertTrue(app.datePickers["past-visit-departure"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Set departure"].exists)
         XCTAssertFalse(app.buttons["Use departure time"].exists)
         app.buttons["Cancel"].tap()
         XCTAssertTrue(addPast.waitForExistence(timeout: 5))
         addPast.tap()
+        selectSampleSuggestion(in: app)
         XCTAssertTrue(app.datePickers["past-visit-departure"].waitForExistence(timeout: 5))
         let review = XCTAttachment(screenshot: app.screenshot()); review.name = "Editable arrival and departure"; review.lifetime = .keepAlways; add(review)
         app.buttons["confirm-past-visits"].tap()
@@ -225,6 +260,7 @@ import XCTest
         XCTAssertEqual(app.staticTexts["suggestion-saved"].label, "Visits and memory added")
         let saved = XCTAttachment(screenshot: app.screenshot()); saved.name = "Add another suggestion after saving"; saved.lifetime = .keepAlways; add(saved)
         app.buttons["next-suggestion"].tap()
+        selectSampleSuggestion(in: app)
         XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
         app.buttons["confirm-past-visits"].tap()
         XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
@@ -240,6 +276,7 @@ import XCTest
         app.buttons["tab-timeline"].tap()
         let suggestions = app.buttons["apple-memory-suggestions"]
         reveal(suggestions, in: app); suggestions.tap()
+        selectSampleSuggestion(in: app)
         XCTAssertTrue(app.staticTexts["Already added"].waitForExistence(timeout: 5))
     }
 
@@ -249,6 +286,7 @@ import XCTest
         app.launch()
         XCTAssertTrue(app.buttons["add-past-visits"].waitForExistence(timeout: 10))
         app.buttons["add-past-visits"].tap()
+        selectSampleSuggestion(in: app)
         XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
         app.buttons["confirm-past-visits"].tap()
         XCTAssertTrue(app.buttons["next-suggestion"].waitForExistence(timeout: 8))
@@ -283,6 +321,7 @@ import XCTest
         let addPast = app.buttons["add-past-visits"]
         XCTAssertTrue(addPast.waitForExistence(timeout: 5))
         addPast.tap()
+        selectSampleSuggestion(in: app)
         XCTAssertTrue(app.buttons["confirm-past-visits"].waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(addPast.waitForExistence(timeout: 5))
@@ -662,7 +701,7 @@ import XCTest
         let alexSuggestion = app.buttons["mention-memory-friend"]
         XCTAssertTrue(alexSuggestion.waitForExistence(timeout: 5)); alexSuggestion.tap()
         XCTAssertFalse(app.buttons["create-mentioned-person"].exists)
-        note.typeText("and @Robin")
+        note.typeText("and @Robin Taylor")
         let create = app.buttons["create-mentioned-person"]
         XCTAssertTrue(create.waitForExistence(timeout: 5)); reveal(create, in: app); create.tap()
         XCTAssertTrue(app.buttons["add-memory-photos"].waitForExistence(timeout: 5))
@@ -690,12 +729,24 @@ import XCTest
         let description = app.textViews["person-description"]
         description.tap(); description.typeText("Friend of @Rob")
         let robin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "mention-", "Robin")).firstMatch
-        XCTAssertTrue(robin.waitForExistence(timeout: 5)); reveal(robin, in: app); robin.tap()
+        XCTAssertTrue(robin.waitForExistence(timeout: 5)); XCTAssertTrue(robin.label.contains("Robin Taylor")); reveal(robin, in: app); robin.tap()
         let choose = app.buttons["choose-person-avatar"]
         reveal(choose, in: app); choose.tap()
         let suggested = app.buttons["Suggested photo 1"]
-        XCTAssertTrue(suggested.waitForExistence(timeout: 15)); suggested.tap()
+        XCTAssertTrue(suggested.waitForExistence(timeout: 15))
+        let suggestionCount = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Suggested photo ")).count
+        // Opening/cancelling Photos and crop must not restart and duplicate the grid.
+        app.buttons["choose-crop-photo"].tap()
+        let cancelPhoto = app.navigationBars["Photos"].buttons["Cancel"]
+        XCTAssertTrue(cancelPhoto.waitForExistence(timeout: 10)); cancelPhoto.tap()
+        XCTAssertTrue(suggested.waitForExistence(timeout: 5)); suggested.tap()
         XCTAssertTrue(app.buttons["use-photo-crop"].waitForExistence(timeout: 5))
+        app.navigationBars["Crop photo"].buttons["Cancel"].tap()
+        XCTAssertTrue(suggested.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Suggested photo ")).count, suggestionCount)
+        app.buttons["choose-crop-photo"].tap()
+        XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["use-photo-crop"].waitForExistence(timeout: 15))
         app.sliders["Crop zoom"].adjust(toNormalizedSliderPosition: 0.15)
         let crop = XCTAttachment(screenshot: app.screenshot()); crop.name = "Private square avatar crop"; crop.lifetime = .keepAlways; add(crop)
         app.buttons["use-photo-crop"].tap()
@@ -708,7 +759,7 @@ import XCTest
         app.navigationBars["Person"].buttons["Cancel"].tap()
         let saved = XCTAttachment(screenshot: app.screenshot()); saved.name = "Person avatar and linked description"; saved.lifetime = .keepAlways; add(saved)
         app.links["@Robin"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Robin"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Robin Taylor"].firstMatch.waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -757,7 +808,9 @@ import XCTest
             let app = XCUIApplication()
             app.launchArguments = ["--ui-testing", "--ui-map-periods"] + (offline ? ["--ui-on-device-map"] : [])
             app.launch()
-            XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10)); app.buttons["tab-map"].tap()
+            let selectedDay = app.buttons["timeline-day--2"]
+            XCTAssertTrue(selectedDay.waitForExistence(timeout: 10)); selectedDay.tap()
+            app.buttons["tab-map"].tap()
             if !offline { enableAppleMaps(in: app) }
             let picker = app.buttons["map-period-picker"]
             let mapSurface = app.descendants(matching: .any).matching(identifier: offline ? "on-device-map" : "apple-map").firstMatch
@@ -785,6 +838,22 @@ import XCTest
                     XCTAssertLessThan(pin.frame.maxY, picker.frame.minY + 1)
                 }
             }
+            // First opening must already fit this day, before a date-change callback.
+            let west = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", names[0])).firstMatch
+            let east = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", names[1])).firstMatch
+            func separation() -> CGFloat { abs(west.frame.midX - east.frame.midX) + abs(west.frame.midY - east.frame.midY) }
+            let fitted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in west.exists && east.exists && separation() > 80 }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [fitted], timeout: 10), .completed)
+            let originalSeparation = separation(), originalDate = picker.label
+            let initial = XCTAttachment(screenshot: app.screenshot()); initial.name = "First map opening fits selected day \(offline ? "offline" : "Apple")"; initial.lifetime = .keepAlways; add(initial)
+            for _ in 0..<2 {
+                app.buttons["tab-timeline"].tap()
+                XCTAssertTrue(selectedDay.isSelected)
+                app.buttons["tab-map"].tap()
+                XCTAssertTrue(west.waitForExistence(timeout: 10)); XCTAssertTrue(east.waitForExistence(timeout: 10))
+                XCTAssertEqual(picker.label, originalDate)
+                XCTAssertEqual(separation(), originalSeparation, accuracy: originalSeparation * 0.05)
+            }
             picker.tap()
             let kos = app.buttons["suggested-period-Kos"].firstMatch
             reveal(kos, in: app); kos.tap()
@@ -798,6 +867,11 @@ import XCTest
             picker.tap(); reveal(app.buttons["all-history-period"], in: app); app.buttons["all-history-period"].tap()
             checkVisible(names + ["Fixture Amsterdam West", "Fixture Amsterdam East"])
             let all = XCTAttachment(screenshot: app.screenshot()); all.name = "Amsterdam and Kos with routes \(offline ? "offline" : "Apple")"; all.lifetime = .keepAlways; add(all)
+            if offline {
+                map.pinch(withScale: 0.05, velocity: -3)
+                map.swipeUp(velocity: .fast)
+                let world = XCTAttachment(screenshot: app.screenshot()); world.name = "Zoomed-out world fills the screen at its southern edge"; world.lifetime = .keepAlways; add(world)
+            }
             picker.tap()
             XCTAssertTrue(app.staticTexts["To"].exists)
             let show = app.buttons["show-history-period"]

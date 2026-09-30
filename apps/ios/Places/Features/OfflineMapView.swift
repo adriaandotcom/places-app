@@ -115,10 +115,17 @@ struct OfflineMapSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> MLNMapView {
         _ = OfflineMapNetwork.configure
         let json = (try? OfflineMapStyle.make(installed: installed, dark: colorScheme == .dark)) ?? OfflineMapStyle.empty
-        let map = MLNMapView(frame: .zero, styleJSON: json)
+        let map = OfflineMapCanvas(frame: .zero, styleJSON: json)
+        map.didLayout = { [weak coordinator = context.coordinator] map in coordinator?.render(map) }
         context.coordinator.styleSignature = signature
         map.delegate = context.coordinator
+        map.automaticallyAdjustsContentInset = false
         map.showsUserLocation = false; map.maximumZoomLevel = 17
+        // Keep the viewport inside the drawable Mercator world, including when
+        // zooming out or panning towards a pole on a tall screen.
+        map.maximumScreenBounds = MLNCoordinateBounds(
+            sw: CLLocationCoordinate2D(latitude: -85.05112878, longitude: -180),
+            ne: CLLocationCoordinate2D(latitude: 85.05112878, longitude: 180))
         map.logoView.isHidden = true
         map.isUserInteractionEnabled = interactive
         if !interactive { map.attributionButton.isHidden = true; map.compassView.isHidden = true }
@@ -133,12 +140,8 @@ struct OfflineMapSurface: UIViewRepresentable {
     private var signature: String { installed.keys.sorted { $0.rawValue < $1.rawValue }.map { installed[$0]!.path }.joined() + (colorScheme == .dark ? "dark" : "light") }
     func updateUIView(_ map: MLNMapView, context: Context) {
         context.coordinator.parent = self
-        if chromeInsets != EdgeInsets() {
-            map.automaticallyAdjustsContentInset = false
-            let inset = UIEdgeInsets(top: chromeInsets.top, left: chromeInsets.leading, bottom: chromeInsets.bottom, right: chromeInsets.trailing)
-            if map.contentInset != inset { map.contentInset = inset }
-            map.attributionButtonMargins = CGPoint(x: 12, y: 8)
-        }
+        let attributionMargin = CGPoint(x: 12, y: 8 + max(0, chromeInsets.bottom - map.safeAreaInsets.bottom))
+        if map.attributionButtonMargins != attributionMargin { map.attributionButtonMargins = attributionMargin }
         if context.coordinator.focusRequest != focusRequest {
             context.coordinator.focusRequest = focusRequest
             context.coordinator.framed = false
@@ -151,7 +154,10 @@ struct OfflineMapSurface: UIViewRepresentable {
         }
         context.coordinator.render(map)
     }
-    static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) { view.delegate = nil }
+    static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
+        view.delegate = nil
+        (view as? OfflineMapCanvas)?.didLayout = nil
+    }
 
     @MainActor final class Coordinator: NSObject, @preconcurrency MLNMapViewDelegate {
         var parent: OfflineMapSurface
@@ -169,12 +175,15 @@ struct OfflineMapSurface: UIViewRepresentable {
             // Re-evaluate country detail after World finishes downloading too.
             self.mapView(mapView, regionDidChangeAnimated: false)
         }
-        func mapViewDidFinishLoadingMap(_ mapView: MLNMapView) { frame(mapView) }
+        func mapViewDidFinishLoadingMap(_ mapView: MLNMapView) {
+            render(mapView)
+        }
         func mapViewDidFailLoadingMap(_ mapView: MLNMapView, withError error: Error) { parent.failed() }
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             guard framed else { return }
             let bounds = mapView.visibleCoordinateBounds
-            let center = Coordinate(latitude: mapView.centerCoordinate.latitude, longitude: mapView.centerCoordinate.longitude)
+            let center = Coordinate(latitude: (bounds.ne.latitude + bounds.sw.latitude) / 2,
+                longitude: (bounds.ne.longitude + bounds.sw.longitude) / 2)
             let viewport = MapViewport(center: center, latitudeSpan: max(0.0001, bounds.ne.latitude - bounds.sw.latitude),
                 longitudeSpan: max(0.0001, bounds.ne.longitude - bounds.sw.longitude))
             let request = parent.focusRequest, zoom = mapView.zoomLevel
@@ -193,7 +202,8 @@ struct OfflineMapSurface: UIViewRepresentable {
             if coordinate.isValid { parent.pinChanged?(coordinate) }
         }
         func render(_ map: MLNMapView) {
-            guard let style = map.style, rendered != parent.presentation else { frame(map); return }
+            guard let style = map.style else { return }
+            guard rendered != parent.presentation else { frame(map); return }
             if let rendered, rendered.coordinates != parent.presentation.coordinates, parent.pinChanged == nil { framed = false; restoreViewport = false }
             if parent.pinChanged != nil, parent.presentation.pins.first?.letter == nil, let point = parent.presentation.pins.first?.coordinate,
                (rendered?.pins.first?.coordinate).map({ $0.distance(to: point) > 500 }) ?? true {
@@ -255,7 +265,10 @@ struct OfflineMapSurface: UIViewRepresentable {
             frame(map)
         }
         func frame(_ map: MLNMapView) {
-            guard !framed, map.bounds.width > 0, map.bounds.height > 0 else { return }
+            // SwiftUI assigns bounds before MapLibre updates its internal viewport
+            // in layoutSubviews. Fitting earlier uses the renderer's old zero size.
+            guard !framed, map.style != nil, map.bounds.width > 0, map.bounds.height > 0,
+                  (map as? OfflineMapCanvas)?.laidOutSize == map.bounds.size else { return }
             framed = true
             if restoreViewport, let viewport = parent.viewport {
                 let center = viewport.center
@@ -270,8 +283,16 @@ struct OfflineMapSurface: UIViewRepresentable {
                     map.setVisibleCoordinateBounds(MLNCoordinateBounds(
                         sw: CLLocationCoordinate2D(latitude: max(-85, region.center.latitude - region.latitudeSpan / 2), longitude: region.center.longitude - region.longitudeSpan / 2),
                         ne: CLLocationCoordinate2D(latitude: min(85, region.center.latitude + region.latitudeSpan / 2), longitude: region.center.longitude + region.longitudeSpan / 2)),
-                        edgePadding: UIEdgeInsets(top: 60, left: 45, bottom: 70, right: 45), animated: false, completionHandler: nil)
+                        edgePadding: UIEdgeInsets(top: 60 + parent.chromeInsets.top, left: 45 + parent.chromeInsets.leading,
+                            bottom: 70 + parent.chromeInsets.bottom, right: 45 + parent.chromeInsets.trailing), animated: false, completionHandler: nil)
                 } else { map.setCenter(CLLocationCoordinate2D(latitude: 20, longitude: 0), zoomLevel: 1, animated: false) }
+            }
+            // Padding is only for fitting places around the floating controls.
+            // Keep the same visible camera with a full-screen logical viewport,
+            // otherwise world bounds can leave a blank strip below the map.
+            if map.cameraEdgeInsets != .zero {
+                let center = map.convert(CGPoint(x: map.bounds.midX, y: map.bounds.midY), toCoordinateFrom: map)
+                map.setCenter(center, zoomLevel: map.zoomLevel, animated: false)
             }
         }
         func mapView(_ mapView: MLNMapView, viewFor annotation: MLNAnnotation) -> MLNAnnotationView? {
@@ -332,4 +353,15 @@ private final class MapAnnotation: MLNPointAnnotation {
         title = pin.name
     }
     required init?(coder: NSCoder) { nil }
+}
+
+/// A map may finish loading before SwiftUI gives it its final layout.
+private final class OfflineMapCanvas: MLNMapView {
+    var didLayout: ((MLNMapView) -> Void)?
+    private(set) var laidOutSize = CGSize.zero
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        laidOutSize = bounds.size
+        didLayout?(self)
+    }
 }

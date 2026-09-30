@@ -55,6 +55,7 @@ public struct MemoryPerson: Codable, Identifiable, Hashable, Sendable {
     public var avatarJPEG: Data?
     public var mentions: [PersonMention]?
     public var resolvedColorIndex: Int { colorIndex ?? id.utf8.reduce(0) { ($0 + Int($1)) % 6 } }
+    public var firstName: String { name.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? name }
     public var initials: String { name.split(whereSeparator: \.isWhitespace).prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
     public init(id: String = UUID().uuidString, name: String, detail: String = "", colorIndex: Int = Int.random(in: 0..<6), avatarJPEG: Data? = nil, mentions: [PersonMention]? = nil) {
         self.id = id; self.name = name; self.detail = detail; self.colorIndex = colorIndex

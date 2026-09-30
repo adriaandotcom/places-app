@@ -26,15 +26,17 @@ struct PrivacyMapView: View {
     var focusRequest: UUID?
     var customPresentation: MapPresentation?
     var chromeInsets = EdgeInsets()
-    @State private var viewport: MapViewport?
+    var retainedViewport: Binding<MapViewport?>?
+    @State private var localViewport: MapViewport?
+    private var viewport: Binding<MapViewport?> { retainedViewport ?? $localViewport }
     @State private var showMapSettings = false
     var body: some View {
         Group {
         if model.mapsEnabled {
-            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: $viewport, focusRequest: focusRequest, customPresentation: customPresentation, chromeInsets: chromeInsets)
+            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: viewport, focusRequest: focusRequest, customPresentation: customPresentation, chromeInsets: chromeInsets)
                 .accessibilityIdentifier("apple-map")
         } else if model.mapProvider == .onDevice {
-            OfflineMapView(presentation: customPresentation ?? MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
+            OfflineMapView(presentation: customPresentation ?? MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
         } else {
             ScrollView {
             VStack(spacing: 18) {
@@ -142,9 +144,11 @@ struct MapScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 if model.selectedTab == .map {
+                    let request = model.mapFocusRequest
                     PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints, focusRequest: model.mapFocusRequest,
                         chromeInsets: EdgeInsets(top: geometry.safeAreaInsets.top + Layout.touchTarget + Layout.spacing,
-                            leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing, trailing: 0))
+                            leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing, trailing: 0),
+                        retainedViewport: Binding(get: { model.mapViewport }, set: { model.rememberMapViewport($0, for: request) }))
                         .ignoresSafeArea()
                 }
             }

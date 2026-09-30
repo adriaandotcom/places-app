@@ -28,7 +28,7 @@ struct CroppedPhotoField<Preview: View>: View {
     }
 }
 
-private struct PhotoCropSource: Identifiable {
+private struct PhotoCropSource: Identifiable, Hashable {
     let id = UUID()
     let data: Data
     var crop: CGRect?
@@ -46,19 +46,21 @@ struct CroppedPhotoChooser: View {
     var photoIDs: [String] = []
     var suggestsFaces = false
     let use: (Data) -> Void
-    @State private var choosingPhoto = false
     @State private var selection: PhotosPickerItem?
     @State private var source: PhotoCropSource?
     @State private var faces: [PhotoCropSuggestion] = []
     @State private var photos: [PhotoCropSuggestion] = []
+    @State private var scanPhotoIDs: [String]?
+    @State private var scannedPhotoIDs: Set<String> = []
     @State private var scanning = true
     @State private var loading = false
     @State private var error: String?
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Layout.spacing) {
-                Button("Choose a photo", systemImage: "photo.badge.plus") { choosingPhoto = true }
-                    .buttonStyle(PrimaryButton()).disabled(loading).accessibilityIdentifier("choose-crop-photo")
+                PhotosPicker(selection: $selection, matching: .images, preferredItemEncoding: .current) {
+                    Label("Choose a photo", systemImage: "photo.badge.plus")
+                }.buttonStyle(PrimaryButton()).disabled(loading).accessibilityIdentifier("choose-crop-photo")
                 if loading { ProgressView("Opening photo…") }
                 if !faces.isEmpty {
                     SectionHeading(title: "Faces from shared trips")
@@ -73,10 +75,8 @@ struct CroppedPhotoChooser: View {
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .navigationTitle("Choose photo").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .photosPicker(isPresented: $choosingPhoto, selection: $selection, matching: .images, preferredItemEncoding: .current)
             .onChange(of: selection) { importSelection() }
-            .onChange(of: choosingPhoto) { importSelection() }
-            .sheet(item: $source) { source in NavigationStack { PhotoCropEditor(source: source, use: use) } }
+            .navigationDestination(item: $source) { source in PhotoCropEditor(source: source, use: use) }
             .task { await loadSuggestions() }
             .alert("Couldn’t open photo", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") {} } message: { Text(error ?? "") }
     }
@@ -88,7 +88,7 @@ struct CroppedPhotoChooser: View {
     }
 
     private func importSelection() {
-        guard !choosingPhoto, !loading, let selected = selection else { return }
+        guard !loading, let selected = selection else { return }
         selection = nil; loading = true
         Task {
             defer { loading = false }
@@ -100,6 +100,7 @@ struct CroppedPhotoChooser: View {
         }
     }
     private func open(_ suggestion: PhotoCropSuggestion) {
+        guard !loading else { return }
         loading = true
         Task {
             defer { loading = false }
@@ -110,31 +111,53 @@ struct CroppedPhotoChooser: View {
         }
     }
     private func loadSuggestions() async {
+        scanning = true
         defer { scanning = false }
         guard let store = model.store else { return }
-        // A bounded recent suggestion set; importing photos remains unlimited.
-        var seen: Set<String> = []
-        for id in photoIDs.filter({ seen.insert($0).inserted }).prefix(40) {
+        // Keep one ordered snapshot while this chooser is open. Returning from
+        // Photos or the crop screen resumes unfinished work without duplicating it.
+        if scanPhotoIDs == nil {
+            var seen: Set<String> = []
+            scanPhotoIDs = Array(photoIDs.filter { seen.insert($0).inserted }.prefix(40))
+        }
+        for id in scanPhotoIDs ?? [] where !scannedPhotoIDs.contains(id) {
             guard !Task.isCancelled else { return }
             do {
-                guard let data = try await store.photoData(id: id), let preview = try await store.photoData(id: id, thumbnail: true) else { continue }
-                let suggestions: [PhotoCropSuggestion] = suggestsFaces ? await Task.detached(priority: .utility) {
-                    (try? SquarePhotoImage.faceCrops(in: data))?.enumerated().compactMap { index, rect -> PhotoCropSuggestion? in
-                        guard let thumb = try? SquarePhotoImage.cropped(data, rect: rect, maximumSize: 160) else { return nil }
-                        return PhotoCropSuggestion(id: "\(id)-face-\(index)", photoID: id, preview: thumb, crop: rect)
-                    } ?? []
-                }.value : []
+                guard let preview = try await store.photoData(id: id, thumbnail: true) else {
+                    scannedPhotoIDs.insert(id); continue
+                }
                 guard !Task.isCancelled else { return }
-                photos.append(PhotoCropSuggestion(id: id, photoID: id, preview: preview, crop: nil))
-                faces.append(contentsOf: suggestions)
-            } catch { continue }
+                // Show inexpensive thumbnails before running face detection.
+                if !photos.contains(where: { $0.id == id }) {
+                    photos.append(PhotoCropSuggestion(id: id, photoID: id, preview: preview, crop: nil))
+                }
+                if suggestsFaces, faces.count < 12, let data = try await store.photoData(id: id) {
+                    let suggestions = await Task.detached(priority: .utility) {
+                        (try? SquarePhotoImage.faceCrops(in: data))?.enumerated().compactMap { index, rect -> PhotoCropSuggestion? in
+                            guard let thumb = try? SquarePhotoImage.cropped(data, rect: rect, maximumSize: 160) else { return nil }
+                            return PhotoCropSuggestion(id: "\(id)-face-\(index)", photoID: id, preview: thumb, crop: rect)
+                        } ?? []
+                    }.value
+                    guard !Task.isCancelled else { return }
+                    faces.append(contentsOf: suggestions.prefix(12 - faces.count))
+                }
+                scannedPhotoIDs.insert(id)
+            } catch {
+                guard !Task.isCancelled else { return }
+                scannedPhotoIDs.insert(id)
+            }
         }
     }
 }
 
 enum SquarePhotoImage {
     nonisolated static func faceCrops(in data: Data) throws -> [CGRect] {
-        let image = try image(data)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 800
+              ] as CFDictionary) else { throw MemoryError.invalidPhoto }
         let request = VNDetectFaceRectanglesRequest()
         try VNImageRequestHandler(cgImage: image).perform([request])
         return (request.results ?? []).sorted { $0.boundingBox.width * $0.boundingBox.height > $1.boundingBox.width * $1.boundingBox.height }.map {

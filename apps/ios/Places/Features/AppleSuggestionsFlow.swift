@@ -55,6 +55,20 @@ struct AppleSuggestionsFlow: View {
         return model.memories.memories.contains { $0.id == PlaceMemory.suggestionID(selection.id, placeID: place.id) }
     }
     var body: some View {
+        Group {
+            #if DEBUG
+            if model.uiTesting {
+                // Exercise the actual modal lifecycle; never skip directly to review.
+                content.sheet(isPresented: $picker) { fixturePicker }
+            } else { systemPicker }
+            #else
+            systemPicker
+            #endif
+        }.environment(\.hasMainNavigation, false)
+            .onDisappear { loadTask?.cancel() }
+    }
+
+    private var content: some View {
         NavigationStack {
             Group {
                 if let saved { completion(saved) }
@@ -73,6 +87,7 @@ struct AppleSuggestionsFlow: View {
                             Image(systemName: "sparkles").font(.largeTitle).foregroundStyle(Palette.green)
                             Text(error ?? "Choose a moment to remember").font(BrandFont.title).multilineTextAlignment(.center)
                             Button("Choose a suggestion", action: choose).buttonStyle(PrimaryButton())
+                                .accessibilityIdentifier("choose-apple-suggestion")
                         }
                     }.padding(Layout.gutter).frame(maxWidth: .infinity, maxHeight: .infinity)
                         .navigationTitle("Apple suggestions").navigationBarTitleDisplayMode(.inline)
@@ -80,30 +95,42 @@ struct AppleSuggestionsFlow: View {
                 }
             }.background(Palette.background).foregroundStyle(Palette.ink)
                 .interactiveDismissDisabled(loading)
-                #if canImport(JournalingSuggestions) && !targetEnvironment(simulator)
-                .journalingSuggestionsPicker(isPresented: $picker) { suggestion in
-                    loading = true
-                    picker = false
-                    let epoch = model.memoryEpoch
-                    loadTask = Task {
-                        do {
-                            let selected = try await Self.load(suggestion)
-                            try Task.checkCancellation()
-                            guard epoch == model.memoryEpoch else { throw CancellationError() }
-                            selection = selected
-                        } catch is CancellationError {} catch {
-                            self.error = "This suggestion couldn’t be loaded. Please choose it again."
-                        }
-                        loading = false; loadTask = nil
-                    }
-                    // Keep Apple's completion handler alive until its shared files are copied.
-                    await loadTask?.value
-                }
-                #endif
-        }.environment(\.hasMainNavigation, false)
-            .onAppear { if !started { started = true; choose() } }
-            .onDisappear { loadTask?.cancel() }
+        }.background {
+            SuggestionPresentationReady {
+                guard !started else { return }
+                started = true
+                choose()
+            }.frame(width: 0, height: 0)
+        }
     }
+
+    private var systemPicker: some View {
+        #if canImport(JournalingSuggestions) && !targetEnvironment(simulator)
+        // Keep the picker on the stable navigation container, not on the branch
+        // replaced when loading, reviewing, or choosing another suggestion.
+        content.journalingSuggestionsPicker(isPresented: $picker) { suggestion in
+            loading = true
+            let epoch = model.memoryEpoch
+            loadTask = Task {
+                do {
+                    let selected = try await Self.load(suggestion)
+                    try Task.checkCancellation()
+                    guard epoch == model.memoryEpoch else { throw CancellationError() }
+                    selection = selected
+                } catch is CancellationError {} catch {
+                    self.error = "This suggestion couldn’t be loaded. Please choose it again."
+                }
+                loading = false; loadTask = nil
+            }
+            // Apple owns dismissal. Keep its completion alive until shared files
+            // are copied instead of dismissing its presenter during the import.
+            await loadTask?.value
+        }
+        #else
+        content
+        #endif
+    }
+
     private func completion(_ title: String) -> some View {
         VStack(spacing: Layout.spacing) {
             Image(systemName: "checkmark.circle").font(.largeTitle).foregroundStyle(Palette.green)
@@ -120,8 +147,7 @@ struct AppleSuggestionsFlow: View {
         selection?.photoDraft.discard(); selection = nil; saved = nil; error = nil
         #if DEBUG
         if model.uiTesting {
-            do { selection = try Self.fixture(day: day, index: fixtureIndex); fixtureIndex += 1 }
-            catch { self.error = "Couldn’t load the sample suggestion." }
+            picker = true
             return
         }
         #endif
@@ -179,6 +205,23 @@ struct AppleSuggestionsFlow: View {
     #endif
 
     #if DEBUG
+    private var fixturePicker: some View {
+        NavigationStack {
+            VStack(spacing: Layout.spacing) {
+                Text("Synthetic suggestion picker")
+                Button("Use sample suggestion") {
+                    do { selection = try Self.fixture(day: day, index: fixtureIndex); fixtureIndex += 1 }
+                    catch { self.error = "Couldn’t load the sample suggestion." }
+                    picker = false
+                }.accessibilityIdentifier("select-fixture-suggestion")
+            }.toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel picker") { picker = false }.accessibilityIdentifier("cancel-fixture-suggestion")
+                }
+            }
+        }
+    }
+
     private static func fixture(day: Date, index: Int) throws -> AppleSuggestionSelection {
         let start = Calendar.current.startOfDay(for: min(day, Date().addingTimeInterval(-86_400))).addingTimeInterval(Double(10 + index * 3) * 3600)
         let photoDraft = MemoryPhotoDraft()
@@ -194,4 +237,19 @@ struct AppleSuggestionsFlow: View {
         ], photos: [try photoDraft.append(photo)], photoDraft: photoDraft)
     }
     #endif
+}
+
+/// SwiftUI's onAppear runs before the enclosing sheet finishes presenting.
+/// UIKit's viewDidAppear gives the nested picker a visible, settled presenter.
+private struct SuggestionPresentationReady: UIViewControllerRepresentable {
+    let ready: () -> Void
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) { controller.ready = ready }
+    final class Controller: UIViewController {
+        var ready: (() -> Void)?
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            ready?()
+        }
+    }
 }
