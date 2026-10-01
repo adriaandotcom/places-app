@@ -1,0 +1,80 @@
+import SwiftUI
+
+struct SupportReportView: View {
+    @Environment(AppModel.self) private var model
+    @State private var snapshot = SupportSnapshot()
+    @State private var preparing = false
+    @State private var confirmFull = false
+    @State private var document: HistoryDocument?
+    @State private var filename = "Places-support"
+    @State private var showExporter = false
+    @State private var error: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Help us understand a problem without sharing where you’ve been.")
+                Text("Reports stay on this iPhone until you choose to save or share a file. Nothing is sent automatically.")
+                    .foregroundStyle(Palette.muted)
+            }
+            Section {
+                Label("App and iOS versions", systemImage: "app.badge")
+                Label("Error codes and recent app activity", systemImage: "list.bullet.rectangle")
+                Label("Crash stacks and background exit counts", systemImage: "waveform.path.ecg")
+                Label("Permission settings and recording counters", systemImage: "switch.2")
+                Button { prepare(full: false) } label: {
+                    Label("Export technical report", systemImage: "square.and.arrow.up")
+                }.accessibilityIdentifier("support-technical-export")
+            } header: { Text("Technical report · recommended") } footer: {
+                Text("No locations, place names, photos, notes, Wi-Fi details, IP addresses, device identifiers, or exact activity dates. Error messages and file paths are excluded too.")
+            }
+            Section {
+                LabeledContent("Crash & performance reports", value: "\(snapshot.incidents.count)")
+                LabeledContent("Background exit reports", value: "\(snapshot.exitReports.count)")
+                if !snapshot.storageAvailable {
+                    Text("Saved diagnostics are unavailable. Unlock this iPhone or free some storage, then try again.").foregroundStyle(Palette.muted)
+                }
+            } footer: {
+                Text("iOS supplies these reports when available, sometimes after you reopen Places. No reports does not mean no crashes. Recent technical details are kept locally with a size limit.")
+            }
+            Section {
+                Button("Export with full history…", systemImage: "doc.badge.plus") { confirmFull = true }
+                    .disabled(model.store == nil).accessibilityIdentifier("support-full-export")
+            } header: { Text("Include everything for investigation") } footer: {
+                Text("Adds your exact locations and times, places, Wi-Fi and companion identifiers, raw observations, corrections, trips, memories, saved photos, and people. Includes only app data, not your entire photo library. Passwords and encryption keys are never included.")
+            }
+            Section {
+                Text("You choose who receives the file. Your sharing service may reveal your identity, and saving to a cloud folder may sync the file there.")
+                    .foregroundStyle(Palette.muted)
+            }
+            if preparing { Section { ProgressView("Preparing report…") } }
+            if let error { Section { Text(error).foregroundStyle(.red) } }
+        }
+        .disabled(preparing)
+        .scrollContentBackground(.hidden).background(Palette.background)
+        .navigationTitle("Report a problem").navigationBarTitleDisplayMode(.inline)
+        .task { snapshot = await LocalDiagnostics.shared.log.snapshot() }
+        .confirmationDialog("Include your private history?", isPresented: $confirmFull, titleVisibility: .visible) {
+            Button("Export full support report") { prepare(full: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Anyone with this file can read your locations, photos, people and other private history. Only share it with someone you trust. Nothing is sent until you choose where to save or share it.")
+        }
+        .fileExporter(isPresented: $showExporter, document: document, contentType: .json, defaultFilename: filename) { result in
+            document = nil
+            if case .failure = result { error = "The report could not be saved. Please try again." }
+        }
+    }
+    private func prepare(full: Bool) {
+        preparing = true; error = nil
+        Task {
+            defer { preparing = false }
+            do {
+                let data = try await model.supportReport(includeHistory: full)
+                document = HistoryDocument(data: data, contentType: .json)
+                filename = full ? "Places-support-FULL-PRIVATE" : "Places-support"
+                showExporter = true
+            } catch { self.error = "Could not prepare this report. Your data has not changed. You can try the technical report without history." }
+        }
+    }
+}

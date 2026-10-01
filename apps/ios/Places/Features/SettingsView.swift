@@ -79,7 +79,7 @@ struct SettingsView: View {
                 Button("Export full history…", systemImage: "square.and.arrow.up") { confirmExport = true }
                 Button("Export GPX…", systemImage: "point.topleft.down.to.point.bottomright.curvepath") { confirmGPXExport = true }
                     .accessibilityIdentifier("export-gpx")
-                Button("Export redacted diagnostics…", systemImage: "doc.text") { Task { await model.export(.diagnostics) } }
+                NavigationLink("Report a problem", destination: SupportReportView()).accessibilityIdentifier("support-report")
                 Button("Export a test case…", systemImage: "checkmark.rectangle.stack") { confirmTestExport = true }
                     .accessibilityIdentifier("export-test-case")
                 Button(deleting ? "Starting again…" : "Delete all data and start again…", role: .destructive) { confirmDelete = true }

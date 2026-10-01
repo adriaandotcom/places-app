@@ -1887,6 +1887,36 @@ import XCTest
         screenshot.name = "Test case file export"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
 
+    func testSupportExportMakesPrivacyChoiceExplicit() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["support-report"], in: app); app.buttons["support-report"].tap()
+        let technical = app.buttons["support-technical-export"]
+        XCTAssertTrue(technical.waitForExistence(timeout: 5))
+        reveal(technical, in: app)
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "IP addresses")).firstMatch.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Private technical support report"; screenshot.lifetime = .keepAlways; add(screenshot)
+        technical.tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value == %@", "Places-support")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 15))
+    }
+
+    func testFullSupportExportRequiresExplicitConfirmation() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["support-report"], in: app); app.buttons["support-report"].tap()
+        let full = app.buttons["support-full-export"]
+        reveal(full, in: app); full.tap()
+        XCTAssertTrue(app.buttons["Export full support report"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Anyone with this file")).firstMatch.exists)
+        app.buttons["Export full support report"].tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value == %@", "Places-support-FULL-PRIVATE")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 15))
+    }
+
     func testGPXExportOpensSystemFilePicker() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))

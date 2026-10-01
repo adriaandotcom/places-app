@@ -102,7 +102,7 @@ import UIKit
                 lastReceived = Date()
             }
             if !batches.isEmpty { status = "Your Mac observations are saved on this iPhone." }
-        } catch { if generation == epoch { status = CompanionIdentity.message(for: error) } }
+        } catch { if generation == epoch { LocalDiagnostics.shared.record(.companionFailed, error: error); status = CompanionIdentity.message(for: error) } }
     }
     func erase() async throws {
         generation += 1
@@ -160,6 +160,6 @@ import UIKit
             guard watchEnabled, generation == epoch else { return }
             WCSession.default.transferUserInfo(["ack": batch.id.uuidString, "linkID": link.id.uuidString])
             lastReceived = Date(); status = "Your Watch observations are saved on this iPhone."
-        } catch { status = "Watch observations could not be saved yet. They remain queued on your Watch." }
+        } catch { LocalDiagnostics.shared.record(.watchDeliveryFailed, error: error); status = "Watch observations could not be saved yet. They remain queued on your Watch." }
     }
 }

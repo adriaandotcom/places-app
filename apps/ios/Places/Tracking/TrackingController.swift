@@ -599,6 +599,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         } else { readWiFi(force: true, fallback: .recovery) }
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        LocalDiagnostics.shared.record(.locationFailed, error: error)
         if (error as? CLError)?.code == .denied { refreshAuthorization(); reconcile() }
         // Transient failures are represented by gaps and a bounded recovery window, not raw OS error logs.
     }

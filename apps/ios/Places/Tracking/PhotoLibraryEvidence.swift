@@ -85,15 +85,17 @@ import PlacesCore
         let request = BGAppRefreshTaskRequest(identifier: Self.taskID)
         request.earliestBeginDate = Date().addingTimeInterval(60 * 60)
         // iOS decides when to run; this is a preference, never a promised interval.
-        try? BGTaskScheduler.shared.submit(request)
+        do { try BGTaskScheduler.shared.submit(request) }
+        catch { LocalDiagnostics.shared.record(.photoTaskSchedulingFailed, error: error) }
     }
     func sync() async {
         updateAuthorization()
         guard permitted, !scanning, let store else { return }
         guard let currentModel else { status = "This iPhone model isn’t recognized yet. Automatic photo import is paused."; return }
+        LocalDiagnostics.shared.record(.photoScanStarted)
         scanning = true
         let epoch = revision
-        defer { scanning = false; schedule() }
+        defer { scanning = false; schedule(); LocalDiagnostics.shared.record(.photoScanFinished) }
         let now = Date(), cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
         do {
             let fingerprints = try await store.photoScanFingerprints()
@@ -151,7 +153,7 @@ import PlacesCore
             }
             status = completed ? "Up to date for the last 30 days" : "More photos will be checked on the next scan. Originals stored only in iCloud are skipped until available on this iPhone."
         } catch is CancellationError { }
-        catch { status = "Couldn’t finish checking photos. Try again when this iPhone is unlocked." }
+        catch { LocalDiagnostics.shared.record(.photoScanFailed, error: error); status = "Couldn’t finish checking photos. Try again when this iPhone is unlocked." }
     }
     func dismiss(_ photos: [PhotoLocationEvidence]) async {
         do {

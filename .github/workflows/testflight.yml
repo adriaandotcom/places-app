@@ -112,6 +112,15 @@ jobs:
             places-compiled-v1-ios-release-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.version }}-
       - name: Check, archive and upload internal beta
         run: python3 scripts/testflight.py --skip-tests
+      - name: Keep symbols for user-exported crash reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: places-symbols-${{ github.sha }}-${{ github.run_attempt }}
+          # Only debug symbols: never upload archives, signing material or logs.
+          path: build/testflight/Places.xcarchive/dSYMs/
+          if-no-files-found: ignore
+          retention-days: 90
       - name: Report measured release time
         if: always()
         run: |

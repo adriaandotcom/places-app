@@ -16,6 +16,17 @@ spec.loader.exec_module(release)
 
 
 class TestFlightSmokeTests(unittest.TestCase):
+    def test_support_symbols_are_retained_without_signing_material(self):
+        workflow = (SCRIPT.parents[1] / '.github/workflows/testflight.yml').read_text()
+        step = workflow.split('      - name: Keep symbols for user-exported crash reports', 1)[1].split('      - name:', 1)[0]
+        self.assertIn('if: always()', step)
+        self.assertIn('path: build/testflight/Places.xcarchive/dSYMs/', step)
+        self.assertIn('retention-days: 90', step)
+        self.assertIn('github.sha', step)
+        self.assertEqual(sum(line.strip().startswith('path:') for line in step.splitlines()), 1)
+        self.assertNotIn('include-hidden-files: true', step)
+        self.assertNotIn('RUNNER_TEMP', step)
+
     def test_distribution_profile_checks_companion_capabilities(self):
         profile = {'TeamIdentifier': ['TEAM'], 'UUID': '12345678-ABCD-1234-ABCD-123456789ABC',
                    'ExpirationDate': datetime(2030, 1, 1), 'Entitlements': {

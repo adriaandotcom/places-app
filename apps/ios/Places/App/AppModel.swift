@@ -250,11 +250,11 @@ final class AppModel {
                         }
                     }
                     #endif
-                } catch { store = nil; starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
+                } catch { LocalDiagnostics.shared.record(.historyOpenFailed, error: error); store = nil; starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
             }
         } catch is ProtectedStorage.Locked {
             starting = false; waitingForUnlock = true
-        } catch { starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
+        } catch { LocalDiagnostics.shared.record(.historyOpenFailed, error: error); starting = false; fail("Could not open your history. Your existing data has been kept. Code: \(PlacesStore.failureCode(error)).") }
     }
 
     func receiveCompanionDelivery() async -> Bool {
@@ -440,6 +440,7 @@ final class AppModel {
                 self.retryObservations = []
                 await self.refresh()
             } catch {
+                LocalDiagnostics.shared.record(.historyWriteFailed, error: error)
                 self.retryObservations = batch
                 self.tracking.configure(places: self.places, enabled: false)
                 self.storageNeedsRetry = true
@@ -670,6 +671,7 @@ final class AppModel {
             try mapDownloads.deleteAll()
             try MemoryPhotoDraft.clearAbandonedImports()
             try await store.eraseHistory(resetSettings: true)
+            try await LocalDiagnostics.shared.log.clear()
             retryObservations = []; timeline = []; historyDays = []; firstHistoryDate = nil; places = []; networks = []; accessPoints = []
             memories = MemoryLibrary()
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
@@ -686,7 +688,37 @@ final class AppModel {
             return false
         }
     }
-    private func fail(_ message: String) { errorMessage = message }
+    private func fail(_ message: String, line: UInt = #line) {
+        LocalDiagnostics.shared.record(.appError, line: line)
+        errorMessage = message
+    }
+
+    func supportReport(includeHistory: Bool) async throws -> Data {
+        let epoch = generation
+        guard !deleting else { throw CancellationError() }
+        let history: HistoryArchive?
+        if includeHistory {
+            await pendingWrite?.value
+            guard let store else { throw CocoaError(.fileReadUnknown) }
+            history = try await store.fullHistoryArchive()
+        } else { history = nil }
+        // The technical report uses the last refreshed counters. Do not wait for
+        // database writes or scan history just to diagnose a storage problem.
+        let counters = diagnostics
+        let snapshot = await LocalDiagnostics.shared.log.snapshot()
+        guard !deleting, generation == epoch else { throw CancellationError() }
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        return try SupportReport(formatVersion: 1, scope: includeHistory ? "fullHistory" : "technicalOnly",
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+            build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+            osVersion: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+            runtime: SupportRuntime(trackingState: tracking.state.rawValue,
+                locationAuthorization: Int(tracking.authorization.rawValue), preciseLocation: tracking.accuracy == .fullAccuracy,
+                photoLocationsEnabled: photoLibrary.enabled, photoAuthorization: photoLibrary.authorization.rawValue,
+                macEnabled: companions.macEnabled, watchEnabled: companions.watchEnabled,
+                lowPower: tracking.lowPower, historyAvailable: store != nil),
+            counters: counters, diagnostics: snapshot, history: history).encoded()
+    }
 
     func changeMemories(epoch: Int, _ operation: @Sendable (PlacesStore) async throws -> Void) async throws {
         guard let store, !deleting, generation == epoch else { throw CancellationError() }

@@ -488,6 +488,7 @@ extension MapDownloads: URLSessionDownloadDelegate {
     }
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error { LocalDiagnostics.shared.record(.mapDownloadFailed, error: error) }
         guard let error else { return }
         let resume = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
         Task { @MainActor in

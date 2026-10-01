@@ -410,11 +410,12 @@ public actor PlacesStore {
         }
     }
 
-    public func exportHistory() throws -> Data {
+    public func exportHistory() throws -> Data { try StoreSQL.exportEncoder.encode(fullHistoryArchive()) }
+    public func fullHistoryArchive() throws -> HistoryArchive {
         var archive = try historyArchive()
         archive.memories = try memoryArchive()
         archive.photoEvidence = try photoEvidence(includeHistory: true)
-        return try StoreSQL.exportEncoder.encode(archive)
+        return archive
     }
     public func exportTestCase() throws -> Data {
         try InferenceTestCase.redacting(historyArchive()).encoded()
