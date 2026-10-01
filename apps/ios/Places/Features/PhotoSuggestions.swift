@@ -38,7 +38,7 @@ struct PhotoEvidenceSettings: View {
                 Text("Turning this off stops checks and hides suggestions. Avatars and manually added photos keep working with Apple’s selective picker, even if you remove Full Access.")
             }.font(.subheadline)
             Section {
-                Button("Remove imported photo evidence…", role: .destructive) { removing = true }
+                Button("Remove imported photo evidence…", systemImage: "trash", role: .destructive) { removing = true }.foregroundStyle(.red)
             } footer: { Text("Imported metadata stays on this iPhone until you remove it here. This turns the feature off and removes that metadata and review history. Memories and visits you confirmed are kept.") }
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Photo locations")
             .task { library.updateAuthorization() }
@@ -314,7 +314,7 @@ private struct PhotoSuggestionReview: View {
                         Button("Add to timeline", systemImage: "clock.badge.plus") { addVisit() }
                             .buttonStyle(PrimaryButton()).disabled(place == nil).accessibilityIdentifier("photo-add-visit")
                     }
-                    Button("Delete suggestion", role: .destructive) {
+                    Button("Delete suggestion", systemImage: "trash", role: .destructive) {
                         Task { await model.photoLibrary.deleteSuggestions([group], undo: model.deleteUndo); dismiss() }
                     }.foregroundStyle(.red).frame(maxWidth: .infinity, minHeight: Layout.touchTarget)
                 }

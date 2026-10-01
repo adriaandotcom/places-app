@@ -25,12 +25,19 @@ struct PlaceSelectionField: View {
     @State private var expanded = false
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            Button("Choose a saved place", action: chooseSaved).foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget)
-            Button(place == nil ? "Name this place" : "Choose a different nearby place", action: chooseDifferent)
-                .foregroundStyle(Palette.green).frame(minHeight: Layout.touchTarget)
+            VStack(spacing: 0) {
+                Button(action: chooseSaved) {
+                    Text(place == nil ? "Choose a saved place" : "Replace with a saved place")
+                        .frame(maxWidth: .infinity, minHeight: Layout.touchTarget, alignment: .leading).contentShape(Rectangle())
+                }.accessibilityIdentifier("select-saved-place")
+                Button(action: chooseDifferent) {
+                    Text(place == nil ? "Name this place" : "Replace with a nearby place")
+                        .frame(maxWidth: .infinity, minHeight: Layout.touchTarget, alignment: .leading).contentShape(Rectangle())
+                }.accessibilityIdentifier("select-different-place")
+            }.buttonStyle(.plain).foregroundStyle(Palette.green)
         } label: {
             if let place { SavedPlaceRow(place: place) }
             else { Label("Choose a place", systemImage: "mappin.and.ellipse").frame(minHeight: Layout.touchTarget) }
-        }.disclosureGroupStyle(SelectionDisclosureStyle()).tint(Palette.green).accessibilityIdentifier("selected-place-options")
+        }.disclosureGroupStyle(SelectionDisclosureStyle(identifier: "selected-place-options")).tint(Palette.green)
     }
 }

@@ -37,7 +37,13 @@ import XCTest
         XCTAssertEqual(photos.count, 3)
         photos.firstMatch.tap()
         XCTAssertTrue(app.navigationBars["1 of 3"].waitForExistence(timeout: 5))
+        app.buttons["delete-viewed-photo"].tap()
+        app.sheets.buttons["Delete photo"].tap()
+        XCTAssertTrue(app.navigationBars["1 of 2"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
+        XCTAssertEqual(photos.count, 2)
+        app.buttons["undo-delete"].tap()
+        XCTAssertEqual(photos.count, 3)
         photos.firstMatch.press(forDuration: 1)
         app.buttons["Delete photo"].tap()
         app.buttons["Delete photo"].tap()
@@ -56,16 +62,75 @@ import XCTest
         let review = app.buttons["suggestion-review-suggestion-photo-0"]
         XCTAssertTrue(review.waitForExistence(timeout: 10)); review.tap()
         XCTAssertTrue(app.navigationBars["Photo suggestion"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Choose a saved place"].exists)
+        XCTAssertFalse(app.buttons["select-saved-place"].exists)
         let place = app.buttons["selected-place-options"]
         reveal(place, in: app); place.tap()
-        XCTAssertTrue(app.buttons["Choose a saved place"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Choose a different nearby place"].exists)
+        XCTAssertTrue(app.buttons["select-saved-place"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.buttons["select-saved-place"].label, "Replace with a saved place")
+        XCTAssertEqual(app.buttons["select-different-place"].label, "Replace with a nearby place")
         let remove = app.buttons["Delete suggestion"]
         reveal(remove, in: app)
         XCTAssertTrue(remove.isHittable)
         XCTAssertLessThanOrEqual(remove.frame.maxY, app.buttons["tab-timeline"].frame.minY)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Photo review place disclosure and bottom clearance"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    func testPlaceReplacementActionsAreIndependentAndPhotoTilesMatch() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]
+        app.launch()
+        let create = app.buttons["suggestion-create-memory-suggestion-photo-0"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10)); create.tap()
+        XCTAssertTrue(app.navigationBars["Add a memory"].waitForExistence(timeout: 8))
+        let place = app.buttons["selected-place-options"]
+        place.tap()
+        app.buttons["select-saved-place"].tap()
+        XCTAssertTrue(app.navigationBars["Use a saved place"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Add a place"].exists)
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "saved-place-")).firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Add a memory"].waitForExistence(timeout: 5))
+        app.buttons["select-different-place"].tap()
+        XCTAssertTrue(app.navigationBars["Add a place"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Use a saved place"].exists)
+        app.navigationBars["Add a place"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Add a memory"].waitForExistence(timeout: 5))
+        let addTile = app.buttons["add-memory-photos"]
+        reveal(addTile, in: app)
+        let tile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "draft-photo-")).element(boundBy: 2)
+        XCTAssertEqual(addTile.frame.width, tile.frame.width, accuracy: 1)
+        XCTAssertEqual(addTile.frame.height, tile.frame.height, accuracy: 1)
+        XCTAssertEqual(addTile.frame.width, addTile.frame.height, accuracy: 1)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Matching memory photo and add tiles"; shot.lifetime = .keepAlways; add(shot)
+    }
+
+    func testSavedPhotoDeletionKeepsPagingAndPersists() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-browser"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-places"].waitForExistence(timeout: 10)); app.buttons["tab-places"].tap()
+        app.segmentedControls["places-collection"].buttons["Trips"].tap()
+        app.buttons["trip-photo-trip"].tap()
+        let first = app.buttons["Photo 1"]
+        reveal(first, in: app); first.tap()
+        XCTAssertTrue(app.navigationBars["1 of 9"].waitForExistence(timeout: 5))
+        app.buttons["delete-viewed-photo"].tap(); app.sheets.buttons["Delete photo"].tap()
+        XCTAssertTrue(app.navigationBars["1 of 8"].waitForExistence(timeout: 5))
+        app.buttons["Next photo"].tap()
+        XCTAssertTrue(app.navigationBars["2 of 8"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Saved photo viewer after removal"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["Done"].tap()
+        reveal(first, in: app); first.tap()
+        XCTAssertTrue(app.navigationBars["1 of 8"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["Previous photo"].isEnabled, false)
+        app.buttons["Done"].tap()
+        let edit = app.buttons["Edit memory"].firstMatch
+        reveal(edit, in: app); edit.tap()
+        let delete = app.buttons["Delete memory"]
+        reveal(delete, in: app)
+        let editor = XCTAttachment(screenshot: app.screenshot()); editor.name = "Consistent memory tiles and destructive action"; editor.lifetime = .keepAlways; add(editor)
+        delete.tap(); app.sheets.buttons["Delete memory"].tap()
+        XCTAssertTrue(app.staticTexts["A week of small moments together."].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Photo 1"].exists)
     }
 
     func testPhotoLibraryOptInUsesSystemPermissionAndCanTurnOff() {
@@ -478,8 +543,9 @@ import XCTest
         XCTAssertFalse(app.buttons["Remove photo"].exists)
         photo.press(forDuration: 1); app.buttons["Delete photo"].tap()
         XCTAssertTrue(app.sheets.buttons["Delete photo"].waitForExistence(timeout: 5))
-        // Compact native confirmations dismiss by tapping outside the popover.
-        app.navigationBars["Memory"].tap()
+        // The compact native popover has no Cancel button. Tap the dimmed
+        // margin, outside its bounds (the navigation title can sit behind it).
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
         XCTAssertTrue(app.sheets.buttons["Delete photo"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(photo.exists)
         app.buttons["save-memory"].tap()
@@ -567,13 +633,11 @@ import XCTest
         XCTAssertTrue(saved.waitForExistence(timeout: 10)); saved.tap()
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Locally saved photo"; shot.lifetime = .keepAlways; add(shot)
-        app.buttons["Done"].tap()
-        app.buttons["Edit memory"].firstMatch.tap()
-        let delete = app.buttons["Delete memory"]
-        reveal(delete, in: app); delete.tap()
-        app.sheets.buttons["Delete memory"].tap()
+        app.buttons["delete-viewed-photo"].tap()
+        app.sheets.buttons["Delete photo"].tap()
         XCTAssertTrue(app.buttons["add-memory"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Photo 1"].exists)
+        XCTAssertTrue(app.staticTexts["Breakfast by the sea"].exists)
     }
 
     func testNativePhotoPickerCanBeCancelledWithoutSavingAMemory() {
@@ -704,11 +768,13 @@ import XCTest
         note.tap(); note.typeText("An afternoon with @Al")
         let alexSuggestion = app.buttons["mention-memory-friend"]
         XCTAssertTrue(alexSuggestion.waitForExistence(timeout: 5)); alexSuggestion.tap()
+        XCTAssertTrue((app.buttons["memory-people"].value as? String ?? "").contains("Alex"))
         XCTAssertFalse(app.buttons["create-mentioned-person"].exists)
         note.typeText("and @Robin Taylor")
         let create = app.buttons["create-mentioned-person"]
         XCTAssertTrue(create.waitForExistence(timeout: 5)); reveal(create, in: app); create.tap()
         XCTAssertTrue(app.buttons["add-memory-photos"].waitForExistence(timeout: 5))
+        XCTAssertTrue((app.buttons["memory-people"].value as? String ?? "").contains("Robin Taylor"))
         reveal(app.buttons["add-memory-photos"], in: app); app.buttons["add-memory-photos"].tap()
         let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
         XCTAssertTrue(photo.waitForExistence(timeout: 10)); photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()

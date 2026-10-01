@@ -247,7 +247,8 @@ struct PlaceEditor: View {
             }
             if original != nil && !wifiOnly {
                 Section {
-                    Button("Delete place", role: .destructive) { deleting = true }
+                    Button("Delete place", systemImage: "trash", role: .destructive) { deleting = true }
+                        .foregroundStyle(.red)
                         .disabled(saving).accessibilityIdentifier("delete-place")
                     Button("Merge place", systemImage: "arrow.triangle.merge") {
                         if let place = preparedPlace() { mergeDraft = place }

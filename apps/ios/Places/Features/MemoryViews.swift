@@ -143,11 +143,13 @@ struct MemoryEditor: View {
     @State private var undo = DeleteUndo()
     @State private var offeredPhotos = false
     init(memory: PlaceMemory, addPhotos: Bool = false, importing photos: [MemoryPhotoFile] = [], suggestedCoordinate: Coordinate? = nil, onSaved: (() -> Void)? = nil) {
+        var memory = memory; memory.personIDs = memory.linkedPersonIDs
         _draft = State(initialValue: memory); self.addPhotos = addPhotos
         self.suggestedCoordinate = suggestedCoordinate
         _photos = State(initialValue: photos); self.onSaved = onSaved
     }
     private var exists: Bool { model.memories.memories.contains { $0.id == draft.id } }
+    private var placeCoordinate: Coordinate? { suggestedCoordinate ?? model.places.first { $0.id == draft.placeID }?.coordinate }
     var body: some View {
         Form {
             if suggestedCoordinate != nil || draft.placeID != nil {
@@ -157,32 +159,28 @@ struct MemoryEditor: View {
                 }
             }
             Section {
-                PersonMentionEditor(text: $draft.text, mentions: Binding(get: { draft.mentions ?? [] }, set: { draft.mentions = $0 }), label: "Write a note…", identifier: "memory-note")
+                PersonMentionEditor(text: $draft.text, mentions: Binding(get: { draft.mentions ?? [] }, set: {
+                    draft.mentions = $0
+                    draft.personIDs = draft.linkedPersonIDs
+                }), label: "Write a note…", identifier: "memory-note")
             }
             Section {
                 PeopleSelectionField(selection: $draft.personIDs).accessibilityIdentifier("memory-people")
                 if draft.visitStart == nil { DatePicker("Date", selection: $draft.date, in: ...Date(), displayedComponents: .date) }
             }
             Section("Photos") {
-                    PhotoGrid(items: draft.orderedPhotoIDs.map { PhotoReference(id: $0) }, open: { selectedPhoto = $0 }, remove: { reference in
-                        let index = draft.photoIDs.firstIndex(of: reference.id) ?? 0
-                        let file = photos.first { $0.id == reference.id }
-                        let details = draft.photoDetails?[reference.id]
-                        draft.photoIDs.removeAll { $0 == reference.id }; photos.removeAll { $0.id == reference.id }
-                        draft.photoDetails?.removeValue(forKey: reference.id)
-                        undo.register("Photo removed") {
-                            draft.photoIDs.insert(reference.id, at: min(index, draft.photoIDs.count))
-                            if let file { photos.append(file) }
-                            if let details { draft.photoDetails = (draft.photoDetails ?? [:]).merging([reference.id: details]) { _, restored in restored } }
-                        }
-                    }, reorder: draft.photoIDs.count > 1 ? { reordering = true } : nil,
+                    PhotoGrid(items: draft.orderedPhotoIDs.map { PhotoReference(id: $0) }, open: { selectedPhoto = $0 },
+                    remove: { removePhoto($0.id) }, reorder: draft.photoIDs.count > 1 ? { reordering = true } : nil,
                     add: { choosingPhotos = true }, addIdentifier: "add-memory-photos", addingDisabled: importing, photoIdentifierPrefix: "draft-photo-") { reference in
                         DraftPhotoThumbnail(id: reference.id, files: photos)
                     }
                 if importing { ProgressView(importProgress) }
             }
             if exists {
-                Section { Button("Delete memory", role: .destructive) { confirmDelete = true } }
+                Section {
+                    Button("Delete memory", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                        .foregroundStyle(.red)
+                }
             }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .modifier(DeleteUndoPresentation(undo: undo))
@@ -200,10 +198,10 @@ struct MemoryEditor: View {
             .onChange(of: choosingPhotos) { importSelectionIfReady() }
             .sheet(isPresented: $reordering) { NavigationStack { MemoryPhotoOrderEditor(memory: $draft, files: photos) } }
             .sheet(isPresented: $choosePlace) {
-                NavigationStack { SavedPlacePicker(anchor: suggestedCoordinate) { draft.placeID = $0.id; draft.visitStart = nil; choosePlace = false } }
+                NavigationStack { SavedPlacePicker(anchor: placeCoordinate) { draft.placeID = $0.id; draft.visitStart = nil; choosePlace = false } }
             }
             .sheet(isPresented: $addPlace) {
-                NavigationStack { PlaceEditor(coordinate: suggestedCoordinate, onSavedPlace: { draft.placeID = $0.id; draft.visitStart = nil; addPlace = false }) }
+                NavigationStack { PlaceEditor(coordinate: placeCoordinate, onSavedPlace: { draft.placeID = $0.id; draft.visitStart = nil; addPlace = false }) }
             }
             .fullScreenCover(item: $selectedPhoto) { photo in
                 MemoryPhotoBrowser(photoIDs: draft.orderedPhotoIDs, initialID: photo.id, details: draft.photoDetails ?? [:], load: { id in
@@ -213,7 +211,7 @@ struct MemoryEditor: View {
                     var details = draft.photoDetails?[id] ?? MemoryPhotoDetails()
                     details.caption = caption
                     draft.photoDetails = (draft.photoDetails ?? [:]).merging([id: details]) { _, new in new }
-                })
+                }, removePhoto: { removePhoto($0) })
             }
             .modifier(EditorControls(saving: saving,
                 canSave: !importing && (suggestedCoordinate == nil || draft.placeID != nil) && (!draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.photoIDs.isEmpty || !draft.personIDs.isEmpty),
@@ -222,6 +220,18 @@ struct MemoryEditor: View {
             .confirmationDialog("Delete this memory and its photos?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete memory", role: .destructive) { save(deleting: true) }
             }
+    }
+    private func removePhoto(_ id: String) {
+        guard let index = draft.photoIDs.firstIndex(of: id) else { return }
+        let file = photos.first { $0.id == id }
+        let details = draft.photoDetails?[id]
+        draft.photoIDs.removeAll { $0 == id }; photos.removeAll { $0.id == id }
+        draft.photoDetails?.removeValue(forKey: id)
+        undo.register("Photo removed") {
+            draft.photoIDs.insert(id, at: min(index, draft.photoIDs.count))
+            if let file { photos.append(file) }
+            if let details { draft.photoDetails = (draft.photoDetails ?? [:]).merging([id: details]) { _, restored in restored } }
+        }
     }
     private func importSelectionIfReady() {
         // Selection and dismissal bindings may arrive in either order. Consume the

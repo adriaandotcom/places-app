@@ -63,10 +63,50 @@ private func detect(_ items: [TimelineItem], places: [Place] = [home, hotel], no
 }
 @Test func tripMemoriesOnlyIncludeThisVisitNotEveryStayAtSamePlace() {
     let trip = Trip(title: "Holiday", start: date(2, 0), end: date(5, 0))
-    #expect(PlaceMemory(text: "General place note", placeID: hotel.id).belongs(to: trip) == false)
+    #expect(PlaceMemory(text: "Earlier place note", date: date(1, 0), placeID: hotel.id).belongs(to: trip) == false)
     #expect(PlaceMemory(text: "Earlier visit", placeID: hotel.id, visitStart: date(1, 10)).belongs(to: trip) == false)
     #expect(PlaceMemory(text: "This visit", placeID: hotel.id, visitStart: date(3, 10)).belongs(to: trip))
     #expect(PlaceMemory(text: "Trip note", tripID: trip.id).belongs(to: trip))
+}
+@Test func datedPlaceMemoriesConnectToTripsAndOnlyMatchingVisits() async throws {
+    let trip = Trip(id: "ongoing", title: "Island trip", start: date(2, 0))
+    let outing = PlaceMemory(text: "Afternoon out", date: date(3, 12), placeID: "cafe")
+    let now = date(4, 18)
+    #expect(outing.belongs(to: trip, now: now))
+    #expect(!outing.belongs(to: Trip(title: "Earlier trip", start: date(1, 0), end: date(2, 0)), now: now))
+    #expect(!outing.belongs(to: trip, now: date(3, 11)))
+    #expect(outing.belongs(to: visit("cafe", "cafe", 3, 11, 3, 13), now: now))
+    #expect(!outing.belongs(to: visit("hotel", hotel.id, 3, 11, 3, 13), now: now))
+    #expect(!outing.belongs(to: visit("earlier", "cafe", 2, 11, 2, 13), now: now))
+    var explicitlyLinked = outing; explicitlyLinked.tripID = "other"
+    #expect(!explicitlyLinked.belongs(to: trip, now: now))
+    let store = try PlacesStore()
+    try await store.saveTrip(trip)
+    try await store.savePlace(Place(id: "cafe", name: "Fixture cafe", coordinate: hotel.coordinate))
+    try await store.saveMemory(outing)
+    #expect(try await store.tripIDs(visiting: "cafe", now: now) == [trip.id])
+    #expect(try await store.timeline(in: trip.interval(now: now)).isEmpty, "Showing a memory must not invent a visit")
+}
+
+@Test func removingSavedPhotosIsAtomicAndKeepsOtherMemories() async throws {
+    let store = try PlacesStore(); try await store.savePlace(hotel)
+    let photo = MemoryPhoto(id: "first", jpeg: Data([1]), thumbnail: Data([2]), details: .init(caption: "One"))
+    let second = MemoryPhoto(id: "second", jpeg: Data([3]), thumbnail: Data([4]))
+    let other = MemoryPhoto(id: "other", jpeg: Data([5]), thumbnail: Data([6]))
+    let memory = PlaceMemory(id: "memory", placeID: hotel.id, photoIDs: [photo.id, second.id])
+    try await store.saveMemory(memory, adding: [photo, second])
+    try await store.saveMemory(PlaceMemory(id: "other-memory", text: "Keep me", placeID: hotel.id, photoIDs: [other.id]), adding: [other])
+    await #expect(throws: MemoryError.self) { try await store.deleteMemoryPhoto(memoryID: memory.id, photoID: other.id) }
+    try await store.deleteMemoryPhoto(memoryID: memory.id, photoID: photo.id)
+    let saved = try #require(await store.memoryLibrary().memories.first { $0.id == memory.id })
+    #expect(saved.photoIDs == [second.id] && saved.photoDetails?[photo.id] == nil)
+    #expect(try await store.photoData(id: photo.id) == nil)
+    #expect(try await store.photoData(id: second.id) == second.jpeg)
+    try await store.deleteMemoryPhoto(memoryID: memory.id, photoID: second.id)
+    #expect(try await store.memoryLibrary().memories.map(\.id) == ["other-memory"])
+    try await store.deleteMemoryPhoto(memoryID: "other-memory", photoID: other.id)
+    #expect(try await store.memoryLibrary().memories.first?.text == "Keep me")
+    #expect(try await store.photoData(id: other.id) == nil)
 }
 @Test func memoriesPhotosAndPeoplePersistExportPrivatelyAndEraseCompletely() async throws {
     let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
@@ -273,6 +313,7 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
     try await store.saveMemory(memory)
     #expect(try await store.memoryLibrary().people.first { $0.id == parent.id }?.avatarJPEG == parent.avatarJPEG)
     #expect(try await store.memoryLibrary().memories.first?.linkedPersonIDs == [parent.id])
+    #expect(try await store.memoryLibrary().memories.first?.personIDs == [parent.id])
     let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
     let archive = try decoder.decode(HistoryArchive.self, from: await store.exportHistory())
     #expect(archive.memories?.people.first { $0.id == child.id }?.mentions == [tag])
@@ -304,10 +345,14 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
     var library = MemoryLibrary(); library.people = [person]; library.trips = [trip]
     library.memories = [PlaceMemory(date: date(3, 0), tripID: trip.id, photoIDs: ["trip-photo"]),
         PlaceMemory(date: date(4, 0), placeID: hotel.id, visitStart: date(4, 0), photoIDs: ["visit-photo"]),
-        PlaceMemory(date: date(4, 0), placeID: hotel.id, photoIDs: ["unrelated-place-photo"]),
+        PlaceMemory(date: date(4, 1), placeID: hotel.id, photoIDs: ["outing-photo"]),
+        PlaceMemory(date: date(1, 0), placeID: hotel.id, photoIDs: ["earlier-place-photo"]),
         PlaceMemory(date: date(1, 0), placeID: hotel.id, personIDs: [person.id], photoIDs: ["tagged-photo"])]
-    #expect(library.avatarPhotoIDs(for: person.id, now: date(6, 0)) == ["visit-photo", "trip-photo", "tagged-photo"])
+    #expect(library.avatarPhotoIDs(for: person.id, now: date(6, 0)) == ["outing-photo", "visit-photo", "trip-photo", "tagged-photo"])
+    #expect(library.memories(involving: person.id, now: date(6, 0)).flatMap(\.photoIDs) == ["outing-photo", "visit-photo", "trip-photo", "tagged-photo"])
     #expect(library.avatarPhotoIDs(for: "someone-else", now: date(6, 0)).isEmpty)
+    library.trips[0].hidden = true
+    #expect(library.memories(involving: person.id, now: date(6, 0)).flatMap(\.photoIDs) == ["tagged-photo"])
 }
 
 

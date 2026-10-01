@@ -44,7 +44,7 @@ struct YourDataView: View {
             Section {
                 Button(role: .destructive) { confirmDelete = true } label: {
                     Label(deleting ? "Starting again…" : "Delete all data and start again…", systemImage: "trash")
-                }.accessibilityIdentifier("reset-all-data")
+                }.foregroundStyle(.red).accessibilityIdentifier("reset-all-data")
             }
         }.disabled(preparing || deleting).scrollContentBackground(.hidden).background(Palette.background)
             .navigationTitle("Your data").navigationBarTitleDisplayMode(.inline)

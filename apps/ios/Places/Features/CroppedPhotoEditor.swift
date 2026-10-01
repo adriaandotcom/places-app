@@ -17,8 +17,8 @@ struct CroppedPhotoField<Preview: View>: View {
             Button { choosing = true } label: { preview() }
                 .buttonStyle(.plain).accessibilityLabel(photo == nil ? "Add photo" : "Change photo")
                 .accessibilityIdentifier(identifier)
-            Button(photo == nil ? "Add photo" : "Change photo") { choosing = true }.buttonStyle(.borderless)
-            if photo != nil { Button("Remove photo", role: .destructive) { photo = nil }.buttonStyle(.borderless) }
+            Button(photo == nil ? "Add photo" : "Change photo", systemImage: "photo") { choosing = true }.buttonStyle(.borderless)
+            if photo != nil { Button("Remove photo", systemImage: "trash", role: .destructive) { photo = nil }.buttonStyle(.borderless).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity).padding(.vertical, Layout.compact)
             .sheet(isPresented: $choosing) {
                 NavigationStack {

@@ -4,7 +4,7 @@ import UIKit
 import PlacesCore
 
 enum DemoFixtures {
-    @MainActor static func seedPhotoSuggestions(_ store: PlacesStore, library: PhotoLibraryEvidence) async throws {
+    @MainActor static func seedPhotoSuggestions(_ store: PlacesStore, library: PhotoLibraryEvidence) async throws -> Date {
         let date = Date().addingTimeInterval(-7200)
         let park = Place(id: "photo-park", name: "Little park", coordinate: Coordinate(latitude: 12, longitude: 34), symbol: "tree.fill")
         try await store.savePlace(park)
@@ -29,6 +29,7 @@ enum DemoFixtures {
             values.append(PhotoLocationEvidence(id: id, assetID: id, capturedAt: time, coordinate: coordinate, cameraModel: "Preview iPhone", faceCount: index < 3 ? 3 : 0))
         }
         try await library.loadPreviewForTesting(values, photos: photos)
+        return date
     }
 
     static func seedRewind(_ store: PlacesStore) async throws {
@@ -72,7 +73,12 @@ enum DemoFixtures {
                 coordinate: index == 0 ? Coordinate(latitude: 52.37, longitude: 4.9) : nil)
             photos.append(photo)
         }
-        try await store.saveMemory(PlaceMemory(text: "A week of small moments together.", tripID: trip.id, personIDs: trip.personIDs, photoIDs: photos.reversed().map(\.id)), adding: photos)
+        let outing = Place(id: "photo-outing", name: "Little cafe", coordinate: .init(latitude: 36.875, longitude: 27.19), symbol: "cup.and.saucer.fill")
+        try await store.savePlace(outing)
+        // A dated memory at another place must join the ongoing trip without
+        // requiring a trip ID or a recorded visit at that place.
+        try await store.saveMemory(PlaceMemory(text: "A week of small moments together.", date: Date().addingTimeInterval(-60),
+            placeID: outing.id, personIDs: trip.personIDs, photoIDs: photos.reversed().map(\.id)), adding: photos)
     }
     static func seedMemories(_ store: PlacesStore) async throws {
         let calendar = Calendar.current

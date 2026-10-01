@@ -18,7 +18,7 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
     @ViewBuilder let thumbnail: (Item) -> Thumbnail
     @State private var removing: Item?
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: Layout.portraitSize))], spacing: Layout.compact) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: Layout.portraitSize), spacing: Layout.compact)], spacing: Layout.compact) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 Group {
                     if let open {
@@ -38,9 +38,9 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
             }
             if let add {
                 Button(action: add) {
-                    Image(systemName: "plus").font(.title2).foregroundStyle(Palette.green)
-                        .frame(maxWidth: .infinity).aspectRatio(1, contentMode: .fit)
-                        .background(addBackground, in: RoundedRectangle(cornerRadius: Layout.compact))
+                    PhotoGridTile {
+                        addBackground.overlay { Image(systemName: "plus").font(.title2).foregroundStyle(Palette.green) }
+                    }
                 }.buttonStyle(.plain).accessibilityLabel(addLabel).accessibilityIdentifier(addIdentifier).disabled(addingDisabled)
             }
         }
@@ -49,9 +49,19 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
         } message: { _ in Text("The original photo in your library is kept.") }
     }
     private func tile(_ item: Item) -> some View {
-        GeometryReader { geometry in
-            thumbnail(item).frame(width: geometry.size.width, height: geometry.size.height).clipped()
-        }.aspectRatio(1, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: Layout.compact)).contentShape(Rectangle())
+        PhotoGridTile { thumbnail(item) }
+    }
+}
+
+/// The image and add button receive the same square proposal, independent of
+/// their intrinsic sizes or a Form's automatic button layout.
+private struct PhotoGridTile<Content: View>: View {
+    @ViewBuilder let content: Content
+    var body: some View {
+        Color.clear.aspectRatio(1, contentMode: .fit).overlay {
+            GeometryReader { geometry in
+                content.frame(width: geometry.size.width, height: geometry.size.height).clipped()
+            }
+        }.clipShape(RoundedRectangle(cornerRadius: Layout.compact)).contentShape(Rectangle())
     }
 }

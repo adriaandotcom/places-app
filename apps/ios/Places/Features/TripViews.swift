@@ -54,7 +54,10 @@ struct TripDetail: View {
                     MemorySection(context: .trip(trip))
                     MapPreviewCard(items: items, routePoints: routes)
                     if loadError { Text("The trip’s visits couldn’t be loaded. Reopen this trip to try again.").foregroundStyle(Palette.muted) }
-                    let places = model.places.filter { place in items.contains { $0.kind == .stay && $0.placeID == place.id } }
+                    let places = model.places.filter { place in
+                        items.contains { $0.kind == .stay && $0.placeID == place.id }
+                            || model.memories.memories.contains { $0.placeID == place.id && $0.belongs(to: trip) }
+                    }
                     if !places.isEmpty {
                         SectionHeading(title: "Places on this trip")
                         ForEach(places) { place in

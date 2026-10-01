@@ -85,7 +85,7 @@ struct PersonDetail: View {
                         SectionHeading(title: "Trips together")
                         ForEach(trips) { trip in TripLink(trip: trip) }
                     }
-                    let memories = model.memories.memories.filter { $0.linkedPersonIDs.contains(personID) }
+                    let memories = model.memories.memories(involving: personID)
                     if !memories.isEmpty {
                         SectionHeading(title: "Shared memories")
                         ForEach(memories) { memory in MemoryCard(memory: memory) }
@@ -126,7 +126,7 @@ struct PersonEditor: View {
                 PersonMentionEditor(text: $person.detail, mentions: Binding(get: { person.mentions ?? [] }, set: { person.mentions = $0 }), label: "A little about them…", identifier: "person-description", excludingPersonID: person.id)
             }
             if model.memories.people.contains(where: { $0.id == person.id }) {
-                Section { Button("Delete person", role: .destructive) { deleting = true } }
+                Section { Button("Delete person", systemImage: "trash", role: .destructive) { deleting = true }.foregroundStyle(.red) }
             }
         }.scrollContentBackground(.hidden).background(Palette.background).navigationTitle("Person").navigationBarTitleDisplayMode(.inline)
             .onAppear { if epoch == nil { epoch = model.memoryEpoch } }

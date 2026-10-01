@@ -226,7 +226,7 @@ final class AppModel {
                     await photoLibrary.start(store: opened)
                     #if DEBUG
                     if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-photo-suggestions") {
-                        try await DemoFixtures.seedPhotoSuggestions(opened, library: photoLibrary)
+                        selectedDay = try await DemoFixtures.seedPhotoSuggestions(opened, library: photoLibrary)
                         onboardingComplete = true
                         await refresh()
                     }

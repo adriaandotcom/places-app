@@ -54,6 +54,7 @@ enum PhotoDate {
 
 struct SavedMemoryPhotoBrowser: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     let memoryID: String
     let initialID: String
     @State private var epoch: Int?
@@ -63,8 +64,14 @@ struct SavedMemoryPhotoBrowser: View {
                 load: { try await model.store?.photoData(id: $0) }, saveCaption: { id, caption in
                     guard let epoch else { throw CancellationError() }
                     try await model.changeMemories(epoch: epoch) { try await $0.updatePhotoCaption(memoryID: memoryID, photoID: id, caption: caption) }
-                }).onAppear { if epoch == nil { epoch = model.memoryEpoch } }
-        }
+                }, removePhoto: { id in
+                    guard let epoch else { throw CancellationError() }
+                    try await model.changeMemories(epoch: epoch) { try await $0.deleteMemoryPhoto(memoryID: memoryID, photoID: id) }
+                }, removalMessage: memory.photoIDs.count == 1 && memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && memory.linkedPersonIDs.isEmpty
+                    ? "The original photo in your library is kept. This also removes the memory, which would be empty."
+                    : "The original photo in your library is kept.")
+                .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
+        } else { Color.clear.onAppear { dismiss() } }
     }
 }
 
@@ -75,6 +82,8 @@ struct MemoryPhotoBrowser: View {
     let details: [String: MemoryPhotoDetails]
     let load: (String) async throws -> Data?
     let saveCaption: ((String, String) async throws -> Void)?
+    let removePhoto: ((String) async throws -> Void)?
+    let removalMessage: String
     @State private var selectedID: String
     private enum Detail: Identifiable {
         case caption(String), location(String)
@@ -85,9 +94,14 @@ struct MemoryPhotoBrowser: View {
     @State private var sharePreview: Image?
     @State private var exporting = false
     @State private var exportError: String?
+    @State private var confirmRemoval = false
+    @State private var removing = false
+    @State private var removalError: String?
     init(photoIDs: [String], initialID: String, details: [String: MemoryPhotoDetails],
-         load: @escaping (String) async throws -> Data?, saveCaption: ((String, String) async throws -> Void)? = nil) {
+         load: @escaping (String) async throws -> Data?, saveCaption: ((String, String) async throws -> Void)? = nil,
+         removePhoto: ((String) async throws -> Void)? = nil, removalMessage: String = "The original photo in your library is kept.") {
         self.photoIDs = photoIDs; self.details = details; self.load = load; self.saveCaption = saveCaption
+        self.removePhoto = removePhoto; self.removalMessage = removalMessage
         _selectedID = State(initialValue: initialID)
     }
     private var index: Int { photoIDs.firstIndex(of: selectedID) ?? 0 }
@@ -121,8 +135,32 @@ struct MemoryPhotoBrowser: View {
                         if details[selectedID]?.coordinate != nil {
                             Button("Photo location", systemImage: "info.circle") { presentedDetail = .location(selectedID) }.accessibilityIdentifier("photo-location")
                         }
+                        if removePhoto != nil {
+                            Button("Delete photo", systemImage: "trash", role: .destructive) { confirmRemoval = true }
+                                .tint(.red).foregroundStyle(.red).accessibilityIdentifier("delete-viewed-photo")
+                        }
                     }
                 }
+                .disabled(removing)
+                .onChange(of: photoIDs) { old, remaining in
+                    guard !remaining.contains(selectedID) else { return }
+                    if remaining.isEmpty { dismiss() }
+                    else { selectedID = remaining[min(old.firstIndex(of: selectedID) ?? 0, remaining.count - 1)] }
+                }
+                .confirmationDialog("Remove this photo?", isPresented: $confirmRemoval, titleVisibility: .visible) {
+                    Button("Delete photo", role: .destructive) {
+                        let id = selectedID
+                        removing = true
+                        Task {
+                            defer { removing = false }
+                            do { try await removePhoto?(id) }
+                            catch { removalError = "The photo couldn’t be removed. Try again." }
+                        }
+                    }
+                } message: { Text(removalMessage) }
+                .alert("Couldn’t remove photo", isPresented: Binding(get: { removalError != nil }, set: { if !$0 { removalError = nil } })) {
+                    Button("OK") {}
+                } message: { Text(removalError ?? "") }
                 .task(id: selectedID) {
                     share = nil; sharePreview = nil
                     do {

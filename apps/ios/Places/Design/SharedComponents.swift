@@ -34,6 +34,7 @@ struct SectionHeading: View {
 /// A settled selection with secondary choices underneath, shared by forms/cards.
 struct SelectionDisclosureStyle: DisclosureGroupStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var identifier = ""
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: Layout.compact) {
             Button {
@@ -46,6 +47,7 @@ struct SelectionDisclosureStyle: DisclosureGroupStyle {
                         .rotationEffect(.degrees(configuration.isExpanded ? 180 : 0)).foregroundStyle(Palette.muted)
                 }.contentShape(Rectangle()).frame(minHeight: Layout.touchTarget)
             }.buttonStyle(.plain).accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
+                .accessibilityIdentifier(identifier)
             if configuration.isExpanded {
                 Divider()
                 configuration.content.frame(maxWidth: .infinity, alignment: .leading)

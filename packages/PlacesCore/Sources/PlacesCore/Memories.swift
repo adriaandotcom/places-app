@@ -64,7 +64,7 @@ public struct MemoryPerson: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// A visit uses a time anchor, never a derived timeline ID that can change after re-inference.
-/// General place notes have no visitStart and do not leak into unrelated trips.
+/// Place memories without a visit anchor connect through their saved date.
 public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
     public static func suggestionID(_ suggestionID: String, placeID: String) -> String {
         "suggestion-\(suggestionID)-\(placeID)"
@@ -98,11 +98,14 @@ public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
     }
     public func belongs(to trip: Trip, now: Date = Date()) -> Bool {
         if let tripID { return tripID == trip.id }
-        return visitStart.map { trip.contains($0, now: now) } ?? false
+        return trip.contains(visitStart ?? date, now: now)
     }
     public func belongs(to visit: TimelineItem, now: Date = Date()) -> Bool {
-        guard tripID == nil, let visitStart else { return false }
-        return visitStart >= visit.start && visitStart < (visit.end ?? now)
+        if let placeID {
+            guard visit.kind == .stay, visit.placeID == placeID else { return false }
+        } else if visitStart == nil { return false }
+        let anchor = visitStart ?? date
+        return anchor >= visit.start && anchor < (visit.end ?? now)
     }
 }
 
@@ -151,13 +154,17 @@ public struct MemoryLibrary: Sendable {
     public var people: [MemoryPerson] = []
     public var memories: [PlaceMemory] = []
     public init() {}
-    /// Only photos already added to shared trips or explicitly linked memories, newest first.
-    public func avatarPhotoIDs(for personID: String, now: Date = Date()) -> [String] {
+    /// Direct tags and memories dated within a trip shared with this person.
+    public func memories(involving personID: String, now: Date = Date()) -> [PlaceMemory] {
         let shared = trips.filter { !$0.hidden && $0.personIDs.contains(personID) }
-        var seen: Set<String> = []
         return memories.filter { memory in
             memory.linkedPersonIDs.contains(personID) || shared.contains { memory.belongs(to: $0, now: now) }
-        }.sorted { $0.date > $1.date }.flatMap(\.photoIDs).filter { seen.insert($0).inserted }
+        }.sorted { $0.date > $1.date }
+    }
+    /// Only photos already added to shared trips or explicitly linked memories, newest first.
+    public func avatarPhotoIDs(for personID: String, now: Date = Date()) -> [String] {
+        var seen: Set<String> = []
+        return memories(involving: personID, now: now).flatMap(\.photoIDs).filter { seen.insert($0).inserted }
     }
 }
 public enum MemoryError: Error, LocalizedError {

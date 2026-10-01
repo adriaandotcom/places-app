@@ -7,8 +7,10 @@ extension PlacesStore {
             let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")
             let edits = try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
             let visits = InferenceEngine.applying(edits, to: items).filter { $0.kind == .stay && $0.placeID == placeID }
+            let memories = try MemorySQL.memories(db).filter { $0.placeID == placeID }
             return try MemorySQL.trips(db).filter { trip in
-                !trip.hidden && visits.contains { $0.start < (trip.end ?? now) && ($0.end ?? now) > trip.start }
+                !trip.hidden && (visits.contains { $0.start < (trip.end ?? now) && ($0.end ?? now) > trip.start }
+                    || memories.contains { $0.belongs(to: trip, now: now) })
             }.map(\.id)
         }
     }
@@ -102,6 +104,20 @@ extension PlacesStore {
             try MemorySQL.saveMemory(memory, db: db)
         }
     }
+    public func deleteMemoryPhoto(memoryID: String, photoID: String) throws {
+        try queue.write { db in
+            guard var memory = try StoreSQL.decodeAll(PlaceMemory.self, db: db,
+                sql: "SELECT payload FROM memories WHERE id = ?", arguments: [memoryID]).first,
+                  memory.photoIDs.contains(photoID) else { throw MemoryError.invalidPhoto }
+            memory.photoIDs.removeAll { $0 == photoID }
+            memory.photoDetails?.removeValue(forKey: photoID)
+            if memory.photoIDs.isEmpty && memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && memory.linkedPersonIDs.isEmpty {
+                try db.execute(sql: "DELETE FROM memories WHERE id = ?", arguments: [memoryID])
+            } else {
+                try MemorySQL.saveMemoryWithPhotos(memory, db: db)
+            }
+        }
+    }
     public func photoData(id: String, thumbnail: Bool = false) throws -> Data? {
         try queue.read { try Data.fetchOne($0, sql: thumbnail ? "SELECT thumbnail FROM memoryPhotos WHERE id = ?" : "SELECT jpeg FROM memoryPhotos WHERE id = ?", arguments: [id]) }
     }
@@ -146,6 +162,7 @@ enum MemorySQL {
     static func saveMemoryWithPhotos(_ memory: PlaceMemory, adding photos: [MemoryPhoto] = [],
                                     importing files: [MemoryPhotoFile] = [], db: Database) throws {
         var memory = memory
+        memory.personIDs = memory.linkedPersonIDs
         for (id, details) in photos.map({ ($0.id, $0.details) }) + files.map({ ($0.id, $0.details) }) {
             if let details { memory.photoDetails = (memory.photoDetails ?? [:]).merging([id: details]) { old, _ in old } }
         }
