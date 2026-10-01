@@ -28,6 +28,7 @@ struct OfflineMapView: View {
     var focusRequest: UUID?
     var chromeInsets = EdgeInsets()
     var pinChanged: ((Coordinate) -> Void)?
+    var rawPointSelected: ((RawMapPoint) -> Void)?
     @State private var selectedPlace: Place?
     @State private var showSettings = false
     @State private var suggestedPack: MapPack?
@@ -38,7 +39,8 @@ struct OfflineMapView: View {
         OfflineMapSurface(presentation: presentation, installed: model.mapDownloads.installed, viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets,
             pinChanged: pinChanged,
             selected: { pin in selectedPlace = model.places.first { $0.id == pin.placeID } },
-            settled: suggestCountry, failed: { mapIssue = "The downloaded map could not be displayed." })
+            settled: suggestCountry, failed: { mapIssue = "The downloaded map could not be displayed." },
+            rawPointSelected: rawPointSelected)
             .accessibilityIdentifier(pinChanged == nil ? "on-device-map" : "place-pin-map")
             .overlay(alignment: .top) {
                 if let message = banner {
@@ -110,6 +112,7 @@ struct OfflineMapSurface: UIViewRepresentable {
     let selected: (MapPin) -> Void
     let settled: (MapViewport, Double) -> Void
     let failed: () -> Void
+    var rawPointSelected: ((RawMapPoint) -> Void)?
     var interactive = true
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> MLNMapView {
@@ -168,6 +171,7 @@ struct OfflineMapSurface: UIViewRepresentable {
         var restoreViewport = true
         var routeLayerIDs: [String] = []
         private var annotations: [MapAnnotation] = []
+        private var rawAnnotations: [RawMapAnnotation] = []
         init(_ parent: OfflineMapSurface) { self.parent = parent; focusRequest = parent.focusRequest }
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             rendered = nil; routeLayerIDs = []; render(mapView)
@@ -226,7 +230,12 @@ struct OfflineMapSurface: UIViewRepresentable {
                 layer.lineColor = NSExpression(forConstantValue: UIColor(path.dashed ? Palette.muted : Palette.green))
                 layer.lineWidth = NSExpression(forConstantValue: path.dashed ? 3 : 4)
                 if path.dashed { layer.lineDashPattern = NSExpression(forConstantValue: [2, 2]) }
-                style.addSource(source); style.addLayer(layer); routeLayerIDs.append(id)
+                style.addSource(source)
+                if !parent.presentation.rawPoints.isEmpty, let labels = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
+                    // Keep the time-order line behind raw dot images and map labels.
+                    style.insertLayer(layer, below: labels)
+                } else { style.addLayer(layer) }
+                routeLayerIDs.append(id)
             }
             if let radius = parent.presentation.radius, let pin = parent.presentation.pins.first {
                 let center = pin.coordinate
@@ -262,6 +271,9 @@ struct OfflineMapSurface: UIViewRepresentable {
             if !annotations.isEmpty { map.removeAnnotations(annotations) }
             annotations = parent.presentation.pins.map(MapAnnotation.init)
             map.addAnnotations(annotations)
+            if !rawAnnotations.isEmpty { map.removeAnnotations(rawAnnotations) }
+            rawAnnotations = parent.presentation.rawPoints.map(RawMapAnnotation.init)
+            map.addAnnotations(rawAnnotations)
             frame(map)
         }
         func frame(_ map: MLNMapView) {
@@ -331,7 +343,20 @@ struct OfflineMapSurface: UIViewRepresentable {
         }
         func mapView(_ mapView: MLNMapView, didSelect annotation: MLNAnnotation) {
             if let annotation = annotation as? MapAnnotation { parent.selected(annotation.pin) }
+            if let annotation = annotation as? RawMapAnnotation { parent.rawPointSelected?(annotation.point) }
             mapView.deselectAnnotation(annotation, animated: false)
+        }
+        func mapView(_ mapView: MLNMapView, imageFor annotation: MLNAnnotation) -> MLNAnnotationImage? {
+            guard let annotation = annotation as? RawMapAnnotation else { return nil }
+            // Shared renderer images avoid one UIKit view per raw observation.
+            let reuse = "raw-point-\(annotation.point.colorIndex)-\(parent.colorScheme)"
+            if let image = mapView.dequeueReusableAnnotationImage(withIdentifier: reuse) { return image }
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).image { context in
+                UIColor.white.setFill(); context.cgContext.fillEllipse(in: CGRect(x: 2, y: 2, width: 16, height: 16))
+                UIColor(Palette.accent(annotation.point.colorIndex)).setFill()
+                context.cgContext.fillEllipse(in: CGRect(x: 4, y: 4, width: 12, height: 12))
+            }
+            return MLNAnnotationImage(image: image, reuseIdentifier: reuse)
         }
     }
 }
@@ -351,6 +376,16 @@ private final class MapAnnotation: MLNPointAnnotation {
         self.pin = pin; super.init()
         coordinate = CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)
         title = pin.name
+    }
+    required init?(coder: NSCoder) { nil }
+}
+
+private final class RawMapAnnotation: MLNPointAnnotation {
+    let point: RawMapPoint
+    init(_ point: RawMapPoint) {
+        self.point = point; super.init()
+        coordinate = CLLocationCoordinate2D(latitude: point.coordinate.latitude, longitude: point.coordinate.longitude)
+        title = point.accessibilityLabel
     }
     required init?(coder: NSCoder) { nil }
 }

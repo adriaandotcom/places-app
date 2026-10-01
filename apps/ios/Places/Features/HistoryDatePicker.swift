@@ -102,8 +102,8 @@ struct HistoryDatePicker: View {
                         selectDays(from: calendar.date(byAdding: .day, value: -6, to: Date())!, through: Date(), title: "Last 7 days")
                     }
                     Button("This month") { selectDays(from: calendar.dateInterval(of: .month, for: Date())!.start, through: Date(), title: "This month") }
-                    if let first = model.historyDays.first {
-                        Button("All history") { selectDays(from: first.date, through: Date(), title: "All history") }
+                    if let first = model.firstHistoryDate {
+                        Button("All history") { selectDays(from: first, through: Date(), title: "All history") }
                             .accessibilityIdentifier("all-history-period")
                     }
                 }

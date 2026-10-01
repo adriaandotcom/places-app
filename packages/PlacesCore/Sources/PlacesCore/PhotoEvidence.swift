@@ -113,6 +113,12 @@ extension PlacesStore {
             try StoreSQL.decodeAll(PhotoLocationEvidence.self, db: db, sql: "SELECT payload FROM photoEvidence WHERE capturedAt >= ?" + (includeHistory ? "" : " AND active = 1 AND assetID NOT IN (SELECT assetID FROM photoReview)") + " ORDER BY capturedAt", arguments: [since.timeIntervalSince1970])
         }
     }
+    /// Current stored coordinates, including photos whose suggestions were already reviewed.
+    public func photoEvidence(from start: Date, to end: Date) throws -> [PhotoLocationEvidence] {
+        try queue.read { try StoreSQL.decodeAll(PhotoLocationEvidence.self, db: $0,
+            sql: "SELECT payload FROM photoEvidence WHERE active = 1 AND capturedAt >= ? AND capturedAt < ? ORDER BY capturedAt, id",
+            arguments: [start.timeIntervalSince1970, end.timeIntervalSince1970]) }
+    }
     public func dismissPhotoSuggestions(assetIDs: [String]) throws {
         try queue.write { db in
             for id in assetIDs { try db.execute(sql: "INSERT OR IGNORE INTO photoReview(assetID) VALUES (?)", arguments: [id]) }

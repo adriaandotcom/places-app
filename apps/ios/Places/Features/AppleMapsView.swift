@@ -27,16 +27,17 @@ struct PrivacyMapView: View {
     var customPresentation: MapPresentation?
     var chromeInsets = EdgeInsets()
     var retainedViewport: Binding<MapViewport?>?
+    var rawPointSelected: ((RawMapPoint) -> Void)?
     @State private var localViewport: MapViewport?
     private var viewport: Binding<MapViewport?> { retainedViewport ?? $localViewport }
     @State private var showMapSettings = false
     var body: some View {
         Group {
         if model.mapsEnabled {
-            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: viewport, focusRequest: focusRequest, customPresentation: customPresentation, chromeInsets: chromeInsets)
+            AppleMapSurface(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, viewport: viewport, focusRequest: focusRequest, customPresentation: customPresentation, chromeInsets: chromeInsets, rawPointSelected: rawPointSelected)
                 .accessibilityIdentifier("apple-map")
         } else if model.mapProvider == .onDevice {
-            OfflineMapView(presentation: customPresentation ?? MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: viewport, focusRequest: focusRequest, chromeInsets: chromeInsets)
+            OfflineMapView(presentation: customPresentation ?? MapPresentation(items: items ?? model.timeline, routePoints: routePoints ?? model.routePoints, places: model.places), viewport: viewport, focusRequest: focusRequest, chromeInsets: chromeInsets, rawPointSelected: rawPointSelected)
         } else {
             ScrollView {
             VStack(spacing: 18) {
@@ -64,6 +65,7 @@ private struct AppleMapSurface: View {
     let focusRequest: UUID?
     var customPresentation: MapPresentation?
     let chromeInsets: EdgeInsets
+    let rawPointSelected: ((RawMapPoint) -> Void)?
     @State private var selectedPlace: Place?
     @State private var camera: MapCameraPosition = .automatic
     private var presentation: MapPresentation {
@@ -96,6 +98,18 @@ private struct AppleMapSurface: View {
                     .stroke(path.dashed ? Palette.muted : Palette.green,
                             style: StrokeStyle(lineWidth: path.dashed ? 3 : 4, dash: path.dashed ? [6, 6] : []))
             }
+            ForEach(presentation.rawPoints) { point in
+                Annotation("", coordinate: point.coordinate.mapCoordinate) {
+                    Button { rawPointSelected?(point) } label: {
+                        Circle().fill(Palette.accent(point.colorIndex))
+                            .overlay(Circle().stroke(.white, lineWidth: 2))
+                            .frame(width: 14, height: 14)
+                            .frame(width: Layout.touchTarget, height: Layout.touchTarget)
+                            .contentShape(Circle())
+                    }.buttonStyle(.plain).accessibilityLabel(point.accessibilityLabel)
+                        .accessibilityIdentifier("raw-map-point-\(point.number)")
+                }.annotationTitles(.hidden)
+            }
         }
         .safeAreaPadding(chromeInsets)
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
@@ -124,6 +138,8 @@ struct MapScreen: View {
     @Environment(AppModel.self) private var model
     @State private var settings = false
     @State private var periodHeight: CGFloat = 60
+    @State private var selectedRawPoint: RawMapPoint?
+    @State private var changingMode = false
     var body: some View {
         GeometryReader { geometry in
             VStack {
@@ -136,6 +152,28 @@ struct MapScreen: View {
                 }.padding(.horizontal, Layout.gutter).padding(.top, Layout.compact)
                 Spacer()
                 if model.mapsAvailable {
+                    HStack(spacing: Layout.compact) {
+                        if model.nerdMode {
+                            if let raw = model.mapRawPresentation {
+                                Button { selectedRawPoint = raw.rawPoints.first } label: {
+                                    Text(raw.rawPoints.isEmpty ? "No raw points" : "\(raw.rawPoints.count) raw points")
+                                        .font(.caption.weight(.medium)).padding(.horizontal, Layout.compact)
+                                        .frame(minHeight: Layout.touchTarget)
+                                }.buttonStyle(.glass).disabled(raw.rawPoints.isEmpty)
+                                    .accessibilityIdentifier("raw-map-count")
+                            } else { ProgressView().accessibilityLabel("Loading raw points") }
+                        }
+                        Spacer(minLength: 0)
+                        Button {
+                            changingMode = true
+                            Task { await model.setNerdMode(!model.nerdMode); changingMode = false }
+                        } label: {
+                            Label(model.nerdMode ? "Normal mode" : "Nerd mode", systemImage: model.nerdMode ? "eye.slash" : "eye")
+                                .font(.caption.weight(.medium)).padding(.horizontal, Layout.compact)
+                                .frame(minHeight: Layout.touchTarget)
+                        }.buttonStyle(.glass).disabled(changingMode).accessibilityIdentifier("map-nerd-mode")
+                            .accessibilityValue(model.nerdMode ? "On" : "Off")
+                    }.padding(.leading, Layout.gutter).padding(.trailing, 48)
                     MapDateBar().id(model.selectedDay).padding(.horizontal, Layout.gutter)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { periodHeight = $0 }
                 }
@@ -146,15 +184,24 @@ struct MapScreen: View {
                 if model.selectedTab == .map {
                     let request = model.mapFocusRequest
                     PrivacyMapView(items: model.mapTimeline, routePoints: model.mapRoutePoints, focusRequest: model.mapFocusRequest,
+                        customPresentation: model.nerdMode ? model.mapRawPresentation ?? MapPresentation(pins: []) : nil,
                         chromeInsets: EdgeInsets(top: geometry.safeAreaInsets.top + Layout.touchTarget + Layout.spacing,
-                            leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing, trailing: 0),
-                        retainedViewport: Binding(get: { model.mapViewport }, set: { model.rememberMapViewport($0, for: request) }))
+                            leading: 0, bottom: geometry.safeAreaInsets.bottom + Layout.navigationIslandHeight + periodHeight + Layout.spacing
+                                + (model.mapsEnabled && model.nerdMode ? Layout.touchTarget + Layout.compact : 0), trailing: 0),
+                        retainedViewport: Binding(get: { model.mapViewport }, set: { model.rememberMapViewport($0, for: request) }),
+                        rawPointSelected: { selectedRawPoint = $0 })
                         .ignoresSafeArea()
                 }
             }
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
+            .sheet(item: $selectedRawPoint) { point in
+                RawMapPointDetail(points: model.mapRawPresentation?.rawPoints ?? [], initialID: point.id)
+                    .presentationDetents([.medium, .large])
+            }
+            .onChange(of: model.mapFocusRequest) { _, _ in selectedRawPoint = nil }
+            .onChange(of: model.nerdMode) { _, _ in selectedRawPoint = nil }
     }
 }
 

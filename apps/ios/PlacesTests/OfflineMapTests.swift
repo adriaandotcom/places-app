@@ -4,6 +4,33 @@ import PlacesCore
 @testable import Places
 
 @MainActor final class OfflineMapTests: XCTestCase {
+    func testRawMapPreservesInaccurateAndCoincidentPointsWithoutInventingARoute() throws {
+        let start = Date(timeIntervalSince1970: 1_735_732_800)
+        let point = Coordinate(latitude: 1, longitude: 1)
+        let inaccurate = SensorObservation(id: "a", timestamp: start, source: .location, coordinate: point,
+            coordinateTimestamp: start.addingTimeInterval(-600), horizontalAccuracy: 900)
+        let watch = SensorObservation(id: "b", timestamp: start, source: .location, coordinate: point,
+            horizontalAccuracy: 10, companionDevice: .watch)
+        let later = SensorObservation(id: "c", timestamp: start.addingTimeInterval(300), source: .location,
+            coordinate: Coordinate(latitude: 2, longitude: 2), horizontalAccuracy: 5, companionDevice: .mac)
+        let missing = SensorObservation(timestamp: start, source: .motion)
+        let invalid = SensorObservation(timestamp: start, source: .location, coordinate: Coordinate(latitude: 100, longitude: 1))
+        let photo = PhotoLocationEvidence(id: "a", assetID: "synthetic", capturedAt: start.addingTimeInterval(120), coordinate: point, cameraModel: "Fixture")
+        let map = MapPresentation(observations: [later, watch, missing, inaccurate, invalid], photos: [photo])
+        XCTAssertEqual(map.rawPoints.map(\.id), ["sensor:a", "sensor:b", "photo:a", "sensor:c"])
+        XCTAssertEqual(map.rawPoints.map(\.number), [1, 2, 3, 4])
+        XCTAssertEqual(map.rawPoints.map(\.device), ["iPhone", "Apple Watch", "Photos", "Mac"])
+        XCTAssertEqual(map.rawPoints.first?.accuracy, 900)
+        XCTAssertEqual(map.rawPoints.first?.measuredAt, start.addingTimeInterval(-600))
+        XCTAssertTrue(map.pins.isEmpty)
+        XCTAssertEqual(map.paths.count, 1)
+        XCTAssertTrue(map.paths[0].dashed)
+        XCTAssertEqual(map.paths[0].coordinates, map.rawPoints.map(\.coordinate))
+        XCTAssertNotNil(map.fittingViewport)
+        XCTAssertTrue(MapPresentation(observations: [inaccurate]).paths.isEmpty)
+        XCTAssertNil(MapPresentation(observations: [missing]).fittingViewport)
+    }
+
     func testLocalParkMetadataLoadsGzipAndRejectsInvalidOffsets() async throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pmtiles")
         defer { try? FileManager.default.removeItem(at: file) }

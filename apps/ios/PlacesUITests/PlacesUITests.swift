@@ -803,6 +803,62 @@ import XCTest
         }
     }
 
+    func testNerdMapFollowsDatesAndPersistsAcrossTabsOnBothProviders() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-map-periods"] + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            let day = app.buttons["timeline-day--2"]
+            XCTAssertTrue(day.waitForExistence(timeout: 10)); day.tap()
+            app.buttons["tab-map"].tap()
+            if !offline { enableAppleMaps(in: app) }
+            let mode = app.buttons["map-nerd-mode"]
+            XCTAssertTrue(mode.waitForExistence(timeout: 10)); mode.tap()
+            let count = app.buttons["raw-map-count"]
+            XCTAssertTrue(count.waitForExistence(timeout: 10))
+            XCTAssertEqual(count.label, "8 raw points")
+            XCTAssertEqual(mode.value as? String, "On")
+            let point = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Raw point 4,")).firstMatch
+            XCTAssertTrue(point.waitForExistence(timeout: 10)); point.tap()
+            XCTAssertTrue(app.staticTexts["raw-point-position"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.staticTexts["raw-point-position"].label, "Point 4 of 8")
+            let detail = XCTAttachment(screenshot: app.screenshot()); detail.name = "Raw point details \(offline ? "offline" : "Apple")"; detail.lifetime = .keepAlways; add(detail)
+            app.buttons["Next raw point"].tap()
+            XCTAssertEqual(app.staticTexts["raw-point-position"].label, "Point 5 of 8")
+            app.buttons["Done"].tap()
+            let picker = app.buttons["map-period-picker"], date = picker.label
+            for _ in 0..<2 {
+                app.buttons["tab-timeline"].tap()
+                XCTAssertTrue(day.isSelected)
+                app.buttons["tab-map"].tap()
+                XCTAssertEqual(mode.value as? String, "On")
+                XCTAssertEqual(count.label, "8 raw points")
+                XCTAssertEqual(picker.label, date)
+            }
+            let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Raw chronological map \(offline ? "offline" : "Apple")"; screenshot.lifetime = .keepAlways; add(screenshot)
+            picker.tap(); reveal(app.buttons["all-history-period"], in: app); app.buttons["all-history-period"].tap()
+            let all = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "16 raw points"), object: count)
+            XCTAssertEqual(XCTWaiter.wait(for: [all], timeout: 10), .completed)
+            count.tap()
+            XCTAssertTrue(app.staticTexts["raw-point-position"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.staticTexts["raw-point-position"].label, "Point 1 of 16")
+            XCTAssertFalse(app.buttons["Previous raw point"].isEnabled)
+            app.buttons["Done"].tap()
+            app.buttons["tab-timeline"].tap()
+            app.buttons["timeline-day-0"].tap()
+            app.buttons["tab-map"].tap()
+            let empty = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "No raw points"), object: count)
+            XCTAssertEqual(XCTWaiter.wait(for: [empty], timeout: 10), .completed)
+            XCTAssertFalse(count.isEnabled)
+            app.buttons["tab-timeline"].tap(); day.tap(); app.buttons["tab-map"].tap()
+            mode.tap()
+            XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Fixture Kos West")).firstMatch.waitForExistence(timeout: 10))
+            XCTAssertFalse(count.exists)
+            XCTAssertEqual(mode.value as? String, "Off")
+            app.terminate()
+        }
+    }
+
     func testRegionAndAllHistorySelectionsFrameTheirPlacesOnBothMaps() {
         for offline in [true, false] {
             let app = XCUIApplication()

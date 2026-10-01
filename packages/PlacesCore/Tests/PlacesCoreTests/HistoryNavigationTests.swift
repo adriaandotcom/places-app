@@ -37,6 +37,50 @@ private func stay(_ id: String, _ start: Double, _ end: Double, _ place: String?
     #expect(InferenceEngine.within(DateInterval(start: moment(0), end: moment(10)), items: [outside]).isEmpty)
 }
 
+@Test func rawMapQueryKeepsAllSamplesAndUsesExclusiveCalendarBoundaries() async throws {
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "Europe/Amsterdam")!
+    let day = calendar.date(from: DateComponents(year: 2025, month: 10, day: 26))!
+    let interval = calendar.dateInterval(of: .day, for: day)!
+    #expect(interval.duration == 25 * 3600)
+    let store = try PlacesStore()
+    var samples = (0..<601).map { index in
+        SensorObservation(id: String(format: "point-%04d", index), timestamp: day.addingTimeInterval(Double(index)),
+            source: .location, coordinate: point, horizontalAccuracy: index == 0 ? 900 : 10)
+    }
+    samples += [
+        SensorObservation(id: "same-time", timestamp: day, source: .significantChange, coordinate: point, horizontalAccuracy: 10),
+        SensorObservation(id: "before", timestamp: day.addingTimeInterval(-1), source: .location, coordinate: point, horizontalAccuracy: 10),
+        SensorObservation(id: "tomorrow", timestamp: interval.end, source: .location, coordinate: point, horizontalAccuracy: 10)
+    ]
+    try await store.append(samples.reversed())
+    let values = try await store.observations(from: interval.start, to: interval.end)
+    #expect(values.count == 602)
+    #expect(values.first?.id == "point-0000")
+    #expect(values.first?.usableCoordinate == nil)
+    #expect(values[1].id == "same-time")
+    #expect(values.last?.id == "point-0600")
+    #expect(try await store.observations(from: interval.end, to: interval.end.addingTimeInterval(1)).map(\.id) == ["tomorrow"])
+    #expect(try await store.observations(from: interval.start, to: interval.start).isEmpty)
+    #expect(try await store.firstHistoryDate() == day.addingTimeInterval(-1))
+}
+
+@Test func rawPhotoMapIncludesReviewedCoordinatesButNotOldRevisionsOrNextDay() async throws {
+    let store = try PlacesStore()
+    try await store.setSetting("photoEvidenceEnabled", value: "true")
+    func photo(_ id: String, _ asset: String, _ seconds: Double) -> PhotoLocationEvidence {
+        PhotoLocationEvidence(id: id, assetID: asset, capturedAt: moment(seconds), coordinate: point, cameraModel: "Fixture iPhone")
+    }
+    for value in [photo("old", "a", 0), photo("current", "a", 1), photo("next", "b", 10)] {
+        try await store.indexPhoto(assetID: value.assetID, fingerprint: value.id, evidence: value)
+    }
+    try await store.dismissPhotoSuggestions(assetIDs: ["a"])
+    #expect(try await store.photoEvidence(from: moment(0), to: moment(10)).map(\.id) == ["current"])
+    #expect(try await store.firstHistoryDate() == moment(1))
+    try await store.erasePhotoEvidence()
+    #expect(try await store.photoEvidence(from: moment(0), to: moment(10)).isEmpty)
+    #expect(try await store.firstHistoryDate() == nil)
+}
+
 @Test func selectingOnlyFirstOriginalLeavesRemainingEntriesCombinedAndSurvivesReopen() async throws {
     let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
     defer { try? FileManager.default.removeItem(atPath: path) }

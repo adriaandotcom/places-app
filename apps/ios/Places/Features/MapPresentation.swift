@@ -1,13 +1,13 @@
 import Foundation
 import PlacesCore
 
-struct MapViewport: Equatable {
+struct MapViewport: Equatable, Sendable {
     var center: Coordinate
     var latitudeSpan: Double
     var longitudeSpan: Double
 }
 
-struct MapPin: Equatable, Identifiable {
+struct MapPin: Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var coordinate: Coordinate
@@ -19,18 +19,34 @@ struct MapPin: Equatable, Identifiable {
     var letter: String?
 }
 
-struct MapPath: Equatable, Identifiable {
+struct MapPath: Equatable, Identifiable, Sendable {
     var id: String
     var coordinates: [Coordinate]
     var dashed: Bool
 }
 
-struct MapPresentation: Equatable {
+struct RawMapPoint: Equatable, Identifiable, Sendable {
+    var id: String
+    var coordinate: Coordinate
+    var timestamp: Date
+    var measuredAt: Date?
+    var source: String
+    var device: String
+    var accuracy: Double?
+    var speed: Double?
+    var colorIndex: Int
+    var number = 0
+    var timeLabel: String { timestamp.formatted(date: .omitted, time: .standard) }
+    var accessibilityLabel: String { "Raw point \(number), \(timeLabel), \(device)" }
+}
+
+struct MapPresentation: Equatable, Sendable {
     var pins: [MapPin] = []
+    var rawPoints: [RawMapPoint] = []
     var paths: [MapPath] = []
     var radius: Double?
     var areas: [PlaceArea] = []
-    var coordinates: [Coordinate] { pins.map(\.coordinate) + paths.flatMap(\.coordinates) + areas.flatMap(\.vertices) }
+    var coordinates: [Coordinate] { pins.map(\.coordinate) + rawPoints.map(\.coordinate) + paths.flatMap(\.coordinates) + areas.flatMap(\.vertices) }
     var fittingViewport: MapViewport? {
         let points = coordinates.filter(\.isValid)
         guard let first = points.first else { return nil }
@@ -53,6 +69,32 @@ struct MapPresentation: Equatable {
     }
 
     init(pins: [MapPin], radius: Double? = nil) { self.pins = pins; self.radius = radius }
+    init(observations: [SensorObservation], photos: [PhotoLocationEvidence] = []) {
+        rawPoints = observations.compactMap { observation in
+            // Raw means raw: retain poor accuracy and cached coordinates as well.
+            guard let coordinate = observation.coordinate, coordinate.isValid,
+                  observation.timestamp.timeIntervalSince1970.isFinite else { return nil }
+            let device: String
+            let color: Int
+            switch observation.companionDevice {
+            case .watch: device = "Apple Watch"; color = 1
+            case .mac: device = "Mac"; color = 5
+            case nil: device = "iPhone"; color = 0
+            }
+            return RawMapPoint(id: "sensor:" + observation.id, coordinate: coordinate, timestamp: observation.timestamp,
+                measuredAt: observation.coordinateTimestamp, source: observation.source.displayName, device: device,
+                accuracy: observation.horizontalAccuracy, speed: observation.speed, colorIndex: color)
+        }
+        rawPoints += photos.filter { $0.coordinate.isValid && $0.capturedAt.timeIntervalSince1970.isFinite }.map {
+            RawMapPoint(id: "photo:" + $0.id, coordinate: $0.coordinate, timestamp: $0.capturedAt,
+                source: "Photo location", device: "Photos", colorIndex: 4)
+        }
+        rawPoints.sort { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+        for index in rawPoints.indices { rawPoints[index].number = index + 1 }
+        if rawPoints.count > 1 {
+            paths = [MapPath(id: "raw-observation-order", coordinates: rawPoints.map(\.coordinate), dashed: true)]
+        }
+    }
     init(place: Place) {
         pins = [MapPin(id: place.id, name: place.name, coordinate: place.coordinate,
             symbol: place.symbol, colorIndex: place.colorIndex, customColorHex: place.customColorHex, photoJPEG: place.photoJPEG)]

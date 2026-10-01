@@ -270,8 +270,12 @@ private struct VisitEvidenceView: View {
         style.timeZone = TimeZone(identifier: observation.timezoneIdentifier) ?? .current
         return observation.timestamp.formatted(style)
     }
-    private func sourceName(_ source: ObservationSource) -> String {
-        switch source {
+    private func sourceName(_ source: ObservationSource) -> String { source.displayName }
+}
+
+extension ObservationSource {
+    var displayName: String {
+        switch self {
         case .location: "Location reading"
         case .significantChange: "Significant location change"
         case .visitArrival: "Visit arrival"

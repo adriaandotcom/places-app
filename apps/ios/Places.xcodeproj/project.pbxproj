@@ -73,6 +73,7 @@
 		A0149028523DCE2ECFAC8FF0 /* MapParkCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943131F4A6EC985998F4F312 /* MapParkCatalog.swift */; };
 		A3FB6C17CAEF0EE2EBFE79D6 /* BricolageGrotesque-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 986ECC00DC3B06966B0C516B /* BricolageGrotesque-ExtraBold.ttf */; };
 		A48B0DD0D51FE08FD52CA6EA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6ED1792B97EE623188206D05 /* Assets.xcassets */; };
+		A55650CE28B84355735D91BE /* RawMapPointDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E3AF2034F175BEBB7BC68CD /* RawMapPointDetail.swift */; };
 		A69E4F0CA9A748F124819381 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 131FA0E21B515185FA7B93A3 /* PrivacyInfo.xcprivacy */; };
 		A94B210A5F4EC76421EDF598 /* DemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129CE07ADA04E88C1C23E71 /* DemoFixtures.swift */; };
 		ABFECE207A54BF0AB3665907 /* MacCompanionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532E87FE14E3FE4D2DFE9994 /* MacCompanionModel.swift */; };
@@ -188,6 +189,7 @@
 		2A9BFD85555F9A5A776D14F2 /* PlacesMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesMacApp.swift; sourceTree = "<group>"; };
 		2B8F72C7C69401B63C982A1C /* PhotoLibraryEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryEvidence.swift; sourceTree = "<group>"; };
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
+		2E3AF2034F175BEBB7BC68CD /* RawMapPointDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawMapPointDetail.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesApp.swift; sourceTree = "<group>"; };
 		3D4D0C7A10D98A0969FDD33A /* OfflineMaps */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OfflineMaps; path = Places/Resources/OfflineMaps; sourceTree = SOURCE_ROOT; };
@@ -363,6 +365,7 @@
 				85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */,
 				19157741242CE715116913F2 /* PlacesView.swift */,
 				113678CA5798BA16EBB3B196 /* PlaceWiFiPicker.swift */,
+				2E3AF2034F175BEBB7BC68CD /* RawMapPointDetail.swift */,
 				5712D6BB250F554AD0623178 /* RewindViews.swift */,
 				06A9CEBDAA36315546F8C683 /* SavedPlaceRow.swift */,
 				19E16CB5D0FBE5CF702B4018 /* SearchView.swift */,
@@ -923,6 +926,7 @@
 				BFAE0FBEA803C5B9D62BF290 /* PlacesApp.swift in Sources */,
 				66549826CB59C29A042DBFAB /* PlacesView.swift in Sources */,
 				7D8274BFBC6054B26A47EEBB /* ProtectedStorage.swift in Sources */,
+				A55650CE28B84355735D91BE /* RawMapPointDetail.swift in Sources */,
 				AC5D8EB614CF98D32A744990 /* RewindNotifications.swift in Sources */,
 				4AD965B9D3AF1082C9FD06E9 /* RewindViews.swift in Sources */,
 				3340619B2B86C05B3A118E63 /* SavedPlaceRow.swift in Sources */,

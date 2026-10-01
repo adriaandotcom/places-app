@@ -21,6 +21,7 @@ final class AppModel {
     private(set) var timeline: [TimelineItem] = []
     private(set) var historyRevision = 0
     private(set) var historyDays: [HistoryDay] = []
+    private(set) var firstHistoryDate: Date?
     private(set) var networks: [WiFiNetwork] = []
     private(set) var accessPoints: [WiFiAccessPoint] = []
     private(set) var recentObservations: [SensorObservation] = []
@@ -49,6 +50,7 @@ final class AppModel {
     private(set) var mapPeriod: HistoryPeriod?
     private(set) var mapTimeline: [TimelineItem] = []
     private(set) var mapRoutePoints: [RoutePoint] = []
+    private(set) var mapRawPresentation: MapPresentation?
     private(set) var placeLookupEnabled = false
     private(set) var placeLookupExplained = false
     private(set) var lookingUpRegions = false
@@ -98,6 +100,7 @@ final class AppModel {
         guard epoch == generation, !deleting else { throw CancellationError() }
         if let start = reviewed.visits.flatMap(\.intervals).map(\.start).min() {
             selectedDay = start; mapPeriod = nil; mapSelectionRequest = UUID()
+            mapRawPresentation = nil
         }
         await refresh()
     }
@@ -275,12 +278,14 @@ final class AppModel {
         let day = selectedDay
         let period = mapPeriod
         let selectionRequest = mapSelectionRequest
+        let showingRawPoints = nerdMode
         let expectedGeneration = generation
         do {
             let newPlaces = try await store.places()
             let newMemories = try await store.memoryLibrary()
             let newTimeline = try await store.timeline(on: day)
             let newDays = try await store.historyDays()
+            let newFirstDate = try await store.firstHistoryDate()
             let calendar = Calendar.current
             let interval = calendar.dateInterval(of: .day, for: day)!
             let newPoints = try await store.routePoints(from: interval.start, to: interval.end)
@@ -290,26 +295,38 @@ final class AppModel {
                 mapItems = try await store.timeline(in: period.interval)
                 mapPoints = try await store.routePoints(from: period.interval.start, to: period.interval.end)
             } else { mapItems = newTimeline; mapPoints = newPoints }
+            let rawMap: MapPresentation?
+            if showingRawPoints {
+                let range = period?.interval ?? interval
+                let observations = try await store.observations(from: range.start, to: range.end)
+                let photos = try await store.photoEvidence(from: range.start, to: range.end)
+                rawMap = await Task.detached(priority: .userInitiated) {
+                    MapPresentation(observations: observations, photos: photos)
+                }.value
+            } else { rawMap = nil }
             let newNetworks = try await store.networks()
             let newAccessPoints = try await store.accessPoints()
             let newDiagnostics = try await store.diagnostics()
-            let newObservations = nerdMode ? try await store.observations(limit: 80) : []
-            let newEvents = nerdMode ? try await store.trackingEvents(limit: 60) : []
+            let newObservations = showingRawPoints ? try await store.observations(limit: 80) : []
+            let newEvents = showingRawPoints ? try await store.trackingEvents(limit: 60) : []
             guard !deleting, generation == expectedGeneration else { return }
             historyDays = newDays
+            firstHistoryDate = newFirstDate
             memories = newMemories
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
-            if day == selectedDay && period == mapPeriod && selectionRequest == mapSelectionRequest {
+            if day == selectedDay && period == mapPeriod && selectionRequest == mapSelectionRequest && showingRawPoints == nerdMode {
                 if mapFocusRequest != selectionRequest { mapViewport = nil }
                 mapTimeline = mapItems; mapRoutePoints = mapPoints
+                mapRawPresentation = rawMap
                 // Commit the framing request together with the loaded period, never
                 // while the map still contains the previous selection's places.
                 mapFocusRequest = selectionRequest
             }
-            recentObservations = nerdMode ? newObservations : []
-            events = nerdMode ? newEvents : []
+            if showingRawPoints == nerdMode {
+                recentObservations = newObservations; events = newEvents
+            }
             historyRevision += 1
             await refreshRewindReminders()
         } catch { fail("Could not read your history. Please try again.") }
@@ -364,10 +381,12 @@ final class AppModel {
 
     func selectDay(_ day: Date) {
         selectedDay = min(day, Date()); mapPeriod = nil; mapSelectionRequest = UUID()
+        mapRawPresentation = nil
         Task { await refresh() }
     }
     func selectPeriod(_ period: HistoryPeriod) {
         mapPeriod = period; mapSelectionRequest = UUID()
+        mapRawPresentation = nil
         Task { await refresh() }
     }
     func shiftDay(_ offset: Int, fromMap: Bool = false) {
@@ -540,7 +559,15 @@ final class AppModel {
         enrichRegions()
     }
     func setNerdMode(_ value: Bool) async {
-        do { try await store?.setSetting("nerdMode", value: String(value)); nerdMode = value; await refresh() }
+        guard let store, !deleting else { return }
+        let epoch = generation
+        do {
+            try await store.setSetting("nerdMode", value: String(value))
+            guard !deleting, generation == epoch else { return }
+            nerdMode = value; mapRawPresentation = nil; mapSelectionRequest = UUID()
+            if !value { recentObservations = []; events = [] }
+            await refresh()
+        }
         catch { fail("Could not save this setting.") }
     }
     func setTrackingEnabled(_ value: Bool) async {
@@ -635,7 +662,7 @@ final class AppModel {
         lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
         placeLookupExplained = false; regionLookupIssues = [:]
         regionRun = UUID(); regionTask?.cancel(); regionTask = nil; regionAttempts = []; lookingUpRegions = false
-        mapPeriod = nil; mapTimeline = []; mapRoutePoints = []; mapViewport = nil
+        mapPeriod = nil; mapTimeline = []; mapRoutePoints = []; mapRawPresentation = nil; mapViewport = nil
         tracking.configure(places: [], enabled: false)
         await pendingWrite?.value
         do {
@@ -643,7 +670,7 @@ final class AppModel {
             try mapDownloads.deleteAll()
             try MemoryPhotoDraft.clearAbandonedImports()
             try await store.eraseHistory(resetSettings: true)
-            retryObservations = []; timeline = []; historyDays = []; places = []; networks = []; accessPoints = []
+            retryObservations = []; timeline = []; historyDays = []; firstHistoryDate = nil; places = []; networks = []; accessPoints = []
             memories = MemoryLibrary()
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()

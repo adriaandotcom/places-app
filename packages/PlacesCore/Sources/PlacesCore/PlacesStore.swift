@@ -334,6 +334,23 @@ public actor PlacesStore {
         try queue.read { try StoreSQL.decodeAll(SensorObservation.self, db: $0,
             sql: "SELECT payload FROM observations ORDER BY timestamp DESC LIMIT ?", arguments: [max(0, min(limit, 500))]) }
     }
+    /// Complete raw evidence for a half-open map period, independent of the recent diagnostic log.
+    public func observations(from start: Date, to end: Date) throws -> [SensorObservation] {
+        try queue.read { try StoreSQL.decodeAll(SensorObservation.self, db: $0,
+            sql: "SELECT payload FROM observations WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp, id",
+            arguments: [start.timeIntervalSince1970, end.timeIntervalSince1970]) }
+    }
+    public func firstHistoryDate() throws -> Date? {
+        try queue.read { db in
+            try Double.fetchOne(db, sql: """
+                SELECT MIN(date) FROM (
+                    SELECT MIN(timestamp) AS date FROM observations
+                    UNION ALL SELECT MIN(capturedAt) FROM photoEvidence WHERE active = 1
+                    UNION ALL SELECT MIN(start) FROM timeline
+                )
+                """).map(Date.init(timeIntervalSince1970:))
+        }
+    }
     public func evidence(for item: TimelineItem) throws -> [SensorObservation] {
         let ids = Array(Set(item.evidenceIDs)).sorted()
         return try queue.read { db in
