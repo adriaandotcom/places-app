@@ -157,9 +157,11 @@ struct MapScreen: View {
                             changingMode = true
                             Task { await model.setNerdMode(!model.nerdMode); changingMode = false }
                         } label: {
-                            Image(systemName: model.nerdMode ? "eye.fill" : "eye")
+                            Image(systemName: model.nerdMode ? "eye.circle.fill" : "eye.circle")
+                                .font(.title3).foregroundStyle(Palette.green)
                                 .frame(width: Layout.touchTarget, height: Layout.touchTarget)
-                        }.buttonStyle(.glass).buttonBorderShape(.circle).disabled(changingMode)
+                                .contentShape(Rectangle())
+                        }.buttonStyle(.plain).disabled(changingMode)
                             .accessibilityLabel("Nerd mode").accessibilityIdentifier("map-nerd-mode")
                             .accessibilityValue(model.nerdMode ? "On" : "Off")
                         if model.nerdMode {
