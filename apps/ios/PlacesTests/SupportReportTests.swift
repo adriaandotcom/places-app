@@ -3,6 +3,25 @@ import PlacesCore
 @testable import Places
 
 final class SupportReportTests: XCTestCase {
+    func testExportPeriodUsesCalendarDaysAcrossDaylightSavingAndClampsDays() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Amsterdam"))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2025, month: 3, day: 30, hour: 12)))
+        var selection = ExportPeriodSelection()
+        XCTAssertNil(selection.interval(now: now, calendar: calendar))
+        selection.choice = .days; selection.days = 1
+        let today = try XCTUnwrap(selection.interval(now: now, calendar: calendar))
+        XCTAssertEqual(today.duration, 23 * 3600)
+        selection.days = 0
+        XCTAssertEqual(selection.interval(now: now, calendar: calendar), today)
+        selection.choice = .week
+        let week = try XCTUnwrap(selection.interval(now: now, calendar: calendar))
+        XCTAssertEqual(calendar.dateComponents([.day], from: week.start, to: week.end).day, 7)
+        selection.choice = .dates; selection.start = now; selection.end = now.addingTimeInterval(-86400)
+        let reversed = try XCTUnwrap(selection.interval(now: now, calendar: calendar))
+        XCTAssertEqual(calendar.dateComponents([.day], from: reversed.start, to: reversed.end).day, 2)
+    }
+
     func testAllowlistDropsPersonalDataAndPreservesSymbolication() throws {
         let privateText = "Private Garden 52.123456 4.987654 user@example.test 192.0.2.1 device-secret"
         let binary = "70B89F27-1634-3580-A695-57CDB41D7743"

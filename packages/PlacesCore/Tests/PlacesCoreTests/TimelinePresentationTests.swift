@@ -112,7 +112,7 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
         #expect(result[1].originalItems == Array(edited[1...2]))
     }
     for time in [150.0, 200, 250] {
-        var movingFix = fix(time); movingFix.speed = 2
+        var movingFix = fix(time, coordinate: .init(latitude: 0, longitude: 0.01)); movingFix.speed = 2
         let conflicts = [SensorObservation(timestamp: at(time), source: .paused),
                          SensorObservation(timestamp: at(time), source: .regionExit),
                          SensorObservation(timestamp: at(time), source: .visitDeparture),
@@ -321,4 +321,33 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
     let clipped = InferenceEngine.onDay(date, calendar: calendar, items: combined)
     #expect(clipped.count == 1 && clipped[0].duration() == 23 * 3600)
     #expect(clipped[0].originalItems?.count == 2)
+}
+
+@Test func phoneWatchHandoffsInsideASavedAreaStayTogether() {
+    let place = Place(id: "home", name: "Fixture Park", coordinate: origin, radius: 500)
+    func observation(_ seconds: Double, watch: Bool, longitude: Double, speed: Double) -> SensorObservation {
+        var value = fix(seconds, coordinate: .init(latitude: 0, longitude: longitude))
+        value.speed = speed
+        if watch { value.companionDevice = .watch; value.companionDeviceID = "fixture-watch" }
+        return value
+    }
+    let observations = [observation(0, watch: false, longitude: 0, speed: 0),
+        observation(60, watch: false, longitude: 0.001, speed: 1.2),
+        observation(600, watch: true, longitude: 0.002, speed: 1.3),
+        observation(900, watch: true, longitude: 0.001, speed: 1.0),
+        observation(1500, watch: false, longitude: 0.001, speed: 0)]
+    let inferred = InferenceEngine.infer(observations: observations, places: [place])
+    #expect(inferred.map(\.kind) == [.stay, .gap, .stay, .gap, .stay])
+    let joined = TimelinePresentation.make(items: inferred, observations: observations, places: [place])
+    #expect(joined.count == 1 && joined[0].end == nil)
+    #expect(joined[0].originalItems == inferred)
+    #expect(joined[0].unrecordedDuration == 1140)
+    var outside = observations
+    outside[2].coordinate = .init(latitude: 0, longitude: 0.01)
+    #expect(TimelinePresentation.make(items: inferred, observations: outside, places: [place]).count > 1)
+    let polygon = PlaceArea(vertices: [.init(latitude: -0.001, longitude: -0.001),
+        .init(latitude: 0.001, longitude: -0.001), .init(latitude: 0.001, longitude: 0.001),
+        .init(latitude: -0.001, longitude: 0.001)])
+    var bounded = place; bounded.area = polygon
+    #expect(TimelinePresentation.make(items: inferred, observations: observations, places: [bounded]).count > 1)
 }

@@ -633,7 +633,7 @@ final class AppModel {
             if query == searchText, !deleting, generation == expectedGeneration { searchResults = found }
         } catch { fail("Local search is temporarily unavailable.") }
     }
-    func export(_ format: HistoryExportFormat) async {
+    func export(_ format: HistoryExportFormat, period: DateInterval? = nil, includePhotos: Bool = true) async {
         guard let store else { return }
         let expectedGeneration = generation
         tracking.recordEnergyCheckpoint()
@@ -641,10 +641,10 @@ final class AppModel {
         do {
             let data: Data
             switch format {
-            case .history: data = try await store.exportHistory()
+            case .history: data = try await store.exportHistory(in: period, includePhotos: includePhotos)
             case .diagnostics: data = try await store.exportDiagnostics()
-            case .testCase: data = try await store.exportTestCase()
-            case .gpx: data = try await store.exportGPX()
+            case .testCase: data = try await store.exportTestCase(in: period)
+            case .gpx: data = try await store.exportGPX(in: period)
             }
             guard !deleting, generation == expectedGeneration else { return }
             exportDocument = HistoryDocument(data: data, contentType: format.contentType)
@@ -693,14 +693,14 @@ final class AppModel {
         errorMessage = message
     }
 
-    func supportReport(includeHistory: Bool) async throws -> Data {
+    func supportReport(includeHistory: Bool, period: DateInterval? = nil, includePhotos: Bool = true) async throws -> Data {
         let epoch = generation
         guard !deleting else { throw CancellationError() }
         let history: HistoryArchive?
         if includeHistory {
             await pendingWrite?.value
             guard let store else { throw CocoaError(.fileReadUnknown) }
-            history = try await store.fullHistoryArchive()
+            history = try await store.fullHistoryArchive(in: period, includePhotos: includePhotos)
         } else { history = nil }
         // The technical report uses the last refreshed counters. Do not wait for
         // database writes or scan history just to diagnose a storage problem.

@@ -190,8 +190,7 @@ private struct TimelineDayPage: View {
                             .buttonStyle(.plain).accessibilityIdentifier("timeline-\(item.kind.rawValue)-\(item.id)")
                         if item.kind == .stay {
                             ForEach(memories(for: item)) { memory in
-                                TimelineMemoryRow(memory: memory).padding(.leading, Layout.iconTile)
-                                    .padding(.top, Layout.compact).padding(.bottom, Layout.compact)
+                                TimelineMemoryRow(memory: memory)
                             }
                         }
                     }
@@ -254,20 +253,22 @@ private struct TimelineMemoryRow: View {
     @State private var editing = false
     var body: some View {
         Button { editing = true } label: {
-            HStack(spacing: Layout.compact) {
-                if let photo = memory.orderedPhotoIDs.first {
-                    StoredPhoto(id: photo, thumbnail: true).frame(width: Layout.avatarSize, height: Layout.avatarSize)
-                        .clipShape(RoundedRectangle(cornerRadius: Layout.compact))
-                } else { Image(systemName: "text.bubble").foregroundStyle(Palette.green) }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(memory.text.isEmpty ? "Memory" : memory.text).font(.subheadline).lineLimit(2).multilineTextAlignment(.leading)
-                    if !memory.photoIDs.isEmpty {
-                        Text("\(memory.photoIDs.count) \(memory.photoIDs.count == 1 ? "photo" : "photos")").font(.caption).foregroundStyle(Palette.muted)
+            TimelineInsetRow {
+                HStack(spacing: Layout.compact) {
+                    if let photo = memory.orderedPhotoIDs.first {
+                        StoredPhoto(id: photo, thumbnail: true).frame(width: Layout.avatarSize, height: Layout.avatarSize)
+                            .clipShape(RoundedRectangle(cornerRadius: Layout.compact))
+                    } else { Image(systemName: "text.bubble").foregroundStyle(Palette.green) }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(memory.text.isEmpty ? "Memory" : memory.text).font(.subheadline).lineLimit(2).multilineTextAlignment(.leading)
+                        if !memory.photoIDs.isEmpty {
+                            Text("\(memory.photoIDs.count) \(memory.photoIDs.count == 1 ? "photo" : "photos")").font(.caption).foregroundStyle(Palette.muted)
+                        }
                     }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
-            }.frame(minHeight: Layout.touchTarget).modifier(CardSurface(padding: Layout.compact))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                }.frame(minHeight: Layout.touchTarget)
+            }
         }.buttonStyle(.plain).accessibilityIdentifier("timeline-memory-\(memory.id)")
             .sheet(isPresented: $editing) { NavigationStack { MemoryEditor(memory: memory) }.environment(\.hasMainNavigation, false) }
     }

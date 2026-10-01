@@ -37,6 +37,7 @@
 		4B3E927FE010B0E4E99E50CF /* BatteryActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */; };
 		4BB09FFB84861510F74BD203 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA197721E63F4B0F2F74FC75 /* AppModel.swift */; };
 		4C8059CBABE8F045A1CF08E9 /* WiFiClassificationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */; };
+		4FB18AED4B7A5B6445A9CFF4 /* YourDataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D9EF3AF4328C4FA8EF1E555 /* YourDataView.swift */; };
 		53C9CE307FC18B883E9BA41A /* MemoryPhotoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B737EA8F8B1D81197E245F /* MemoryPhotoTests.swift */; };
 		595DA971976AEDA5373D9931 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE309F70353EBEDB7069F031 /* MainView.swift */; };
 		5A855E355B92C7D190DAEBA1 /* PlacesMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9BFD85555F9A5A776D14F2 /* PlacesMacApp.swift */; };
@@ -79,6 +80,7 @@
 		A94B210A5F4EC76421EDF598 /* DemoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0129CE07ADA04E88C1C23E71 /* DemoFixtures.swift */; };
 		ABFECE207A54BF0AB3665907 /* MacCompanionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532E87FE14E3FE4D2DFE9994 /* MacCompanionModel.swift */; };
 		AC5D8EB614CF98D32A744990 /* RewindNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DCC98798B0BC98DBB97827D /* RewindNotifications.swift */; };
+		B92365AE99DF540B81BAD761 /* ExportPeriodPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A52B3ADCC1C7C3FB8E0A34A /* ExportPeriodPicker.swift */; };
 		BA60D0E791CB46DE7E6E47DF /* WiFiTrackingControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */; };
 		BC18F8719CD13D48B0FE8D18 /* PlacesWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 1C2D255274BBF1FF00F02D7B /* PlacesWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BD22F1A51DD600D357144295 /* PlaceEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */; };
@@ -233,8 +235,10 @@
 		85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceIconPicker.swift; sourceTree = "<group>"; };
 		8683E4F2F033E292992D7CAC /* AddPastVisits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPastVisits.swift; sourceTree = "<group>"; };
 		87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindNotificationTests.swift; sourceTree = "<group>"; };
+		8A52B3ADCC1C7C3FB8E0A34A /* ExportPeriodPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportPeriodPicker.swift; sourceTree = "<group>"; };
 		8BB7A5D87F02787A86AD38B0 /* DeleteControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteControls.swift; sourceTree = "<group>"; };
 		8D9BE8B37414C7567A82F2FB /* SupportReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportReportView.swift; sourceTree = "<group>"; };
+		8D9EF3AF4328C4FA8EF1E555 /* YourDataView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YourDataView.swift; sourceTree = "<group>"; };
 		8DCB060063689EC2C469CE9E /* PlacesCompanion */ = {isa = PBXFileReference; lastKnownFileType = folder; name = PlacesCompanion; path = ../../packages/PlacesCompanion; sourceTree = SOURCE_ROOT; };
 		8F06208AFD18F34A46C0FC60 /* PlacesMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlacesMac.entitlements; sourceTree = "<group>"; };
 		943131F4A6EC985998F4F312 /* MapParkCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapParkCatalog.swift; sourceTree = "<group>"; };
@@ -349,6 +353,7 @@
 				C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */,
 				DD51F4A2DD5EF97EFB6F4746 /* CompanionSettings.swift */,
 				67FB75D8D21CAEF00D6A179C /* CroppedPhotoEditor.swift */,
+				8A52B3ADCC1C7C3FB8E0A34A /* ExportPeriodPicker.swift */,
 				738274611DA8F1F53B88808E /* HistoryCalendar.swift */,
 				4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */,
 				DE309F70353EBEDB7069F031 /* MainView.swift */,
@@ -385,6 +390,7 @@
 				EEB102BB0DB953EC91699D45 /* TimelinePager.swift */,
 				677B848C9A186B52AB7FA48E /* TripViews.swift */,
 				64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */,
+				8D9EF3AF4328C4FA8EF1E555 /* YourDataView.swift */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -916,6 +922,7 @@
 				7B0170A069E140F024D421C4 /* DeleteControls.swift in Sources */,
 				A94B210A5F4EC76421EDF598 /* DemoFixtures.swift in Sources */,
 				033FEB4F012F60839CD8B3D8 /* DesignSystem.swift in Sources */,
+				B92365AE99DF540B81BAD761 /* ExportPeriodPicker.swift in Sources */,
 				8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */,
 				7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */,
 				FFB0367248F37BB0D15ABB78 /* LocalDiagnostics.swift in Sources */,
@@ -966,6 +973,7 @@
 				32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */,
 				292FF27672027218EC112975 /* TripViews.swift in Sources */,
 				4C8059CBABE8F045A1CF08E9 /* WiFiClassificationPicker.swift in Sources */,
+				4FB18AED4B7A5B6445A9CFF4 /* YourDataView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

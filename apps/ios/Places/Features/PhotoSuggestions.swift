@@ -132,7 +132,7 @@ struct PhotoSuggestionSection: View {
         let groups = groups
         if let group = groups.first {
             VStack(spacing: 0) {
-                PhotoSuggestionCard(group: group)
+                PhotoSuggestionCard(group: group, showsDate: day == nil)
                 if groups.count > 1 {
                     Divider().padding(.horizontal, Layout.spacing)
                     NavigationLink {
@@ -165,6 +165,7 @@ private struct PhotoSuggestionActionLabel: View {
 private struct PhotoSuggestionCard: View {
     @Environment(AppModel.self) private var model
     let group: PhotoVisitSuggestion
+    var showsDate = true
     @State private var creatingMemory = false
     @State private var preview: PhotoReference?
     var body: some View {
@@ -174,7 +175,9 @@ private struct PhotoSuggestionCard: View {
                     HStack {
                         VStack(alignment: .leading, spacing: Layout.compact) {
                             Text(group.place(in: model.places)?.name ?? "Remember this place?").font(BrandFont.title)
-                            Text(group.start.formatted(date: .abbreviated, time: .shortened)).font(.footnote).foregroundStyle(Palette.muted)
+                            if showsDate {
+                                Text(group.start.formatted(date: .abbreviated, time: .shortened)).font(.footnote).foregroundStyle(Palette.muted)
+                            }
                         }
                         Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
                     }.frame(minHeight: Layout.touchTarget).contentShape(Rectangle())
@@ -182,7 +185,7 @@ private struct PhotoSuggestionCard: View {
                 PhotoGrid(items: Array(group.previewPhotos.prefix(3)), open: { preview = PhotoReference(id: $0.id) }) { photo in
                     LibraryPhotoThumbnail(photo: photo)
                 }
-            }.padding(Layout.spacing)
+            }.padding(.horizontal, Layout.spacing).padding(.top, Layout.spacing)
             Button { creatingMemory = true } label: {
                 PhotoSuggestionActionLabel(title: "Create memory with these photos")
             }.buttonStyle(.plain).accessibilityIdentifier("suggestion-create-memory-\(group.id)")

@@ -332,8 +332,10 @@ import XCTest
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-rewind"]
         app.launch()
-        XCTAssertTrue(app.buttons["open-rewind"].waitForExistence(timeout: 10))
-        app.buttons["open-rewind"].tap()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["settings-rewind"], in: app)
+        app.buttons["settings-rewind"].tap()
         XCTAssertTrue(app.buttons["rewind-review"].waitForExistence(timeout: 8))
         let intro = XCTAttachment(screenshot: app.screenshot()); intro.name = "Monthly rewind invitation"; intro.lifetime = .keepAlways; add(intro)
         app.buttons["rewind-review"].tap()
@@ -367,8 +369,10 @@ import XCTest
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-rewind", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
-        XCTAssertTrue(app.buttons["open-rewind"].waitForExistence(timeout: 10))
-        app.buttons["open-rewind"].tap()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["settings-rewind"], in: app)
+        app.buttons["settings-rewind"].tap()
         let start = app.buttons["show-rewind"]
         reveal(start, in: app); start.tap()
         XCTAssertTrue(app.buttons["rewind-next"].waitForExistence(timeout: 5))
@@ -813,7 +817,10 @@ import XCTest
             app.buttons["tab-map"].tap()
             if !offline { enableAppleMaps(in: app) }
             let mode = app.buttons["map-nerd-mode"]
-            XCTAssertTrue(mode.waitForExistence(timeout: 10)); mode.tap()
+            XCTAssertTrue(mode.waitForExistence(timeout: 10))
+            XCTAssertLessThan(mode.frame.width, 65)
+            XCTAssertLessThan(mode.frame.midX, app.frame.midX)
+            mode.tap()
             let count = app.buttons["raw-map-count"]
             XCTAssertTrue(count.waitForExistence(timeout: 10))
             XCTAssertEqual(count.label, "8 raw points")
@@ -1849,6 +1856,7 @@ import XCTest
         XCTAssertTrue(app.staticTexts["Home"].exists)
         app.buttons["tab-timeline"].tap()
         app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
         reveal(app.buttons["reset-all-data"], in: app)
         app.buttons["reset-all-data"].tap()
         XCTAssertTrue(app.buttons["Delete all data and restart"].waitForExistence(timeout: 5))
@@ -1870,10 +1878,37 @@ import XCTest
         XCTAssertTrue(app.buttons["choose-maps"].exists)
     }
 
+    func testLimitedHistoryExportUsesItsOwnScreenAndPeriodOptions() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
+        XCTAssertTrue(app.navigationBars["Your data"].waitForExistence(timeout: 5))
+        let period = app.buttons["export-period"]
+        period.tap(); app.buttons["Last 7 days"].tap()
+        XCTAssertTrue(period.label.contains("Last 7 days"))
+        let photos = app.switches["export-photos"]
+        photos.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(photos.value as? String, "0")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Your data with a limited period"; screenshot.lifetime = .keepAlways; add(screenshot)
+        period.tap(); app.buttons["Number of days"].tap()
+        let days = app.textFields["export-days"]
+        XCTAssertTrue(days.waitForExistence(timeout: 5))
+        period.tap(); app.buttons["Choose dates"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "export-from").firstMatch.exists)
+        period.tap(); app.buttons["Last 30 days"].tap()
+        app.buttons["export-history"].tap()
+        app.buttons["Export history"].tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value == %@", "Places-history")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 15))
+    }
+
     func testTestCaseExportExplainsExpectedResultsAndOpensFilePicker() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
         app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
         reveal(app.buttons["export-test-case"], in: app)
         app.buttons["export-test-case"].tap()
         XCTAssertTrue(app.buttons["Export test case"].waitForExistence(timeout: 5))
@@ -1891,6 +1926,7 @@ import XCTest
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
         app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
         reveal(app.buttons["support-report"], in: app); app.buttons["support-report"].tap()
         let technical = app.buttons["support-technical-export"]
         XCTAssertTrue(technical.waitForExistence(timeout: 5))
@@ -1907,12 +1943,13 @@ import XCTest
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
         app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
         reveal(app.buttons["support-report"], in: app); app.buttons["support-report"].tap()
         let full = app.buttons["support-full-export"]
         reveal(full, in: app); full.tap()
-        XCTAssertTrue(app.buttons["Export full support report"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Export private support report"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Anyone with this file")).firstMatch.exists)
-        app.buttons["Export full support report"].tap()
+        app.buttons["Export private support report"].tap()
         let filename = app.textFields.matching(NSPredicate(format: "value == %@", "Places-support-FULL-PRIVATE")).firstMatch
         XCTAssertTrue(filename.waitForExistence(timeout: 15))
     }
@@ -1921,6 +1958,7 @@ import XCTest
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
         app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
         reveal(app.buttons["export-gpx"], in: app)
         app.buttons["export-gpx"].tap()
         XCTAssertTrue(app.buttons["Export GPX"].waitForExistence(timeout: 5))

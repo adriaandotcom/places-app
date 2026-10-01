@@ -410,29 +410,37 @@ public actor PlacesStore {
         }
     }
 
-    public func exportHistory() throws -> Data { try StoreSQL.exportEncoder.encode(fullHistoryArchive()) }
-    public func fullHistoryArchive() throws -> HistoryArchive {
-        var archive = try historyArchive()
-        archive.memories = try memoryArchive()
-        archive.photoEvidence = try photoEvidence(includeHistory: true)
-        return archive
+    public func exportHistory(in period: DateInterval? = nil, includePhotos: Bool = true) throws -> Data {
+        try StoreSQL.exportEncoder.encode(fullHistoryArchive(in: period, includePhotos: includePhotos))
     }
-    public func exportTestCase() throws -> Data {
-        try InferenceTestCase.redacting(historyArchive()).encoded()
+    public func fullHistoryArchive(in period: DateInterval? = nil, includePhotos: Bool = true) throws -> HistoryArchive {
+        var archive = try historyArchive(in: period)
+        archive.memories = try memoryArchive(in: period, includePhotos: includePhotos)
+        archive.photoEvidence = try photoEvidence(since: period?.start ?? .distantPast, includeHistory: true)
+        return archive.limited(to: period, includePhotos: includePhotos)
     }
-    public func exportGPX() throws -> Data {
-        try queue.read { db in
+    public func exportTestCase(in period: DateInterval? = nil) throws -> Data {
+        try InferenceTestCase.redacting(historyArchive(in: period).limited(to: period)).encoded()
+    }
+    public func exportGPX(in period: DateInterval? = nil) throws -> Data {
+        if let period {
+            let archive = try historyArchive(in: period).limited(to: period)
+            return GPXExport.encode(places: archive.places, observations: archive.observations)
+        }
+        return try queue.read { db in
             GPXExport.encode(places: try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places"),
                 observations: try StoreSQL.decodeAll(SensorObservation.self, db: db,
                     sql: "SELECT payload FROM observations WHERE source IN ('location', 'significantChange', 'paused', 'resumed', 'recovery') ORDER BY timestamp"))
         }
     }
-    private func historyArchive() throws -> HistoryArchive {
+    private func historyArchive(in period: DateInterval? = nil) throws -> HistoryArchive {
         try queue.read { db in
             let items = try StoreSQL.decodeAll(TimelineItem.self, db: db, sql: "SELECT payload FROM timeline ORDER BY start")
             let edits = try StoreSQL.decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
             let places = try StoreSQL.decodeAll(Place.self, db: db, sql: "SELECT payload FROM places")
-            let observations = try StoreSQL.decodeAll(SensorObservation.self, db: db, sql: "SELECT payload FROM observations ORDER BY timestamp")
+            let observations = try StoreSQL.decodeAll(SensorObservation.self, db: db,
+                sql: "SELECT payload FROM observations" + (period == nil ? "" : " WHERE timestamp >= ? AND timestamp < ?") + " ORDER BY timestamp",
+                arguments: period.map { [$0.start.timeIntervalSince1970, $0.end.timeIntervalSince1970] } ?? [])
             let separatedAt = try Double.fetchAll(db, sql: "SELECT timestamp FROM timelineSeparations ORDER BY timestamp").map(Date.init(timeIntervalSince1970:))
             return try HistoryArchive(formatVersion: 1, exportedAt: Date(),
                 places: places, observations: observations,

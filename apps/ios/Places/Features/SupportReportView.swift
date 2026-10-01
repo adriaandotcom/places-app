@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SupportReportView: View {
     @Environment(AppModel.self) private var model
+    @State var period = ExportPeriodSelection()
+    @State var includePhotos = true
     @State private var snapshot = SupportSnapshot()
     @State private var preparing = false
     @State private var confirmFull = false
@@ -38,10 +40,16 @@ struct SupportReportView: View {
                 Text("iOS supplies these reports when available, sometimes after you reopen Places. No reports does not mean no crashes. Recent technical details are kept locally with a size limit.")
             }
             Section {
-                Button("Export with full history…", systemImage: "doc.badge.plus") { confirmFull = true }
+                ExportPeriodPicker(selection: $period)
+                Toggle("Include saved photos", isOn: $includePhotos).tint(Palette.controlGreen)
+            } header: { Text("History options") } footer: {
+                Text("These options apply only when you include history. The technical report never includes your history or photos.")
+            }
+            Section {
+                Button("Export with history…", systemImage: "doc.badge.plus") { confirmFull = true }
                     .disabled(model.store == nil).accessibilityIdentifier("support-full-export")
-            } header: { Text("Include everything for investigation") } footer: {
-                Text("Adds your exact locations and times, places, Wi-Fi and companion identifiers, raw observations, corrections, trips, memories, saved photos, and people. Includes only app data, not your entire photo library. Passwords and encryption keys are never included.")
+            } header: { Text("Include private history") } footer: {
+                Text("Adds the selected period’s exact locations and times, Wi-Fi and companion identifiers, observations, corrections and memories, plus related places, trips and people. Saved photos are included only when enabled. Includes only app data, not your entire photo library. Passwords and encryption keys are never included.")
             }
             Section {
                 Text("You choose who receives the file. Your sharing service may reveal your identity, and saving to a cloud folder may sync the file there.")
@@ -55,7 +63,7 @@ struct SupportReportView: View {
         .navigationTitle("Report a problem").navigationBarTitleDisplayMode(.inline)
         .task { snapshot = await LocalDiagnostics.shared.log.snapshot() }
         .confirmationDialog("Include your private history?", isPresented: $confirmFull, titleVisibility: .visible) {
-            Button("Export full support report") { prepare(full: true) }
+            Button("Export private support report") { prepare(full: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Anyone with this file can read your locations, photos, people and other private history. Only share it with someone you trust. Nothing is sent until you choose where to save or share it.")
@@ -70,7 +78,7 @@ struct SupportReportView: View {
         Task {
             defer { preparing = false }
             do {
-                let data = try await model.supportReport(includeHistory: full)
+                let data = try await model.supportReport(includeHistory: full, period: period.interval(), includePhotos: includePhotos)
                 document = HistoryDocument(data: data, contentType: .json)
                 filename = full ? "Places-support-FULL-PRIVATE" : "Places-support"
                 showExporter = true

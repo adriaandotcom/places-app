@@ -153,6 +153,15 @@ struct MapScreen: View {
                 Spacer()
                 if model.mapsAvailable {
                     HStack(spacing: Layout.compact) {
+                        Button {
+                            changingMode = true
+                            Task { await model.setNerdMode(!model.nerdMode); changingMode = false }
+                        } label: {
+                            Image(systemName: model.nerdMode ? "eye.fill" : "eye")
+                                .frame(width: Layout.touchTarget, height: Layout.touchTarget)
+                        }.buttonStyle(.glass).buttonBorderShape(.circle).disabled(changingMode)
+                            .accessibilityLabel("Nerd mode").accessibilityIdentifier("map-nerd-mode")
+                            .accessibilityValue(model.nerdMode ? "On" : "Off")
                         if model.nerdMode {
                             if let raw = model.mapRawPresentation {
                                 Button { selectedRawPoint = raw.rawPoints.first } label: {
@@ -164,15 +173,6 @@ struct MapScreen: View {
                             } else { ProgressView().accessibilityLabel("Loading raw points") }
                         }
                         Spacer(minLength: 0)
-                        Button {
-                            changingMode = true
-                            Task { await model.setNerdMode(!model.nerdMode); changingMode = false }
-                        } label: {
-                            Label(model.nerdMode ? "Normal mode" : "Nerd mode", systemImage: model.nerdMode ? "eye.slash" : "eye")
-                                .font(.caption.weight(.medium)).padding(.horizontal, Layout.compact)
-                                .frame(minHeight: Layout.touchTarget)
-                        }.buttonStyle(.glass).disabled(changingMode).accessibilityIdentifier("map-nerd-mode")
-                            .accessibilityValue(model.nerdMode ? "On" : "Off")
                     }.padding(.leading, Layout.gutter).padding(.trailing, 48)
                     MapDateBar().id(model.selectedDay).padding(.horizontal, Layout.gutter)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { periodHeight = $0 }

@@ -70,6 +70,11 @@ enum Layout {
     static let spacing: CGFloat = 16
     static let compact: CGFloat = 8
     static let touchTarget: CGFloat = 44
+    static let timelineInset: CGFloat = 55
+    static let timelineSpineInset: CGFloat = 38
+    static let timelineRowHeight: CGFloat = 78
+    static let timelineRowHorizontal: CGFloat = 12
+    static let timelineRowVertical: CGFloat = 10
     static let iconTile: CGFloat = 76
     static let mapHeight: CGFloat = 280
     static let islandInset: CGFloat = 6

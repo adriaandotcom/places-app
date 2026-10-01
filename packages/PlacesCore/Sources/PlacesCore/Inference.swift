@@ -260,13 +260,13 @@ public enum InferenceEngine {
         return within(interval, items: items)
     }
 
-    public static func within(_ interval: DateInterval, items: [TimelineItem]) -> [TimelineItem] {
+    public static func within(_ interval: DateInterval, items: [TimelineItem], now: Date = Date()) -> [TimelineItem] {
         return items.compactMap { item in
             guard item.start < interval.end, (item.end ?? .distantFuture) > interval.start else { return nil }
             var clipped = item
             clipped.start = max(item.start, interval.start)
             if let end = item.end { clipped.end = min(end, interval.end) }
-            else if interval.end <= Date() { clipped.end = interval.end }
+            else if interval.end <= now { clipped.end = interval.end }
             return clipped
         }
     }

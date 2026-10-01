@@ -81,6 +81,12 @@ public enum TimelinePresentation {
         return !observations.contains { observation in
             guard interval.contains(observation.timestamp) else { return false }
             if [.paused, .regionExit, .visitDeparture].contains(observation.source) { return true }
+            // Walking around a hotel or park is not a departure. Device changes
+            // may interrupt coverage while both devices still locate the same
+            // saved area. Preserve that gap in originalItems, not another card.
+            if let place, let coordinate = observation.usableCoordinate {
+                return !place.contains(coordinate)
+            }
             if let motion = observation.motion, [.walking, .running, .cycling, .automotive].contains(motion) { return true }
             if let coordinate = observation.usableCoordinate {
                 return anchor.distance(to: coordinate) > radius || (observation.speed ?? -1) >= 0.8

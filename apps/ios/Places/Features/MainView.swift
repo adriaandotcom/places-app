@@ -119,9 +119,6 @@ struct TimelineView: View {
                 HStack {
                     Text(model.selectedDay.formatted(.dateTime.month(.wide).year())).font(.subheadline).foregroundStyle(Palette.muted)
                     Spacer()
-                    Button { model.rewindRequest = RewindRequest(month: model.defaultRewindMonth) } label: {
-                        Label("Rewind", systemImage: "sparkles").font(.subheadline.weight(.semibold)).frame(minHeight: Layout.touchTarget)
-                    }.accessibilityIdentifier("open-rewind")
                     Button { showDate = true } label: { Image(systemName: "calendar").frame(width: 44, height: 44) }
                         .accessibilityLabel("Choose date")
                 }
@@ -161,10 +158,8 @@ struct TimelineRow: View {
                 .padding(.vertical, 4)
                 .accessibilityElement(children: .combine)
         } else {
-            HStack(spacing: 15) {
-                DottedLine().stroke(Palette.muted.opacity(0.6), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 7]))
-                    .frame(width: 2).padding(.leading, 38).accessibilityHidden(true)
-                HStack(spacing: 8) {
+            TimelineInsetRow {
+                HStack(spacing: Layout.compact) {
                     Image(systemName: item.kind == .gap ? (item.connection == nil ? "questionmark.circle" : "point.topleft.down.to.point.bottomright.curvepath") : item.mode.symbol)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.kind == .gap ? (item.connection == nil ? "An unknown interval" : "Between recorded locations") : item.mode.title).font(.subheadline.weight(.semibold))
@@ -175,9 +170,25 @@ struct TimelineRow: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.caption2)
-                }.padding(.vertical, 10).padding(.horizontal, 12).background(Palette.paper, in: RoundedRectangle(cornerRadius: 16))
-            }.frame(minHeight: 78).padding(.trailing, 16).accessibilityElement(children: .combine)
+                }
+            }.accessibilityElement(children: .combine)
         }
+    }
+}
+/// Shared spine, inset and card spacing for travel, gaps and visit memories.
+struct TimelineInsetRow<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        content.padding(.vertical, Layout.timelineRowVertical).padding(.horizontal, Layout.timelineRowHorizontal)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.paper, in: RoundedRectangle(cornerRadius: Layout.spacing))
+            .padding(.vertical, Layout.compact)
+            .padding(.leading, Layout.timelineInset).padding(.trailing, Layout.spacing)
+            .frame(minHeight: Layout.timelineRowHeight)
+            .background(alignment: .leading) {
+                DottedLine().stroke(Palette.muted.opacity(0.6), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [2, 7]))
+                    .frame(width: 2).padding(.leading, Layout.timelineSpineInset).accessibilityHidden(true)
+            }
     }
 }
 private struct DottedLine: Shape {

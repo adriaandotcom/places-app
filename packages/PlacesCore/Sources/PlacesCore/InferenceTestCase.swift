@@ -17,6 +17,8 @@ public struct InferenceTestCase: Codable, Sendable {
         public let accessPoints: [WiFiAccessPoint]
         public let corrections: [UserOverride]
         public var separatedAt: [Date]? = nil
+        public var period: DateInterval? = nil
+        public var referenceDate: Date? = nil
     }
 
     /// Compare behavior instead of generated IDs, explanatory copy, or GPS rounding.
@@ -42,8 +44,9 @@ public struct InferenceTestCase: Codable, Sendable {
     public func replay() -> [TimelineExpectation] {
         let inferred = InferenceEngine.infer(observations: input.observations, places: input.places,
                                              networks: input.networks, accessPoints: input.accessPoints)
-        return TimelinePresentation.make(items: InferenceEngine.applying(input.corrections, to: inferred),
-            observations: input.observations, places: input.places, separatedAt: input.separatedAt ?? []).map(TimelineExpectation.init)
+        let result = TimelinePresentation.make(items: InferenceEngine.applying(input.corrections, to: inferred),
+            observations: input.observations, places: input.places, separatedAt: input.separatedAt ?? [])
+        return (input.period.map { InferenceEngine.within($0, items: result, now: input.referenceDate ?? Date()) } ?? result).map(TimelineExpectation.init)
     }
 
     public func encoded() throws -> Data {
@@ -131,10 +134,12 @@ public struct InferenceTestCase: Codable, Sendable {
             return TimelineExpectation(copy)
         }
         return Self(formatVersion: 1, policyVersion: TrackingPolicy.version,
-                    instructions: "Dates are Unix seconds. expectedTimeline snapshots the saved, corrected history. Review it against what happened, or edit it to describe the desired result. In Swift: InferenceTestCase.decode(data), then compare replay() with expectedTimeline. Millisecond precision is used for timeline comparisons.",
+                    instructions: "Dates are Unix seconds. expectedTimeline snapshots the saved, corrected history. Review it against what happened, or edit it to describe the desired result. In Swift: InferenceTestCase.decode(data), then compare replay() with expectedTimeline. Millisecond precision is used for timeline comparisons. Limited periods exclude earlier observations, so a difference at the start can mean missing earlier context.",
                     privacy: "Names, addresses, identifiers, dates, geographic time zone names, and absolute locations are replaced. Distances, route shapes, time of day, UTC offsets, and durations remain and can still be identifying. Review before sharing. Diagnostic free text and device metadata are excluded.",
                     input: Input(observations: observations, places: places, networks: networks, accessPoints: points,
-                                 corrections: corrections, separatedAt: archive.separatedAt?.map(date)),
+                                 corrections: corrections, separatedAt: archive.separatedAt?.map(date),
+                                 period: archive.period.map { DateInterval(start: date($0.start), end: date($0.end)) },
+                                 referenceDate: archive.period == nil ? nil : date(archive.exportedAt)),
                     expectedTimeline: expected)
     }
 

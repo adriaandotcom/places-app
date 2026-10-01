@@ -105,12 +105,38 @@ extension PlacesStore {
     public func photoData(id: String, thumbnail: Bool = false) throws -> Data? {
         try queue.read { try Data.fetchOne($0, sql: thumbnail ? "SELECT thumbnail FROM memoryPhotos WHERE id = ?" : "SELECT jpeg FROM memoryPhotos WHERE id = ?", arguments: [id]) }
     }
-    func memoryArchive() throws -> MemoryArchive {
+    func memoryArchive(in period: DateInterval? = nil, includePhotos: Bool = true) throws -> MemoryArchive {
         try queue.read { db in
-            let photos = try Row.fetchAll(db, sql: "SELECT id, jpeg, thumbnail FROM memoryPhotos").map {
-                MemoryPhoto(id: $0["id"], jpeg: $0["jpeg"], thumbnail: $0["thumbnail"])
+            let memories = try MemorySQL.memories(db).filter { memory in
+                period.map { memory.date >= $0.start && memory.date < $0.end } ?? true
             }
-            return try MemoryArchive(trips: MemorySQL.trips(db), people: MemorySQL.people(db), memories: MemorySQL.memories(db), photos: photos)
+            let tripIDs = Set(memories.compactMap(\.tripID))
+            let trips = try MemorySQL.trips(db).filter { trip in
+                period.map { tripIDs.contains(trip.id) || (trip.start < $0.end && (trip.end ?? .distantFuture) > $0.start) } ?? true
+            }.map { value in var copy = value; if !includePhotos { copy.photoJPEG = nil }; return copy }
+            var personIDs = Set(memories.flatMap(\.linkedPersonIDs) + trips.flatMap(\.personIDs))
+            let allPeople = try MemorySQL.people(db)
+            // Retain people referenced in the descriptions of already linked people.
+            var pending = personIDs
+            while !pending.isEmpty {
+                let referenced = Set(allPeople.filter { pending.contains($0.id) }.flatMap { ($0.mentions ?? []).map(\.personID) })
+                pending = referenced.subtracting(personIDs); personIDs.formUnion(pending)
+            }
+            let people = allPeople.filter { period == nil || personIDs.contains($0.id) }.map { value in
+                var copy = value; if !includePhotos { copy.avatarJPEG = nil }; return copy
+            }
+            // Filter before reading JPEG blobs so a short export never loads the
+            // whole photo archive into memory.
+            let photoIDs = Set(memories.flatMap(\.photoIDs))
+            var photos: [MemoryPhoto] = []
+            if includePhotos {
+                for id in photoIDs.sorted() {
+                    if let row = try Row.fetchOne(db, sql: "SELECT id, jpeg, thumbnail FROM memoryPhotos WHERE id = ?", arguments: [id]) {
+                        photos.append(MemoryPhoto(id: row["id"], jpeg: row["jpeg"], thumbnail: row["thumbnail"]))
+                    }
+                }
+            }
+            return MemoryArchive(trips: trips, people: people, memories: memories, photos: photos)
         }
     }
 }
