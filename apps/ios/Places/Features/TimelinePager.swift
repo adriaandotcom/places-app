@@ -254,7 +254,7 @@ private struct TimelineMemoryRow: View {
         NavigationLink { MemoryDetail(memoryID: memory.id) } label: {
             TimelineInsetRow {
                 HStack(spacing: Layout.compact) {
-                    if let photo = memory.orderedPhotoIDs.first {
+                    if let photo = memory.resolvedCoverPhotoID {
                         StoredPhoto(id: photo, thumbnail: true).frame(width: Layout.avatarSize, height: Layout.avatarSize)
                             .clipShape(RoundedRectangle(cornerRadius: Layout.compact))
                     } else { Image(systemName: "text.bubble").foregroundStyle(Palette.green) }

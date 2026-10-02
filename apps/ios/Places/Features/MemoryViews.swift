@@ -80,7 +80,7 @@ struct MemoryCard: View {
             }
             if !memory.text.isEmpty { PersonMentionText(text: memory.text, mentions: memory.mentions ?? []) }
             if !memory.photoIDs.isEmpty {
-                PhotoGrid(items: memory.orderedPhotoIDs.map { PhotoReference(id: $0) },
+                PhotoGrid(items: memory.coverFirstPhotoIDs.map { PhotoReference(id: $0) },
                     open: { selectedPhoto = $0 }, add: { editing = MemoryEditRequest(addPhotos: true) }, addLabel: "Add photos to memory", addIdentifier: "add-photos-to-memory") { photo in
                     StoredPhoto(id: photo.id, thumbnail: true)
                 }
@@ -99,6 +99,7 @@ struct MemoryDetail: View {
     @Environment(\.dismiss) private var dismiss
     let memoryID: String
     @State private var editing = false
+    @State private var choosingCover = false
     @State private var selectedPhoto: PhotoReference?
     private var memory: PlaceMemory? { model.memories.memories.first { $0.id == memoryID } }
     var body: some View {
@@ -114,15 +115,21 @@ struct MemoryDetail: View {
                     if !memory.text.isEmpty {
                         PersonMentionText(text: memory.text, mentions: memory.mentions ?? [])
                     }
-                    if let first = memory.orderedPhotoIDs.first {
+                    if let first = memory.resolvedCoverPhotoID {
                         VStack(spacing: Layout.compact) {
+                            if memory.photoIDs.count > 1 {
+                                SectionHeading(title: "Photos", actionTitle: "Change cover", actionSymbol: "photo",
+                                    actionIdentifier: "change-memory-cover", action: { choosingCover = true })
+                            }
                             Button { selectedPhoto = PhotoReference(id: first) } label: {
                                 StoredPhoto(id: first, thumbnail: false, fillsFrame: true).frame(height: Layout.mapHeight)
                                     .background(Palette.paper)
                                     .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
-                            }.buttonStyle(.plain).accessibilityLabel("Photo 1")
+                                    .contentShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
+                            }.buttonStyle(.plain).accessibilityLabel("Cover photo").accessibilityIdentifier("memory-cover")
+                                .accessibilityValue("Photo \((memory.orderedPhotoIDs.firstIndex(of: first) ?? 0) + 1) of \(memory.photoIDs.count)")
                             if memory.photoIDs.count > 1 {
-                                PhotoGrid(items: memory.orderedPhotoIDs.dropFirst().map { PhotoReference(id: $0) },
+                                PhotoGrid(items: memory.coverFirstPhotoIDs.dropFirst().map { PhotoReference(id: $0) },
                                     label: { "Photo \($0 + 2)" }, open: { selectedPhoto = $0 }) { photo in
                                     StoredPhoto(id: photo.id, thumbnail: true)
                                 }
@@ -151,6 +158,16 @@ struct MemoryDetail: View {
             }
             .sheet(isPresented: $editing, onDismiss: dismissIfDeleted) {
                 if let memory { NavigationStack { MemoryEditor(memory: memory) }.environment(\.hasMainNavigation, false) }
+            }
+            .sheet(isPresented: $choosingCover) {
+                if let memory {
+                    let epoch = model.memoryEpoch
+                    NavigationStack {
+                        MemoryCoverPicker(photoIDs: memory.orderedPhotoIDs, selectedID: memory.resolvedCoverPhotoID) { id in
+                            try await model.changeMemories(epoch: epoch) { try await $0.setMemoryCover(memoryID: memoryID, photoID: id) }
+                        }
+                    }.environment(\.hasMainNavigation, false)
+                }
             }
             .fullScreenCover(item: $selectedPhoto, onDismiss: dismissIfDeleted) { photo in
                 SavedMemoryPhotoBrowser(memoryID: memoryID, initialID: photo.id)
@@ -280,7 +297,8 @@ struct MemoryEditor: View {
                     var details = draft.photoDetails?[id] ?? MemoryPhotoDetails()
                     details.caption = caption
                     draft.photoDetails = (draft.photoDetails ?? [:]).merging([id: details]) { _, new in new }
-                }, removePhoto: { removePhoto($0) })
+                }, removePhoto: { removePhoto($0) }, coverPhotoID: draft.resolvedCoverPhotoID,
+                   setCover: { draft.coverPhotoID = $0 })
             }
             .modifier(EditorControls(saving: saving,
                 canSave: !importing && (suggestedCoordinate == nil || draft.placeID != nil) && (!draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !draft.photoIDs.isEmpty || !draft.personIDs.isEmpty),
@@ -294,10 +312,13 @@ struct MemoryEditor: View {
         guard let index = draft.photoIDs.firstIndex(of: id) else { return }
         let file = photos.first { $0.id == id }
         let details = draft.photoDetails?[id]
+        let cover = draft.coverPhotoID
+        if draft.coverPhotoID == id { draft.coverPhotoID = nil }
         draft.photoIDs.removeAll { $0 == id }; photos.removeAll { $0.id == id }
         draft.photoDetails?.removeValue(forKey: id)
         undo.register("Photo removed") {
             draft.photoIDs.insert(id, at: min(index, draft.photoIDs.count))
+            if cover == id && draft.coverPhotoID == nil { draft.coverPhotoID = cover }
             if let file { photos.append(file) }
             if let details { draft.photoDetails = (draft.photoDetails ?? [:]).merging([id: details]) { _, restored in restored } }
         }

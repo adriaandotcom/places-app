@@ -14,6 +14,7 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
     var addIdentifier = ""
     var addingDisabled = false
     var photoIdentifierPrefix = ""
+    var showsContextMenu = true
     var addBackground = Palette.background
     @ViewBuilder let thumbnail: (Item) -> Thumbnail
     @State private var removing: Item?
@@ -27,9 +28,11 @@ struct PhotoGrid<Item: Identifiable, Thumbnail: View>: View {
                     } else { tile(item).accessibilityLabel(label(index)) }
                 }
                 .contextMenu {
-                    if let open { Button("View photo", systemImage: "arrow.up.left.and.arrow.down.right") { open(item) } }
-                    if let reorder { Button("Reorder photos", systemImage: "arrow.up.arrow.down", action: reorder) }
-                    if remove != nil { Button("Delete photo", systemImage: "trash", role: .destructive) { removing = item } }
+                    if showsContextMenu {
+                        if let open { Button("View photo", systemImage: "arrow.up.left.and.arrow.down.right") { open(item) } }
+                        if let reorder { Button("Reorder photos", systemImage: "arrow.up.arrow.down", action: reorder) }
+                        if remove != nil { Button("Delete photo", systemImage: "trash", role: .destructive) { removing = item } }
+                    }
                 }
                 .accessibilityActions {
                     if let reorder { Button("Reorder photos", action: reorder) }

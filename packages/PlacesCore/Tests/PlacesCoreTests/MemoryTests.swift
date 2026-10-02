@@ -398,3 +398,32 @@ private func memoryWithoutPeople(_ memory: PlaceMemory) -> PlaceMemory { var mem
     #expect(try JSONDecoder().decode(Place.self, from: JSONEncoder().encode(hotel)).photoJPEG == nil)
     #expect(try JSONDecoder().decode(Trip.self, from: JSONEncoder().encode(trip)).photoJPEG == nil)
 }
+
+@Test func memoryCoverPersistsWithoutReorderingAndFallsBackAfterDeletion() async throws {
+    let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let store = try PlacesStore(path: path); try await store.savePlace(hotel)
+    let photos = ["early", "middle", "late"].enumerated().map { index, id in
+        MemoryPhoto(id: id, jpeg: Data([1]), thumbnail: Data([2]), details: .init(createdAt: date(3, index + 10)))
+    }
+    let memory = PlaceMemory(id: "cover-memory", text: "Day out", placeID: hotel.id, photoIDs: photos.map(\.id))
+    try await store.saveMemory(memory, adding: photos)
+    try await store.setMemoryCover(memoryID: memory.id, photoID: "middle")
+    let reopened = try PlacesStore(path: path)
+    var saved = try #require(await reopened.memoryLibrary().memories.first)
+    #expect(saved.coverPhotoID == "middle")
+    #expect(saved.resolvedCoverPhotoID == "middle")
+    #expect(saved.orderedPhotoIDs == ["early", "middle", "late"])
+    #expect(saved.coverFirstPhotoIDs == ["middle", "early", "late"])
+    await #expect(throws: MemoryError.self) { try await reopened.setMemoryCover(memoryID: memory.id, photoID: "outside-memory") }
+    #expect(try await reopened.memoryLibrary().memories.first?.coverPhotoID == "middle")
+    try await reopened.deleteMemoryPhoto(memoryID: memory.id, photoID: "middle")
+    saved = try #require(await reopened.memoryLibrary().memories.first)
+    #expect(saved.coverPhotoID == nil && saved.resolvedCoverPhotoID == "early")
+    // Older payloads omit the optional cover and retain their original first photo.
+    let legacy = try JSONDecoder().decode(PlaceMemory.self, from: JSONEncoder().encode(memory))
+    #expect(legacy.coverPhotoID == nil && legacy.resolvedCoverPhotoID == "early")
+    try await reopened.deleteMemoryPhoto(memoryID: memory.id, photoID: "early")
+    try await reopened.deleteMemoryPhoto(memoryID: memory.id, photoID: "late")
+    #expect(try await reopened.memoryLibrary().memories.first?.resolvedCoverPhotoID == nil)
+}

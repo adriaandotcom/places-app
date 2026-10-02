@@ -80,6 +80,16 @@ public struct PlaceMemory: Codable, Identifiable, Hashable, Sendable {
     public var photoIDs: [String]
     public var photoDetails: [String: MemoryPhotoDetails]?
     public var photosManuallyOrdered: Bool?
+    /// Independent of chronological/manual photo order; absent in older memories.
+    public var coverPhotoID: String?
+    public var resolvedCoverPhotoID: String? {
+        if let coverPhotoID, photoIDs.contains(coverPhotoID) { return coverPhotoID }
+        return orderedPhotoIDs.first
+    }
+    public var coverFirstPhotoIDs: [String] {
+        guard let cover = resolvedCoverPhotoID else { return [] }
+        return [cover] + orderedPhotoIDs.filter { $0 != cover }
+    }
     public var orderedPhotoIDs: [String] {
         guard photosManuallyOrdered != true else { return photoIDs }
         return photoIDs.enumerated().sorted { left, right in

@@ -34,7 +34,7 @@ enum BackupReadable {
             try records(PlaceMemory.self, db: db, sql: "SELECT payload FROM memories ORDER BY date DESC") { memory in
                 let title = memory.placeID.flatMap { placeNames[$0] } ?? memory.tripID.flatMap { tripNames[$0] } ?? "Memory"
                 try output.text("<article><h2>\(escape(title))</h2><p>\(date(memory.date))</p><p class=\"note\">\(escape(memory.text))</p><p>\(escape(memory.linkedPersonIDs.compactMap { peopleNames[$0] }.joined(separator: ", ")))</p><div class=\"photos\">")
-                for id in memory.orderedPhotoIDs {
+                for id in memory.coverFirstPhotoIDs {
                     try autoreleasepool {
                         if let data = try Data.fetchOne(db, sql: "SELECT jpeg FROM memoryPhotos WHERE id = ?", arguments: [id]) {
                             let path = try BackupIO.media(data, root: root)

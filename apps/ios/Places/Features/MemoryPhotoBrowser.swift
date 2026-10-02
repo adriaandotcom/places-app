@@ -69,7 +69,10 @@ struct SavedMemoryPhotoBrowser: View {
                     try await model.changeMemories(epoch: epoch) { try await $0.deleteMemoryPhoto(memoryID: memoryID, photoID: id) }
                 }, removalMessage: memory.photoIDs.count == 1 && memory.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && memory.linkedPersonIDs.isEmpty
                     ? "The original photo in your library is kept. This also removes the memory, which would be empty."
-                    : "The original photo in your library is kept.")
+                    : "The original photo in your library is kept.", coverPhotoID: memory.resolvedCoverPhotoID, setCover: { id in
+                    guard let epoch else { throw CancellationError() }
+                    try await model.changeMemories(epoch: epoch) { try await $0.setMemoryCover(memoryID: memoryID, photoID: id) }
+                })
                 .onAppear { if epoch == nil { epoch = model.memoryEpoch } }
         } else { Color.clear.onAppear { dismiss() } }
     }
@@ -84,6 +87,8 @@ struct MemoryPhotoBrowser: View {
     let saveCaption: ((String, String) async throws -> Void)?
     let removePhoto: ((String) async throws -> Void)?
     let removalMessage: String
+    let coverPhotoID: String?
+    let setCover: ((String) async throws -> Void)?
     @State private var selectedID: String
     private enum Detail: Identifiable {
         case caption(String), location(String)
@@ -97,18 +102,22 @@ struct MemoryPhotoBrowser: View {
     @State private var confirmRemoval = false
     @State private var removing = false
     @State private var removalError: String?
+    @State private var savingCover = false
+    @State private var coverError: String?
     init(photoIDs: [String], initialID: String, details: [String: MemoryPhotoDetails],
          load: @escaping (String) async throws -> Data?, saveCaption: ((String, String) async throws -> Void)? = nil,
-         removePhoto: ((String) async throws -> Void)? = nil, removalMessage: String = "The original photo in your library is kept.") {
+         removePhoto: ((String) async throws -> Void)? = nil, removalMessage: String = "The original photo in your library is kept.",
+         coverPhotoID: String? = nil, setCover: ((String) async throws -> Void)? = nil) {
         self.photoIDs = photoIDs; self.details = details; self.load = load; self.saveCaption = saveCaption
         self.removePhoto = removePhoto; self.removalMessage = removalMessage
+        self.coverPhotoID = coverPhotoID; self.setCover = setCover
         _selectedID = State(initialValue: initialID)
     }
     private var index: Int { photoIDs.firstIndex(of: selectedID) ?? 0 }
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                MemoryPhotoPager(photoIDs: photoIDs, selectedID: $selectedID, load: load)
+                MemoryPhotoPager(photoIDs: photoIDs, selectedID: $selectedID, load: load, dismiss: { dismiss() })
                 VStack(spacing: Layout.compact) {
                     if let date = PhotoDate.label(details[selectedID]) { Text(date).font(.caption).foregroundStyle(Palette.muted).accessibilityIdentifier("photo-created-at") }
                     if saveCaption != nil { Button { presentedDetail = .caption(selectedID) } label: {
@@ -119,6 +128,20 @@ struct MemoryPhotoBrowser: View {
             }.background(Palette.background).foregroundStyle(Palette.ink)
                 .navigationTitle("\(index + 1) of \(photoIDs.count)").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    if let setCover {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button(selectedID == coverPhotoID ? "Cover photo" : "Use as cover") {
+                                let id = selectedID
+                                savingCover = true
+                                Task {
+                                    defer { savingCover = false }
+                                    do { try await setCover(id) }
+                                    catch { coverError = "The cover couldn’t be changed. Try again." }
+                                }
+                            }.disabled(savingCover || selectedID == coverPhotoID)
+                                .accessibilityIdentifier("use-photo-as-cover")
+                        }
+                    }
                     ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
                     ToolbarItemGroup(placement: .bottomBar) {
                         Menu {
@@ -141,7 +164,10 @@ struct MemoryPhotoBrowser: View {
                         }
                     }
                 }
-                .disabled(removing)
+                .disabled(removing || savingCover)
+                .alert("Couldn’t change cover", isPresented: Binding(get: { coverError != nil }, set: { if !$0 { coverError = nil } })) {
+                    Button("OK") {}
+                } message: { Text(coverError ?? "") }
                 .onChange(of: photoIDs) { old, remaining in
                     guard !remaining.contains(selectedID) else { return }
                     if remaining.isEmpty { dismiss() }
@@ -317,4 +343,41 @@ private final class PhotoZoomScrollView: UIScrollView, UIScrollViewDelegate {
         }
     }
     @objc private func accessibleZoom() -> Bool { setZoomScale(zoomScale > 1.01 ? 1 : 3, animated: animateZoom); return true }
+}
+
+/// Uses the same locally stored thumbnails as the gallery, without library access.
+struct MemoryCoverPicker: View {
+    @Environment(\.dismiss) private var dismiss
+    let photoIDs: [String]
+    let selectedID: String?
+    let select: (String) async throws -> Void
+    @State private var saving = false
+    @State private var error: String?
+    var body: some View {
+        ScrollView {
+            PhotoGrid(items: photoIDs.map { PhotoReference(id: $0) },
+                label: { "Photo \($0 + 1)" + (photoIDs[$0] == selectedID ? ", current cover" : "") }, open: { photo in
+                saving = true
+                Task {
+                    defer { saving = false }
+                    do { try await select(photo.id); dismiss() }
+                    catch { self.error = "The cover couldn’t be changed. Try again." }
+                }
+            }, photoIdentifierPrefix: "cover-option-", showsContextMenu: false) { photo in
+                StoredPhoto(id: photo.id, thumbnail: true)
+                    .overlay(alignment: .bottomTrailing) {
+                        if photo.id == selectedID {
+                            Image(systemName: "checkmark.circle.fill").font(.title2)
+                                .foregroundStyle(.white, Palette.green).padding(Layout.compact)
+                        }
+                    }
+            }.disabled(saving).padding(Layout.gutter)
+        }.background(Palette.background).foregroundStyle(Palette.ink)
+            .navigationTitle("Cover photo").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) } }
+            .interactiveDismissDisabled(saving)
+            .alert("Couldn’t change cover", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+                Button("OK") {}
+            } message: { Text(error ?? "") }
+    }
 }

@@ -94,6 +94,15 @@ extension PlacesStore {
     public func deleteMemory(id: String) throws {
         try queue.write { try $0.execute(sql: "DELETE FROM memories WHERE id = ?", arguments: [id]) }
     }
+    public func setMemoryCover(memoryID: String, photoID: String) throws {
+        try queue.write { db in
+            guard var memory = try StoreSQL.decodeAll(PlaceMemory.self, db: db,
+                sql: "SELECT payload FROM memories WHERE id = ?", arguments: [memoryID]).first,
+                  memory.photoIDs.contains(photoID) else { throw MemoryError.invalidPhoto }
+            memory.coverPhotoID = photoID
+            try MemorySQL.saveMemory(memory, db: db)
+        }
+    }
     public func updatePhotoCaption(memoryID: String, photoID: String, caption: String) throws {
         try queue.write { db in
             guard var memory = try StoreSQL.decodeAll(PlaceMemory.self, db: db, sql: "SELECT payload FROM memories WHERE id = ?", arguments: [memoryID]).first,
@@ -166,6 +175,7 @@ enum MemorySQL {
         for (id, details) in photos.map({ ($0.id, $0.details) }) + files.map({ ($0.id, $0.details) }) {
             if let details { memory.photoDetails = (memory.photoDetails ?? [:]).merging([id: details]) { old, _ in old } }
         }
+        if let cover = memory.coverPhotoID, !memory.photoIDs.contains(cover) { memory.coverPhotoID = nil }
         memory.photoDetails = memory.photoDetails?.filter { memory.photoIDs.contains($0.key) }
         guard (memory.photoDetails ?? [:]).values.allSatisfy({ details in
             details.createdAt?.timeIntervalSince1970.isFinite != false &&

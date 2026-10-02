@@ -26,6 +26,7 @@ private func populatedBackupStore() async throws -> PlacesStore {
     var memory = PlaceMemory(id: "memory", text: "Picnic & sunshine", date: backupDate.addingTimeInterval(100), tripID: "trip", placeID: "park", personIDs: ["person"], photoIDs: ["photo"])
     memory.photoDetails = ["photo": .init(createdAt: backupDate, utcOffsetSeconds: 7200, coordinate: point, caption: "<img src=x onerror=alert(1)>")]
     memory.photosManuallyOrdered = true
+    memory.coverPhotoID = "photo"
     try await store.saveMemory(memory, adding: [MemoryPhoto(id: "photo", jpeg: Data([7, 8, 9]), thumbnail: Data([7]))])
     try await store.setSetting("favoritePlaceColors", value: "[\"#123456\"]")
     for key in ["photoEvidenceEnabled", "trackingEnabled", "placeLookupEnabled", "mapsEnabled", "weeklyReviewReminders"] { try await store.setSetting(key, value: "true") }

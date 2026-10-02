@@ -6,18 +6,25 @@ struct MemoryPhotoPager: UIViewControllerRepresentable {
     let photoIDs: [String]
     @Binding var selectedID: String
     let load: (String) async throws -> Data?
+    let dismiss: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeUIViewController(context: Context) -> MemoryPhotoPagerController { MemoryPhotoPagerController() }
     func updateUIViewController(_ controller: MemoryPhotoPagerController, context: Context) {
         controller.selectionChanged = { selectedID = $0 }
+        controller.close = dismiss
+        controller.reduceMotion = reduceMotion
         controller.makePage = { id in AnyView(PhotoBrowserPage(id: id, active: true, load: load)) }
         controller.show(photoIDs, selected: selectedID, animated: !reduceMotion)
     }
 }
 
-final class MemoryPhotoPagerController: UIPageViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+final class MemoryPhotoPagerController: UIPageViewController, UIPageViewControllerDataSource, UIPageViewControllerDelegate, UIGestureRecognizerDelegate {
     var selectionChanged: ((String) -> Void)?
+    var close: (() -> Void)?
+    var reduceMotion = false
+    private var draggingToClose = false
+    private lazy var closePan = UIPanGestureRecognizer(target: self, action: #selector(dragToClose(_:)))
     var makePage: ((String) -> AnyView)?
     private var ids: [String] = []
     private var pages: [String: UIHostingController<AnyView>] = [:]
@@ -32,6 +39,45 @@ final class MemoryPhotoPagerController: UIPageViewController, UIPageViewControll
         dataSource = self; delegate = self
         view.backgroundColor = .clear
         view.accessibilityIdentifier = "memory-photo-pager"
+        closePan.maximumNumberOfTouches = 1
+        closePan.delegate = self
+        view.addGestureRecognizer(closePan)
+    }
+
+    func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard gesture === closePan, !transitioning else { return false }
+        let velocity = closePan.velocity(in: view)
+        guard velocity.y > abs(velocity.x) * 1.2 else { return false }
+        // A zoomed image owns vertical pans. The pager only closes at full size.
+        func zoomed(_ view: UIView) -> Bool {
+            if let scroll = view as? UIScrollView, scroll.zoomScale > scroll.minimumZoomScale + 0.01 { return true }
+            return view.subviews.contains { zoomed($0) }
+        }
+        return viewControllers?.first.map { !zoomed($0.view) } ?? true
+    }
+    func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        gesture === closePan && other is UIPanGestureRecognizer
+    }
+    @objc private func dragToClose(_ gesture: UIPanGestureRecognizer) {
+        let distance = max(0, gesture.translation(in: view.superview).y)
+        switch gesture.state {
+        case .began, .changed:
+            draggingToClose = true
+            view.transform = reduceMotion ? .identity : CGAffineTransform(translationX: 0, y: distance)
+            view.alpha = 1 - min(distance / max(view.bounds.height, 1), 0.6)
+        case .ended, .cancelled:
+            let projected = distance + max(0, gesture.velocity(in: view.superview).y) * 0.15
+            if gesture.state == .ended && distance > 24 && projected > 140 {
+                close?()
+            } else {
+                UIView.animate(withDuration: reduceMotion ? 0.12 : 0.25, delay: 0,
+                    usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                    self.view.transform = .identity; self.view.alpha = 1
+                }
+            }
+            draggingToClose = false
+        default: break
+        }
     }
 
     func show(_ ids: [String], selected id: String, animated: Bool) {
@@ -39,6 +85,7 @@ final class MemoryPhotoPagerController: UIPageViewController, UIPageViewControll
         self.ids = ids
         // An observation refresh must not fight an interactive swipe or an
         // arrow animation. The completed gesture owns the resulting selection.
+        guard !draggingToClose else { return }
         guard selected != id else { pendingSelection = nil; return }
         if transitioning { pendingSelection = (id, animated); return }
         guard let next = page(id) else { return }

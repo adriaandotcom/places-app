@@ -60,7 +60,7 @@ import XCTest
         XCTAssertFalse(app.textViews["memory-note"].exists)
         XCTAssertFalse(app.otherElements["apple-map"].exists)
         let detail = XCTAttachment(screenshot: app.screenshot()); detail.name = "Memory detail before editing"; detail.lifetime = .keepAlways; add(detail)
-        app.buttons["Photo 1"].tap()
+        app.buttons["memory-cover"].tap()
         XCTAssertTrue(app.navigationBars["1 of 3"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         app.buttons["edit-memory"].tap()
@@ -76,6 +76,65 @@ import XCTest
         reveal(delete, in: app); delete.tap(); app.sheets.buttons["Delete memory"].tap()
         XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
         XCTAssertFalse(memory.exists)
+    }
+
+    func testMemoryCoverSelectionAndSwipeDownViewerDismissal() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]
+        app.launch()
+        let create = app.buttons["suggestion-create-memory-suggestion-photo-0"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10)); create.tap()
+        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 8)); app.buttons["save-memory"].tap()
+        let memory = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-memory-")).firstMatch
+        XCTAssertTrue(memory.waitForExistence(timeout: 8)); memory.tap()
+        let cover = app.buttons["memory-cover"]
+        XCTAssertTrue(cover.waitForExistence(timeout: 5))
+        let original = cover.value as? String
+        app.buttons["change-memory-cover"].tap()
+        XCTAssertTrue(app.navigationBars["Cover photo"].waitForExistence(timeout: 5))
+        let options = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "cover-option-"))
+        XCTAssertEqual(options.count, 3)
+        let newCover = "Photo 2 of 3"
+        let pickerShot = XCTAttachment(screenshot: app.screenshot()); pickerShot.name = "Choose a memory cover"; pickerShot.lifetime = .keepAlways; add(pickerShot)
+        options.element(boundBy: 1).tap()
+        XCTAssertTrue(app.navigationBars["Cover photo"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(cover.value as? String, newCover)
+        XCTAssertNotEqual(cover.value as? String, original)
+        let detailShot = XCTAttachment(screenshot: app.screenshot()); detailShot.name = "Memory with chosen cover"; detailShot.lifetime = .keepAlways; add(detailShot)
+        cover.tap()
+        XCTAssertTrue(app.navigationBars["2 of 3"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["use-photo-as-cover"].label, "Cover photo")
+        let pager = app.otherElements["memory-photo-pager"]
+        let zoom = app.scrollViews["zoomable-memory-photo"]
+        XCTAssertTrue(zoom.waitForExistence(timeout: 5)); zoom.doubleTap()
+        zoom.swipeDown()
+        XCTAssertTrue(app.navigationBars["2 of 3"].exists, "A zoomed photo must pan rather than dismiss")
+        zoom.doubleTap()
+        // A short, slow pull returns to the viewer instead of closing it.
+        pager.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).press(forDuration: 0.1,
+            thenDragTo: pager.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        XCTAssertTrue(app.navigationBars["2 of 3"].exists)
+        pager.swipeLeft()
+        XCTAssertTrue(app.navigationBars["3 of 3"].waitForExistence(timeout: 5))
+        app.buttons["use-photo-as-cover"].tap()
+        XCTAssertTrue(app.buttons["Cover photo"].waitForExistence(timeout: 5))
+        pager.swipeDown()
+        XCTAssertTrue(app.navigationBars["3 of 3"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["edit-memory"].exists)
+        let viewerCover = cover.value as? String
+        XCTAssertNotEqual(viewerCover, newCover)
+        // A cover chosen in an editor stays a draft until Save.
+        app.buttons["edit-memory"].tap()
+        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 5))
+        let draftPhoto = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "draft-photo-", "Photo 1")).firstMatch
+        reveal(draftPhoto, in: app); draftPhoto.tap()
+        XCTAssertTrue(app.navigationBars["1 of 3"].waitForExistence(timeout: 5))
+        app.buttons["use-photo-as-cover"].tap()
+        XCTAssertEqual(app.buttons["use-photo-as-cover"].label, "Cover photo")
+        app.otherElements["memory-photo-pager"].swipeDown()
+        XCTAssertTrue(app.navigationBars["1 of 3"].waitForNonExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        XCTAssertEqual(cover.value as? String, viewerCover)
     }
 
     func testPhotoSuggestionReviewKeepsPlaceOptionsCollapsedAndLastActionVisible() {
