@@ -137,8 +137,8 @@ struct DiagnosticsView: View {
 private struct LicensesView: View {
     var body: some View {
         List {
-            ForEach(["OFL", "GRDB-LICENSE", "MapLibre-LICENSE", "Map-data", "Map-fonts"], id: \.self) { name in
-                Section(["OFL": "Bricolage Grotesque", "GRDB-LICENSE": "GRDB.swift", "MapLibre-LICENSE": "MapLibre", "Map-data": "On-device map data", "Map-fonts": "Noto Sans map labels"][name] ?? name) {
+            ForEach(["OFL", "GRDB-LICENSE", "ZIPFoundation-LICENSE", "MapLibre-LICENSE", "Map-data", "Map-fonts"], id: \.self) { name in
+                Section(["OFL": "Bricolage Grotesque", "GRDB-LICENSE": "GRDB.swift", "ZIPFoundation-LICENSE": "ZIPFoundation", "MapLibre-LICENSE": "MapLibre", "Map-data": "On-device map data", "Map-fonts": "Noto Sans map labels"][name] ?? name) {
                     Text(license(name)).font(.caption).textSelection(.enabled)
                 }
             }

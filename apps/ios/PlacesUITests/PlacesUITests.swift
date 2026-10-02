@@ -1967,6 +1967,76 @@ import XCTest
         XCTAssertTrue(app.buttons["choose-maps"].exists)
     }
 
+    func testCompleteBackupPreviewCancelAndRestore() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-browser"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
+        app.buttons["backup-and-restore"].tap()
+        XCTAssertTrue(app.buttons["backup-export"].waitForExistence(timeout: 5))
+        let initial = XCTAttachment(screenshot: app.screenshot())
+        initial.name = "Complete backup and restore"; initial.lifetime = .keepAlways; add(initial)
+        app.buttons["backup-export"].tap(); app.buttons["Create ZIP backup"].tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value CONTAINS %@", "Places-backup")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 30))
+        let name = "Places-qa-" + UUID().uuidString.prefix(8)
+        filename.tap()
+        filename.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (filename.value as? String ?? "").count) + name)
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.alerts["Backup saved"].waitForExistence(timeout: 15))
+        app.alerts.buttons["Done"].tap()
+        app.buttons["backup-import"].tap()
+        let file = app.staticTexts[name + ".zip"]
+        if !file.waitForExistence(timeout: 5), app.buttons["Recents"].exists { app.buttons["Recents"].tap() }
+        XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
+        let item = app.cells.containing(.staticText, identifier: name + ".zip").firstMatch
+        XCTAssertTrue(item.exists, app.debugDescription)
+        item.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        let restore = app.buttons["backup-restore-confirm"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 30))
+        reveal(restore, in: app)
+        let preview = XCTAttachment(screenshot: app.screenshot())
+        preview.name = "Validated backup preview"; preview.lifetime = .keepAlways; add(preview)
+        restore.tap()
+        XCTAssertTrue(app.alerts["Replace the data on this iPhone?"].waitForExistence(timeout: 5))
+        app.alerts.buttons["Cancel"].tap()
+        XCTAssertTrue(restore.exists)
+        restore.tap(); app.alerts.buttons["Replace and restore"].tap()
+        XCTAssertTrue(app.alerts["Backup restored"].waitForExistence(timeout: 20))
+        app.alerts.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["Your data"].waitForExistence(timeout: 5))
+        app.navigationBars["Your data"].buttons.firstMatch.tap()
+        let tracking = app.switches["tracking-toggle"]
+        for _ in 0..<8 where !tracking.exists { app.swipeDown() }
+        XCTAssertEqual(tracking.value as? String, "0")
+    }
+
+    func testCompleteBackupOpensSystemExportPicker() {
+        let app = launch(fixture: true)
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))
+        app.buttons["open-settings"].tap()
+        reveal(app.buttons["your-data"], in: app); app.buttons["your-data"].tap()
+        app.buttons["backup-and-restore"].tap()
+        app.buttons["backup-export"].tap()
+        app.buttons["Create ZIP backup"].tap()
+        let filename = app.textFields.matching(NSPredicate(format: "value CONTAINS %@", "Places-backup")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 30))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "ZIP backup in Files"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
+
+    func testNewPhoneCanRestoreBeforeOnboarding() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["onboarding-restore"].waitForExistence(timeout: 10))
+        app.buttons["onboarding-restore"].tap()
+        XCTAssertTrue(app.buttons["backup-import"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["backup-export"].exists)
+        app.buttons["backup-import"].tap()
+        XCTAssertTrue(app.navigationBars["Browse"].waitForExistence(timeout: 10) || app.buttons["Browse"].exists)
+    }
+
     func testLimitedHistoryExportUsesItsOwnScreenAndPeriodOptions() {
         let app = launch(fixture: true)
         XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 10))

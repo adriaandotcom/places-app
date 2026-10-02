@@ -16,6 +16,11 @@ struct YourDataView: View {
         @Bindable var model = model
         Form {
             Section {
+                NavigationLink { BackupTransferView() } label: {
+                    DataActionLabel(title: "Backup and restore", detail: "One complete ZIP for another iPhone", symbol: "externaldrive")
+                }.accessibilityIdentifier("backup-and-restore")
+            }
+            Section {
                 ExportPeriodPicker(selection: $period)
                 Toggle("Include saved photos", isOn: $includePhotos).tint(Palette.controlGreen)
                     .accessibilityIdentifier("export-photos")
@@ -92,7 +97,7 @@ struct YourDataView: View {
     }
 }
 
-private struct DataActionLabel: View {
+struct DataActionLabel: View {
     let title: String
     let detail: String
     let symbol: String

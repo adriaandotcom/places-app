@@ -140,6 +140,7 @@ final class AppModel {
         do {
             let opened = try uiTesting ? PlacesStore() : ProtectedStorage.open()
             try MemoryPhotoDraft.clearAbandonedImports()
+            try BackupTransferView.clearAbandonedTransfers()
             store = opened; waitingForUnlock = false
             tracking.onObservations = { [weak self] values in self?.enqueue(values) }
             tracking.onEvent = { [weak self] event in self?.enqueue(event) }
@@ -652,6 +653,63 @@ final class AppModel {
             showExporter = true
         } catch { fail("Could not prepare the export. Your data has not changed.") }
     }
+    func makeBackup(in workspace: URL) async throws -> URL {
+        guard let store, !deleting else { throw CancellationError() }
+        let epoch = generation
+        await pendingWrite?.value
+        guard !deleting, generation == epoch else { throw CancellationError() }
+        let url = try await store.makeBackup(in: workspace)
+        guard !deleting, generation == epoch else { throw CancellationError() }
+        return url
+    }
+
+    func restoreBackup(_ backup: PreparedBackup) async throws {
+        guard let store, !deleting else { throw CancellationError() }
+        deleting = true; generation += 1
+        let previousTracking = trackingEnabled, previousLookup = placeLookupEnabled
+        let previousProvider = mapProvider
+        photoLibrary.reset(); deleteUndo.clear()
+        mapPreference = UUID(); mapProvider = .off
+        lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
+        regionRun = UUID(); regionTask?.cancel(); regionTask = nil; lookingUpRegions = false
+        tracking.configure(places: [], enabled: false)
+        await pendingWrite?.value
+        do {
+            try await store.restoreBackup(backup)
+        } catch {
+            deleting = false; mapProvider = previousProvider; placeLookupEnabled = previousLookup
+            regionLookup.setEnabled(previousLookup && !uiTesting)
+            if !uiTesting { tracking.configure(places: places, enabled: previousTracking) }
+            await photoLibrary.start(store: store)
+            throw error
+        }
+        // Nothing below can fail after the durable transaction has committed.
+        companions.pauseAfterRestore()
+        trackingEnabled = false; mapsChoiceMade = false; placeLookupExplained = false
+        monthlyRewindReminders = false; weeklyReviewReminders = false; rewindRequest = nil
+        rewindNotifications.update([])
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        regionAttempts = []; regionLookupIssues = [:]
+        retryObservations = []; pendingWrite = nil; tracking.clearSensitiveState()
+        mapPeriod = nil; mapViewport = nil; mapSelectionRequest = UUID()
+        mapTimeline = []; mapRoutePoints = []; mapRawPresentation = nil
+        recentObservations = []; events = []; searchResults = []; searchText = ""
+        places = []; timeline = []; memories = MemoryLibrary(); routePoints = []
+        historyDays = []; firstHistoryDate = nil; diagnostics = nil
+        showExporter = false; exportDocument = nil; errorMessage = nil; storageNeedsRetry = false
+        selectedDay = Date(); selectedTab = .timeline; librarySection = "Places"
+        nerdMode = (try? await store.setting("nerdMode")) == "true"
+        deleting = false
+        await photoLibrary.start(store: store)
+        await refresh()
+    }
+
+    func finishBackupRestore() {
+        onboardingComplete = true; replayingOnboarding = false
+        navigationRoots = [:]
+    }
+
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
@@ -670,6 +728,7 @@ final class AppModel {
             if !uiTesting { try await companions.erase() }
             try mapDownloads.deleteAll()
             try MemoryPhotoDraft.clearAbandonedImports()
+            try BackupTransferView.clearAbandonedTransfers()
             try await store.eraseHistory(resetSettings: true)
             try await LocalDiagnostics.shared.log.clear()
             retryObservations = []; timeline = []; historyDays = []; firstHistoryDate = nil; places = []; networks = []; accessPoints = []

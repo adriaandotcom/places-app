@@ -49,6 +49,11 @@ struct OnboardingView: View {
                             .font(.body.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 44)
                             .accessibilityIdentifier("onboarding-skip")
                     }
+                    if step == .welcome {
+                        NavigationLink("Restore a backup") { BackupTransferView(restoreOnly: true) }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .accessibilityIdentifier("onboarding-restore")
+                    }
                 }.padding(.horizontal, Layout.gutter).padding(.top, 12).padding(.bottom, 8).background(Palette.background)
             }
             .toolbar {

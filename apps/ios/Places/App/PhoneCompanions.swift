@@ -104,6 +104,18 @@ import UIKit
             if !batches.isEmpty { status = "Your Mac observations are saved on this iPhone." }
         } catch { if generation == epoch { LocalDiagnostics.shared.record(.companionFailed, error: error); status = CompanionIdentity.message(for: error) } }
     }
+    /// Pause locally without deleting the previous phone's cloud inbox or keys.
+    /// Pairing secrets never travel in an ordinary, human-readable backup.
+    func pauseAfterRestore() {
+        generation += 1; deliveryTask?.cancel()
+        macEnabled = false; watchEnabled = false; lastReceived = nil
+        UserDefaults.standard.set(false, forKey: "macCompanionEnabled")
+        UserDefaults.standard.set(false, forKey: "watchCompanionEnabled")
+        UIApplication.shared.unregisterForRemoteNotifications()
+        if WCSession.isSupported(), WCSession.default.activationState == .activated { sendWatchConfiguration() }
+        status = "Companions are paused after restoring. Enable them again when you’re ready."
+    }
+
     func erase() async throws {
         generation += 1
         if cloud == nil, UserDefaults.standard.bool(forKey: "macCompanionConfigured") {
