@@ -250,9 +250,8 @@ private struct TimelineDayPage: View {
 
 private struct TimelineMemoryRow: View {
     let memory: PlaceMemory
-    @State private var editing = false
     var body: some View {
-        Button { editing = true } label: {
+        NavigationLink { MemoryDetail(memoryID: memory.id) } label: {
             TimelineInsetRow {
                 HStack(spacing: Layout.compact) {
                     if let photo = memory.orderedPhotoIDs.first {
@@ -270,6 +269,5 @@ private struct TimelineMemoryRow: View {
                 }.frame(minHeight: Layout.touchTarget)
             }
         }.buttonStyle(.plain).accessibilityIdentifier("timeline-memory-\(memory.id)")
-            .sheet(isPresented: $editing) { NavigationStack { MemoryEditor(memory: memory) }.environment(\.hasMainNavigation, false) }
     }
 }

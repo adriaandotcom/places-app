@@ -79,12 +79,14 @@ func transportChoicesRankByRecordedDistanceAndTime(speed: Double, first: Transpo
     let decoder = JSONDecoder()
     #expect(try decoder.decode(TransportMode.self, from: Data("\"train\"".utf8)).title == "Public transport")
     #expect(try decoder.decode(TransportMode.self, from: Data("\"driving\"".utf8)).title == "Car")
+    #expect(TransportMode.choiceOrder.map(\.choiceTitle) == ["Walking", "Bicycle", "E-bike", "Scooter", "Motorcycle", "Car", "Bus", "Tram", "Metro", "Train", "Public transport", "Ferry", "Plane", "Not sure"])
+    #expect(Set(TransportMode.choiceOrder) == Set(TransportMode.allCases))
     for mode in TransportMode.allCases {
         #expect(try decoder.decode(TransportMode.self, from: JSONEncoder().encode(mode)) == mode)
     }
 }
 
-@Test(arguments: [TransportMode.plane, .ferry, .scooter])
+@Test(arguments: [TransportMode.plane, .ferry, .scooter, .eBike, .motorcycle, .bus, .tram, .metro, .rail])
 func newTransportCorrectionsPersistAndOutrankSuggestions(mode: TransportMode) async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

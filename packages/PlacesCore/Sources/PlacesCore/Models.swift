@@ -26,12 +26,15 @@ public enum ObservationSource: String, Codable, Sendable {
 public enum TransportMode: String, Codable, CaseIterable, Sendable {
     // Keep the existing raw values so saved journeys and corrections remain readable.
     case unknown, walking, cycling, scooter, driving, train, plane, ferry
-    public static let choiceOrder: [Self] = [.walking, .cycling, .scooter, .driving, .train, .ferry, .plane, .unknown]
+    // `train` historically means generic public transport; `rail` is an explicit train choice.
+    case eBike, motorcycle, bus, tram, metro, rail
+    public static let choiceOrder: [Self] = [.walking, .cycling, .eBike, .scooter, .motorcycle,
+        .driving, .bus, .tram, .metro, .rail, .train, .ferry, .plane, .unknown]
     public var choiceTitle: String {
         switch self {
         case .unknown: "Not sure"
         case .walking: "Walking"
-        case .cycling: "Cycling"
+        case .cycling: "Bicycle"
         default: title
         }
     }
@@ -40,8 +43,14 @@ public enum TransportMode: String, Codable, CaseIterable, Sendable {
         case .unknown: "Travelled"
         case .walking: "Walked"
         case .cycling: "Cycled"
+        case .eBike: "E-bike"
         case .scooter: "Scooter"
+        case .motorcycle: "Motorcycle"
         case .driving: "Car"
+        case .bus: "Bus"
+        case .tram: "Tram"
+        case .metro: "Metro"
+        case .rail: "Train"
         case .train: "Public transport"
         case .plane: "Plane"
         case .ferry: "Ferry"
@@ -51,9 +60,14 @@ public enum TransportMode: String, Codable, CaseIterable, Sendable {
         switch self {
         case .unknown: "point.topleft.down.to.point.bottomright.curvepath"
         case .walking: "figure.walk"
-        case .cycling: "bicycle"
+        case .cycling, .eBike: "bicycle"
         case .scooter: "scooter"
+        case .motorcycle: "motorcycle.fill"
         case .driving: "car.fill"
+        case .bus: "bus.fill"
+        case .tram: "tram.fill"
+        case .metro: "tram.tunnel.fill"
+        case .rail: "train.side.front.car"
         case .train: "tram.fill"
         case .plane: "airplane"
         case .ferry: "ferry.fill"

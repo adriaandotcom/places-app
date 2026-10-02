@@ -53,6 +53,29 @@ import XCTest
         app.buttons["save-memory"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-memory-")).firstMatch.waitForExistence(timeout: 8))
         let saved = XCTAttachment(screenshot: app.screenshot()); saved.name = "Memory indented beneath its visit"; saved.lifetime = .keepAlways; add(saved)
+        let memory = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-memory-")).firstMatch
+        memory.tap()
+        XCTAssertTrue(app.buttons["edit-memory"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["save-memory"].exists)
+        XCTAssertFalse(app.textViews["memory-note"].exists)
+        XCTAssertFalse(app.otherElements["apple-map"].exists)
+        let detail = XCTAttachment(screenshot: app.screenshot()); detail.name = "Memory detail before editing"; detail.lifetime = .keepAlways; add(detail)
+        app.buttons["Photo 1"].tap()
+        XCTAssertTrue(app.navigationBars["1 of 3"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        app.buttons["edit-memory"].tap()
+        XCTAssertTrue(app.buttons["save-memory"].waitForExistence(timeout: 5))
+        let note = app.textViews["memory-note"]
+        note.tap(); note.typeText("A little afternoon in the park")
+        app.buttons["save-memory"].tap()
+        XCTAssertTrue(app.buttons["edit-memory"].waitForExistence(timeout: 5))
+        let text = app.staticTexts["A little afternoon in the park"]
+        reveal(text, in: app); XCTAssertTrue(text.isHittable)
+        app.buttons["edit-memory"].tap()
+        let delete = app.buttons["Delete memory"]
+        reveal(delete, in: app); delete.tap(); app.sheets.buttons["Delete memory"].tap()
+        XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 5))
+        XCTAssertFalse(memory.exists)
     }
 
     func testPhotoSuggestionReviewKeepsPlaceOptionsCollapsedAndLastActionVisible() {
@@ -2047,7 +2070,12 @@ import XCTest
         app.buttons["edit-entry"].tap()
         let menu = app.buttons["change-transport"]
         menu.tap()
-        XCTAssertTrue(app.buttons["transport-ferry"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["transport-cycling"].waitForExistence(timeout: 5))
+        for id in ["walking", "cycling", "eBike", "scooter", "motorcycle", "driving", "bus", "tram", "metro", "rail", "train", "ferry", "plane", "unknown"] {
+            XCTAssertTrue(app.buttons["transport-\(id)"].exists)
+        }
+        XCTAssertEqual(app.buttons["transport-cycling"].label, "Bicycle")
+        XCTAssertEqual(app.buttons["transport-rail"].label, "Train")
         XCTAssertTrue(app.buttons["Car"].exists)
         XCTAssertTrue(app.buttons["Public transport"].exists)
         XCTAssertTrue(app.buttons["Plane"].exists)

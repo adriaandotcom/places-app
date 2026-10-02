@@ -94,17 +94,86 @@ struct MemoryCard: View {
 }
 private struct MemoryEditRequest: Identifiable { let id = UUID(); let addPhotos: Bool }
 
+struct MemoryDetail: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let memoryID: String
+    @State private var editing = false
+    @State private var selectedPhoto: PhotoReference?
+    private var memory: PlaceMemory? { model.memories.memories.first { $0.id == memoryID } }
+    var body: some View {
+        ScrollView {
+            if let memory {
+                let place = model.places.first { $0.id == memory.placeID }
+                let trips = model.memories.trips.filter { !$0.hidden && memory.belongs(to: $0) }
+                VStack(alignment: .leading, spacing: Layout.spacing) {
+                    Text(place?.name ?? trips.first?.title ?? "Memory").font(BrandFont.hero)
+                    Text(memory.date.formatted(date: .long, time: .shortened))
+                        .font(.subheadline).foregroundStyle(Palette.muted)
+                    PersonAvatarGroup(personIDs: memory.linkedPersonIDs)
+                    if !memory.text.isEmpty {
+                        PersonMentionText(text: memory.text, mentions: memory.mentions ?? [])
+                    }
+                    if let first = memory.orderedPhotoIDs.first {
+                        VStack(spacing: Layout.compact) {
+                            Button { selectedPhoto = PhotoReference(id: first) } label: {
+                                StoredPhoto(id: first, thumbnail: false, fillsFrame: true).frame(height: Layout.mapHeight)
+                                    .background(Palette.paper)
+                                    .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
+                            }.buttonStyle(.plain).accessibilityLabel("Photo 1")
+                            if memory.photoIDs.count > 1 {
+                                PhotoGrid(items: memory.orderedPhotoIDs.dropFirst().map { PhotoReference(id: $0) },
+                                    label: { "Photo \($0 + 2)" }, open: { selectedPhoto = $0 }) { photo in
+                                    StoredPhoto(id: photo.id, thumbnail: true)
+                                }
+                            }
+                        }
+                    }
+                    if let place {
+                        NavigationLink { PlaceDetail(placeID: place.id) } label: {
+                            SavedPlaceRow(place: place, card: true, showsDisclosure: true)
+                        }.buttonStyle(.plain).accessibilityIdentifier("memory-place")
+                        PlaceRecognitionMap(place: place)
+                    }
+                    if !trips.isEmpty {
+                        SectionHeading(title: trips.count == 1 ? "On this trip" : "On these trips")
+                        ForEach(trips) { TripLink(trip: $0) }
+                    }
+                }.padding(Layout.gutter)
+            }
+        }.modifier(MainNavigationClearance()).background(Palette.background).foregroundStyle(Palette.ink)
+            .navigationTitle("Memory").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Edit memory", systemImage: "pencil") { editing = true }
+                        .accessibilityIdentifier("edit-memory").disabled(memory == nil)
+                }
+            }
+            .sheet(isPresented: $editing, onDismiss: dismissIfDeleted) {
+                if let memory { NavigationStack { MemoryEditor(memory: memory) }.environment(\.hasMainNavigation, false) }
+            }
+            .fullScreenCover(item: $selectedPhoto, onDismiss: dismissIfDeleted) { photo in
+                SavedMemoryPhotoBrowser(memoryID: memoryID, initialID: photo.id)
+            }
+            .onChange(of: memory?.id) { _, id in
+                if id == nil && !editing && selectedPhoto == nil { dismiss() }
+            }
+    }
+    private func dismissIfDeleted() { if memory == nil { dismiss() } }
+}
+
 struct StoredPhoto: View {
     @Environment(AppModel.self) private var model
     let id: String
     let thumbnail: Bool
+    var fillsFrame = false
     @State private var image: UIImage?
     @State private var unavailable = false
     var body: some View {
         GeometryReader { geometry in
             Group {
                 if let image {
-                    if thumbnail { Image(uiImage: image).resizable().scaledToFill() }
+                    if thumbnail || fillsFrame { Image(uiImage: image).resizable().scaledToFill() }
                     else { Image(uiImage: image).resizable().scaledToFit() }
                 } else if unavailable { Image(systemName: "photo").foregroundStyle(Palette.muted) }
                 else { ProgressView() }
