@@ -4,8 +4,9 @@ import PlacesCompanion
 @MainActor enum WatchStorage {
     static let group = "group.com.adriaan.places.watch"
     static let defaults = UserDefaults(suiteName: group)!
+    static var deliveryEnabled: Bool { defaults.bool(forKey: "phoneEnabled") }
     static var enabled: Bool {
-        get { defaults.bool(forKey: "enabled") && defaults.bool(forKey: "phoneEnabled") }
+        get { defaults.bool(forKey: "enabled") && deliveryEnabled }
         set { defaults.set(newValue, forKey: "enabled") }
     }
     static var frequent: Bool {
@@ -13,6 +14,8 @@ import PlacesCompanion
         set { defaults.set(newValue, forKey: "frequent") }
     }
     static var lastRecorded: Date? { defaults.object(forKey: "lastRecorded") as? Date }
+    static var lastPhoneContact: Date? { defaults.object(forKey: "lastPhoneContact") as? Date }
+    static var lastSynced: Date? { defaults.object(forKey: "lastSynced") as? Date }
     static func keys() throws -> CompanionKeychain {
         guard let group = Bundle.main.object(forInfoDictionaryKey: "WatchKeychainGroup") as? String,
               !group.contains("$(") else { throw CompanionError.notLinked }
@@ -33,7 +36,11 @@ import PlacesCompanion
         let sample = CompanionSample(deviceID: try CompanionIdentity.deviceID(keys: keys()), kind: .watch,
             timestamp: date, latitude: latitude, longitude: longitude, accuracy: accuracy, speed: speed)
         guard sample.isValid() else { return }
-        try await outbox().append(CompanionBatch(linkID: link.id, samples: [sample]))
+        let batch = CompanionBatch(linkID: link.id, samples: [sample]), outbox = try outbox()
+        try await outbox.append(batch)
+        // A reset / re-pair can happen while the file is being written, including
+        // in the complication process. Finish that erase instead of reviving old data.
+        guard try self.link()?.id == link.id else { try await outbox.acknowledge(batch.id); return }
         defaults.set(date, forKey: "lastRecorded")
     }
 }

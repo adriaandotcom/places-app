@@ -17,13 +17,13 @@ import WatchKit
                     Text(model.status).font(.footnote).foregroundStyle(.secondary)
                     if model.enabled {
                         Toggle("More frequent", isOn: Binding(get: { model.frequent }, set: { model.setFrequent($0) }))
-                        Text(model.frequent ? "Continues after you lower your wrist, with automatic stationary pauses. Uses more battery; may need reopening after a restart."
-                            : "Collects when watchOS allows. Add Places to your watch face for more opportunities.")
+                        Text(model.frequent ? "More updates away from your iPhone and Wi-Fi. Rests when either is available. May need reopening to resume frequent tracking."
+                            : "Collects when watchOS allows, away from your iPhone and Wi-Fi.")
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     if let date = model.lastRecorded { Text("Last recorded \(date.formatted(date: .omitted, time: .shortened))").font(.caption2) }
-                    if model.queued > 0 { Text("\(model.queued) waiting for iPhone").font(.caption2) }
-                    Button("Send to iPhone") { Task { await model.flush() } }.disabled(!model.enabled)
+                    if let date = model.lastSynced { Text("Last synced \(date.formatted(date: .omitted, time: .shortened))").font(.caption2) }
+                    Text("Syncs automatically with your iPhone.").font(.caption2).foregroundStyle(.secondary)
                 }.padding(.horizontal, 4)
             }.task { model.start(); await model.foreground() }
                 .onChange(of: scenePhase) { _, phase in

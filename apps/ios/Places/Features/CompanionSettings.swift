@@ -10,8 +10,15 @@ struct CompanionSettings: View {
             }
             Section {
                 Toggle("Receive Watch locations", isOn: Binding(get: { companions.watchEnabled }, set: { companions.setWatchEnabled($0) }))
-                Text("Open Places on your Watch once to allow location access. Add the Places complication for more automatic opportunities. watchOS controls background availability.")
+                Text("Open Places on your Watch once to allow location access. It rests when your iPhone is available or the Watch has Wi-Fi. watchOS controls background opportunities.")
                     .font(.caption).foregroundStyle(.secondary)
+                if companions.watchEnabled {
+                    Text("Saved locations arrive automatically, including when you open Places on your iPhone. There’s no need to send them from your Watch.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let date = companions.lastWatchReceived {
+                        LabeledContent("Last received from Watch") { Text(date, style: .relative) }
+                    }
+                }
             } header: { Label("Apple Watch", systemImage: "applewatch") }
             Section {
                 Toggle("Receive Mac locations through iCloud", isOn: Binding(get: { companions.macEnabled }, set: { value in

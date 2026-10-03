@@ -99,6 +99,7 @@
 		D2F3D55DC34DFAF82D780991 /* TimelineDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */; };
 		D39E32808EE109D32D743656 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */; };
 		D414EAFD38C1EB439C7C1793 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 6F34812A8C1EB34B9C7A7931 /* MapLibre */; };
+		D4439794DA7E0DA048A41EE6 /* WatchConnectionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */; };
 		D4E68E2E7B8CA381E6C51CF5 /* AddPastVisits.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8683E4F2F033E292992D7CAC /* AddPastVisits.swift */; };
 		DC70013C8EECEAF7F2EF04C8 /* BricolageGrotesque-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */; };
 		E61DF0B8DB6F157ECE4AC694 /* PlacesWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4DFDBA047D9418E8CC566F /* PlacesWatchApp.swift */; };
@@ -112,6 +113,7 @@
 		EF92AAD94347883388A2037F /* PhoneCompanions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4182BCBFD5ADB5FB51576601 /* PhoneCompanions.swift */; };
 		F55A662BFEBD2DFE92275C9A /* SupportReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D9BE8B37414C7567A82F2FB /* SupportReportView.swift */; };
 		F64465C0066D4DF8C71911BA /* MemoryPhotoDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F3E9E483AB8609D59EFDEB /* MemoryPhotoDraft.swift */; };
+		F6928873294AD66BED4711A5 /* WatchConnectionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */; };
 		FA2762FE9E093C51EC46D4D6 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5B36C3B3E2E85B7532E1B16A /* PlacesCore */; };
 		FA596101EE4C9EAC8807681D /* OfflineMapStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142945BC6C090A8B8874AC76 /* OfflineMapStyle.swift */; };
 		FC0E7C6EDFA0A46D50E99053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3D555F183B14B66A5744E434 /* PrivacyInfo.xcprivacy */; };
@@ -218,6 +220,7 @@
 		537C540F26C2DF35BDB36808 /* PhotoEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoEvidenceTests.swift; sourceTree = "<group>"; };
 		5712D6BB250F554AD0623178 /* RewindViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewindViews.swift; sourceTree = "<group>"; };
 		5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapView.swift; sourceTree = "<group>"; };
+		5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectionMonitor.swift; sourceTree = "<group>"; };
 		5B5950296CF6A9A52EA68CAD /* BackupTransferView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupTransferView.swift; sourceTree = "<group>"; };
 		5F4DFDBA047D9418E8CC566F /* PlacesWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesWatchApp.swift; sourceTree = "<group>"; };
 		64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiClassificationPicker.swift; sourceTree = "<group>"; };
@@ -579,6 +582,7 @@
 		D200B436083126E71F7B77E5 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */,
 				6D1B8DCA0C7287DCD5F87347 /* WatchLocationSnapshot.swift */,
 				A3FAB89CB7816AF999CCAE81 /* WatchStorage.swift */,
 			);
@@ -875,6 +879,7 @@
 				65C95FE61BB85A6DFC20E4B7 /* PlacesMarker.swift in Sources */,
 				E61DF0B8DB6F157ECE4AC694 /* PlacesWatchApp.swift in Sources */,
 				7AA6D9C4DC1869C7A358DC4E /* WatchCompanionModel.swift in Sources */,
+				F6928873294AD66BED4711A5 /* WatchConnectionMonitor.swift in Sources */,
 				83E8962290BF83C020CB0CD3 /* WatchLocationSnapshot.swift in Sources */,
 				6BE534398985AF0328AA92CD /* WatchStorage.swift in Sources */,
 			);
@@ -886,6 +891,7 @@
 			files = (
 				6D35334C531006235285972A /* PlacesComplication.swift in Sources */,
 				1046BFCE12CAAD28AD400F14 /* PlacesMarker.swift in Sources */,
+				D4439794DA7E0DA048A41EE6 /* WatchConnectionMonitor.swift in Sources */,
 				7B2D84DCA1569B16E4B18C3A /* WatchLocationSnapshot.swift in Sources */,
 				0B36D9DE1F05CFADAE72B3D5 /* WatchStorage.swift in Sources */,
 			);

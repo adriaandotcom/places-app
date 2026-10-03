@@ -10,6 +10,7 @@ import UIKit
     private(set) var watchEnabled = UserDefaults.standard.bool(forKey: "watchCompanionEnabled")
     private(set) var status = "Companions are optional. Your iPhone remains the main recorder."
     private(set) var lastReceived: Date?
+    private(set) var lastWatchReceived = UserDefaults.standard.object(forKey: "lastWatchReceived") as? Date
     private(set) var syncing = false
     private(set) var configuring = false
     private var cloud: CloudInbox?
@@ -74,11 +75,13 @@ import UIKit
                 watchLink = try JSONDecoder().decode(WatchLink.self, from: bytes)
             }
             watchEnabled = value; UserDefaults.standard.set(value, forKey: "watchCompanionEnabled")
-            activateWatch(); sendWatchConfiguration()
+            activateWatch(); requestWatchSync()
             status = value ? "Open Places on your Watch once to allow location access." : "Watch reception is paused."
         } catch { status = "Could not prepare the Watch connection. Please try again." }
     }
     func sync() async {
+        // Foreground refresh also requests the Watch outbox, independently of Mac / iCloud.
+        requestWatchSync()
         // A silent-push handler must await an in-flight import too, so returning
         // from the handler cannot suspend the app before its durable commit.
         if let deliveryTask { await deliveryTask.value; return }
@@ -109,6 +112,7 @@ import UIKit
     func pauseAfterRestore() {
         generation += 1; deliveryTask?.cancel()
         macEnabled = false; watchEnabled = false; lastReceived = nil
+        lastWatchReceived = nil; UserDefaults.standard.removeObject(forKey: "lastWatchReceived")
         UserDefaults.standard.set(false, forKey: "macCompanionEnabled")
         UserDefaults.standard.set(false, forKey: "watchCompanionEnabled")
         UIApplication.shared.unregisterForRemoteNotifications()
@@ -127,6 +131,7 @@ import UIKit
         if let cloud, let receiverID { try await cloud.erase(receiverID: receiverID) }
         else if macEnabled { throw CompanionError.notLinked }
         macEnabled = false; watchEnabled = false
+        lastWatchReceived = nil; UserDefaults.standard.removeObject(forKey: "lastWatchReceived")
         UIApplication.shared.unregisterForRemoteNotifications()
         UserDefaults.standard.removeObject(forKey: "macCompanionEnabled")
         UserDefaults.standard.removeObject(forKey: "watchCompanionEnabled")
@@ -143,35 +148,78 @@ import UIKit
         guard WCSession.isSupported() else { return }
         let session = WCSession.default; session.delegate = self; session.activate()
     }
-    private func sendWatchConfiguration() {
+    private func sendWatchConfiguration(requestSync: Bool = false) {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
         do {
             var context: [String: Any] = ["enabled": watchEnabled, "reset": watchLink == nil]
             if let watchLink { context["link"] = try JSONEncoder().encode(watchLink) }
+            // Latest intent may replace an older request; observations never travel
+            // in applicationContext, where replacement would lose undelivered data.
+            if requestSync { context["syncRequest"] = UUID().uuidString }
             try WCSession.default.updateApplicationContext(context)
         } catch { status = "Waiting to deliver settings to your Watch." }
     }
+    private func requestWatchSync() {
+        guard WCSession.isSupported() else { return }
+        guard WCSession.default.activationState == .activated else {
+            if watchEnabled { activateWatch() }
+            return
+        }
+        sendWatchConfiguration(requestSync: watchEnabled)
+        guard watchEnabled, let watchLink, WCSession.default.isReachable else { return }
+        WCSession.default.sendMessage(["syncLink": watchLink.id.uuidString], replyHandler: { _ in }, errorHandler: { _ in
+            // The persisted context still requests delivery at the next OS opportunity.
+        })
+    }
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {
-        Task { @MainActor in self.sendWatchConfiguration() }
+        Task { @MainActor in self.requestWatchSync() }
+    }
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        let reachable = session.isReachable
+        Task { @MainActor in if reachable { self.requestWatchSync() } }
     }
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) { }
     nonisolated func sessionDidDeactivate(_ session: WCSession) { session.activate() }
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         guard let payload = userInfo["batch"] as? Data else { return }
-        Task { @MainActor in await self.receiveWatch(payload) }
+        Task { @MainActor in
+            await self.receiveWatch([payload]) { receipt in
+                guard let receipt else { return }
+                // Preserve background delivery and compatibility with older Watch builds.
+                for id in receipt.batchIDs {
+                    WCSession.default.transferUserInfo(["ack": id.uuidString, "linkID": receipt.linkID.uuidString])
+                }
+                if WCSession.default.isReachable, let data = try? JSONEncoder().encode(receipt) {
+                    WCSession.default.sendMessage(["receipt": data], replyHandler: { _ in }, errorHandler: { _ in })
+                }
+            }
+        }
     }
-    private func receiveWatch(_ payload: Data) async {
-        guard watchEnabled, let link = watchLink, let importBatch else { return }
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
+        guard let payloads = message["batches"] as? [Data] else { replyHandler([:]); return }
+        let reply = WatchMessageReply(replyHandler)
+        Task { @MainActor in
+            await self.receiveWatch(payloads) { receipt in
+                reply.send(receipt: receipt.flatMap { try? JSONEncoder().encode($0) })
+            }
+        }
+    }
+    private func receiveWatch(_ payloads: [Data], deliverReceipt: (WatchDelivery.Receipt?) -> Void) async {
+        guard watchEnabled, let link = watchLink, let importBatch else { deliverReceipt(nil); return }
         let background = UIApplication.shared.beginBackgroundTask(withName: "Save companion observations")
+        // Keep the background allowance through the receipt, not just the database write.
         defer { if background != .invalid { UIApplication.shared.endBackgroundTask(background) } }
         let epoch = generation
         do {
-            let batch = try CompanionCipher.open(CompanionBatch.self, data: payload, key: link.key)
-            try batch.validate(linkID: link.id, kind: .watch)
-            try await importBatch(batch)
-            guard watchEnabled, generation == epoch else { return }
-            WCSession.default.transferUserInfo(["ack": batch.id.uuidString, "linkID": link.id.uuidString])
-            lastReceived = Date(); status = "Your Watch observations are saved on this iPhone."
+            let receipt = try await WatchDelivery.receive(payloads, link: link, isEnabled: {
+                self.watchEnabled && self.generation == epoch && self.watchLink?.id == link.id
+            }, persist: importBatch)
+            lastReceived = Date(); lastWatchReceived = lastReceived
+            UserDefaults.standard.set(lastWatchReceived, forKey: "lastWatchReceived")
+            status = "Your Watch observations are saved on this iPhone."
+            deliverReceipt(receipt)
+            return
         } catch { LocalDiagnostics.shared.record(.watchDeliveryFailed, error: error); status = "Watch observations could not be saved yet. They remain queued on your Watch." }
+        deliverReceipt(nil)
     }
 }

@@ -35,7 +35,10 @@ public actor CompanionOutbox {
     }
     public func acknowledge(_ id: UUID) throws {
         let file = directory.appendingPathComponent(id.uuidString).appendingPathExtension("sealed")
-        if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+        // A live receipt and a previously queued receipt can arrive together, even
+        // through separate actor instances. Unlink atomically; a missing file is success.
+        do { try FileManager.default.removeItem(at: file) }
+        catch let error as CocoaError where error.code == .fileNoSuchFile { }
     }
     public func erase() throws { for file in try files() { try FileManager.default.removeItem(at: file) } }
     private func files() throws -> [URL] {
