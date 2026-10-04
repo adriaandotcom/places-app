@@ -167,9 +167,9 @@ import UIKit
         }
         sendWatchConfiguration(requestSync: watchEnabled)
         guard watchEnabled, let watchLink, WCSession.default.isReachable else { return }
-        WCSession.default.sendMessage(["syncLink": watchLink.id.uuidString], replyHandler: { _ in }, errorHandler: { _ in
-            // The persisted context still requests delivery at the next OS opportunity.
-        })
+        // The persisted context still requests delivery if the live hint fails.
+        WCSession.default.sendMessage(["syncLink": watchLink.id.uuidString],
+            replyHandler: WatchMessageCallbacks.ignored.reply, errorHandler: WatchMessageCallbacks.ignored.error)
     }
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {
         Task { @MainActor in self.requestWatchSync() }
@@ -190,7 +190,8 @@ import UIKit
                     WCSession.default.transferUserInfo(["ack": id.uuidString, "linkID": receipt.linkID.uuidString])
                 }
                 if WCSession.default.isReachable, let data = try? JSONEncoder().encode(receipt) {
-                    WCSession.default.sendMessage(["receipt": data], replyHandler: { _ in }, errorHandler: { _ in })
+                    WCSession.default.sendMessage(["receipt": data],
+                        replyHandler: WatchMessageCallbacks.ignored.reply, errorHandler: WatchMessageCallbacks.ignored.error)
                 }
             }
         }

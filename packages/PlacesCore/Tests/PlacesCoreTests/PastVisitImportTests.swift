@@ -18,6 +18,9 @@ private func existing(_ kind: TimelineKind = .stay, start: TimeInterval = 600, e
 
 @Test func pastVisitsFillEmptyHistoryWithoutFabricatingSensorEvidence() async throws {
     let store = try PlacesStore()
+    // This fixed timestamp crosses midnight in some host time zones.
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
     let drafts = [draft()]
     let plan = PastVisitPlan.make(drafts: drafts, context: try await store.pastVisitContext(), now: importNow)
     try await store.importPastVisits(drafts, reviewed: plan, now: importNow)
@@ -28,7 +31,7 @@ private func existing(_ kind: TimelineKind = .stay, start: TimeInterval = 600, e
     #expect(items[0].reasons.joined().contains("Journaling Suggestions"))
     #expect(try await store.observations(limit: 100).isEmpty)
     #expect(try await store.routePoints(from: importDay, to: importNow).isEmpty)
-    #expect(try await store.historyDays(now: importNow).count == 1)
+    #expect(try await store.historyDays(now: importNow, calendar: calendar).count == 1)
     #expect(try await store.search("Fixture").count == 1)
     let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
     let archive = try decoder.decode(HistoryArchive.self, from: await store.exportHistory())

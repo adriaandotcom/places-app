@@ -28,6 +28,7 @@ import Foundation
     private var pendingObservation: NSKeyValueObservation?
     private var flushTask: Task<Void, Never>?
     private var flushRequested = false
+    private var backgroundLiveAttempted = false
     private nonisolated let connectivityWork = ConnectivityWork()
 
     func start() {
@@ -56,6 +57,7 @@ import Foundation
         Task { await foreground() }
     }
     func foreground() async {
+        if WKApplication.shared().applicationState == .active { backgroundLiveAttempted = false }
         noteReachablePhone()
         reconcileCollection()
         if !frequent { await captureOne() }
@@ -64,6 +66,7 @@ import Foundation
     }
     func backgroundOpportunity() async {
         // An OS-granted refresh, not a repeating GPS timer or a fabricated workout.
+        if flushTask == nil { backgroundLiveAttempted = false }
         noteReachablePhone()
         reconcileCollection()
         if !recording { await captureOne() }
@@ -73,7 +76,7 @@ import Foundation
     private func scheduleDelivery() {
         guard WatchStorage.deliveryEnabled else { return }
         // Preferred delivery time only: watchOS budgets these opportunities and may defer them.
-        WKApplication.shared().scheduleBackgroundRefresh(withPreferredDate: Date().addingTimeInterval(1_800), userInfo: nil) { _ in }
+        WKApplication.shared().scheduleBackgroundRefresh(withPreferredDate: Date().addingTimeInterval(1_800), userInfo: nil) { @Sendable _ in }
     }
     private func beginFrequentIfAllowed() {
         guard collectionDecision == .collect, frequent, !recording else { return }
@@ -208,7 +211,9 @@ import Foundation
         flushTask = nil
         // An OS-granted caller must join existing delivery before completing its
         // background task. Also catch a new request arriving as that task finishes.
-        if flushRequested { await flush() }
+        // A background wake must end promptly even if more delivery requests
+        // arrive. The durable outbox and queued transfers retain unfinished work.
+        if flushRequested, WKApplication.shared().applicationState == .active { await flush() }
         finishConnectivityIfReady()
     }
     private func flushOutbox() async {
@@ -221,8 +226,14 @@ import Foundation
                 // Retry outstanding background packets too. A lost/delayed receipt
                 // must not strand already imported data; the phone deduplicates IDs.
                 while !pending.isEmpty, WCSession.default.isReachable, deliveryAllowed(link) {
+                    // Share this limit across coalesced callbacks in the same
+                    // background wake; receipts must not restart another wait.
+                    if WKApplication.shared().applicationState != .active {
+                        guard !backgroundLiveAttempted else { break }
+                    }
                     let payloads = try WatchDelivery.payloads(from: pending, link: link)
                     guard !payloads.isEmpty else { break }
+                    backgroundLiveAttempted = true
                     guard let receipt = await sendLive(payloads), deliveryAllowed(link),
                           receipt.linkID == link.id,
                           receipt.batchIDs == Array(pending.prefix(payloads.count)).map(\.id) else { break }
@@ -237,18 +248,15 @@ import Foundation
                     WCSession.default.transferUserInfo(["id": batch.id.uuidString,
                         "batch": try CompanionCipher.seal(batch, key: link.key)])
                 }
-            } while flushRequested && deliveryAllowed(link)
+            } while flushRequested && deliveryAllowed(link) && WKApplication.shared().applicationState == .active
         } catch { status = "Waiting to send encrypted locations. They are kept on this Watch." }
     }
     private func deliveryAllowed(_ link: WatchLink) -> Bool {
         WatchStorage.deliveryEnabled && (try? WatchStorage.link()?.id) == link.id
     }
     private func sendLive(_ payloads: [Data]) async -> WatchDelivery.Receipt? {
-        await withCheckedContinuation { continuation in
-            WCSession.default.sendMessage(["batches": payloads], replyHandler: { reply in
-                let receipt = (reply["receipt"] as? Data).flatMap { try? JSONDecoder().decode(WatchDelivery.Receipt.self, from: $0) }
-                continuation.resume(returning: receipt)
-            }, errorHandler: { _ in continuation.resume(returning: nil) })
+        await WatchMessageCallbacks.receive { callbacks in
+            WCSession.default.sendMessage(["batches": payloads], replyHandler: callbacks.reply, errorHandler: callbacks.error)
         }
     }
     private func acknowledge(_ receipt: WatchDelivery.Receipt) async throws {
@@ -262,6 +270,7 @@ import Foundation
         lastSynced = Date(); WatchStorage.defaults.set(lastSynced, forKey: "lastSynced")
     }
     func connectivityTask(_ task: WKWatchConnectivityRefreshBackgroundTask) {
+        if connectivityTasks.isEmpty, flushTask == nil { backgroundLiveAttempted = false }
         connectivityTasks.append(task); finishConnectivityIfReady()
     }
     private func finishConnectivityIfReady() {
