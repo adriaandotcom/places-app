@@ -6,6 +6,7 @@ ASC_KEY_ID and ASC_ISSUER_ID. Keep the private key outside this repository.
 Create an internal TestFlight group with automatic distribution once in App Store
 Connect. Apple processing and installation happen after this uploader finishes.
 Use --archive-only to benchmark without uploading; --dry-run prints the steps.
+Use --platform macos for the native menu bar companion in the same TestFlight app.
 Run scripts/validate_local.py before pushing. CI uses --skip-tests because the
 test suites run locally; archive and upload still validate the release build.
 """
@@ -25,15 +26,24 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def validate_distribution_profile(profile, team, bundle, now=None):
+def validate_distribution_profile(profile, team, bundle, now=None, platform='ios'):
     entitlements = profile.get('Entitlements', {})
-    if profile.get('TeamIdentifier') != [team] or entitlements.get('application-identifier') != team + '.' + bundle:
+    identifier = 'com.apple.application-identifier' if platform == 'macos' else 'application-identifier'
+    if profile.get('TeamIdentifier') != [team] or entitlements.get(identifier) != team + '.' + bundle:
         raise ValueError('Signing profile belongs to a different team or app.')
-    if entitlements.get('get-task-allow') or profile.get('ProvisionedDevices') or not entitlements.get('beta-reports-active'):
+    if (entitlements.get('get-task-allow') or entitlements.get('com.apple.security.get-task-allow')
+            or profile.get('ProvisionedDevices') or profile.get('ProvisionsAllDevices')
+            or (platform == 'ios' and not entitlements.get('beta-reports-active'))):
         raise ValueError('An App Store distribution profile is required.')
     if profile['ExpirationDate'].replace(tzinfo=timezone.utc) <= (now or datetime.now(timezone.utc)):
         raise ValueError('Signing profile has expired.')
-    if bundle == 'com.adriaan.places':
+    if platform == 'macos':
+        if 'OSX' not in profile.get('Platform', []):
+            raise ValueError('A Mac App Store distribution profile is required.')
+        if ('iCloud.com.adriaan.places' not in entitlements.get('com.apple.developer.icloud-container-identifiers', [])
+                or 'Production' not in entitlements.get('com.apple.developer.icloud-container-environment', [])):
+            raise ValueError('Regenerate the Mac App Store profile with the Places CloudKit container enabled.')
+    elif bundle == 'com.adriaan.places':
         if 'iCloud.com.adriaan.places' not in entitlements.get('com.apple.developer.icloud-container-identifiers', []):
             raise ValueError('Regenerate the iPhone profile with the Places CloudKit container enabled.')
         if entitlements.get('aps-environment') != 'production':
@@ -68,7 +78,7 @@ def authentication(env):
             '-authenticationKeyIssuerID', values[2]]
 
 
-def export_options(team, profile=None, watch_profile=None, complication_profile=None):
+def export_options(team, profile=None, watch_profile=None, complication_profile=None, platform='ios'):
     options = {'method': 'app-store-connect', 'destination': 'upload',
             'signingStyle': 'automatic', 'teamID': team,
             'testFlightInternalTestingOnly': True,
@@ -76,9 +86,11 @@ def export_options(team, profile=None, watch_profile=None, complication_profile=
     if profile:
         options.update(signingStyle='manual', signingCertificate='Apple Distribution',
                        provisioningProfiles={'com.adriaan.places': profile})
-        if watch_profile:
+        if platform == 'macos':
+            options['installerSigningCertificate'] = 'Mac Installer Distribution'
+        elif watch_profile:
             options['provisioningProfiles']['com.adriaan.places.watch'] = watch_profile
-        if complication_profile:
+        if platform == 'ios' and complication_profile:
             options['provisioningProfiles']['com.adriaan.places.watch.widgets'] = complication_profile
     return options
 
@@ -106,22 +118,26 @@ def execute(args, env=os.environ):
     if not re.fullmatch(r'[1-9][0-9]{0,3}\.[0-9]{1,2}\.[0-9]{1,2}', args.build_number):
         raise ValueError('Use a build number such as 2460.10.25 (up to 4.2.2 digits).')
     auth = authentication(env)
-    profile = env.get('PLACES_PROFILE_UUID')
+    platform = getattr(args, 'platform', 'ios')
+    profile_name = 'PLACES_MAC_PROFILE_UUID' if platform == 'macos' else 'PLACES_PROFILE_UUID'
+    profile = env.get(profile_name)
     watch_profile = env.get('PLACES_WATCH_PROFILE_UUID')
     complication_profile = env.get('PLACES_COMPLICATION_PROFILE_UUID')
     if profile and not re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}', profile):
-        raise ValueError('PLACES_PROFILE_UUID must identify the installed Places distribution profile.')
+        raise ValueError(profile_name + ' must identify the installed Places distribution profile.')
     for name, value in [('PLACES_WATCH_PROFILE_UUID', watch_profile), ('PLACES_COMPLICATION_PROFILE_UUID', complication_profile)]:
         if value and not re.fullmatch(r'[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}', value):
             raise ValueError(name + ' must identify an installed distribution profile.')
-    if profile and not (watch_profile and complication_profile):
+    if platform == 'ios' and profile and not (watch_profile and complication_profile):
         raise ValueError('Manual signing also requires PLACES_WATCH_PROFILE_UUID and PLACES_COMPLICATION_PROFILE_UUID.')
     # Only the Places Release target consumes these custom settings. Global
     # signing overrides also reach Swift package resource bundles, which cannot
     # accept an app provisioning profile.
-    signing = ([f'PLACES_PROFILE_UUID={profile}', 'PLACES_CODE_SIGN_STYLE=Manual',
-                f'PLACES_WATCH_PROFILE_UUID={watch_profile}', f'PLACES_COMPLICATION_PROFILE_UUID={complication_profile}',
+    signing = ([f'{profile_name}={profile}', 'PLACES_CODE_SIGN_STYLE=Manual',
                 'PLACES_CODE_SIGN_IDENTITY=Apple Distribution'] if profile else [])
+    if profile and platform == 'ios':
+        signing += [f'PLACES_WATCH_PROFILE_UUID={watch_profile}', f'PLACES_COMPLICATION_PROFILE_UUID={complication_profile}']
+    scheme = 'PlacesMac' if platform == 'macos' else 'Places'
     work = args.work_dir.expanduser().resolve()
     work.mkdir(parents=True, exist_ok=True)
     # Prevent two local releases from changing the same archive or build cache.
@@ -131,9 +147,9 @@ def execute(args, env=os.environ):
         except BlockingIOError:
             raise ValueError('Another TestFlight release is using this build directory.') from None
         revision = None if args.archive_only or args.dry_run else clean_revision()
-        archive = work / 'Places.xcarchive'
+        archive = work / f'{scheme}.xcarchive'
         options = work / 'ExportOptions.plist'
-        options.write_bytes(plistlib.dumps(export_options(args.team, profile, watch_profile, complication_profile)))
+        options.write_bytes(plistlib.dumps(export_options(args.team, profile, watch_profile, complication_profile, platform)))
         phases = [
             ('Privacy checks', [sys.executable, 'scripts/check_privacy.py']),
         ]
@@ -143,8 +159,8 @@ def execute(args, env=os.environ):
                 ('Core tests', ['swift', 'test', '--package-path', 'packages/PlacesCore']),
             ])
         phases.extend([
-            ('Archive', ['xcodebuild', '-project', 'apps/ios/Places.xcodeproj', '-scheme', 'Places',
-                         '-configuration', 'Release', '-destination', 'generic/platform=iOS',
+            ('Archive', ['xcodebuild', '-project', 'apps/ios/Places.xcodeproj', '-scheme', scheme,
+                         '-configuration', 'Release', '-destination', 'generic/platform=macOS' if platform == 'macos' else 'generic/platform=iOS',
                          '-derivedDataPath', str(work / 'DerivedData'),
                          '-clonedSourcePackagesDirPath', str(work / 'SourcePackages'),
                          '-disableAutomaticPackageResolution', '-archivePath', str(archive),
@@ -158,7 +174,7 @@ def execute(args, env=os.environ):
             phases.append(('Upload', ['xcodebuild', '-exportArchive', '-archivePath', str(archive),
                                      '-exportPath', str(work / 'Export'), '-exportOptionsPlist', str(options),
                                      '-allowProvisioningUpdates', *auth]))
-        timings = {'revision': revision, 'archiveBuildNumber': args.build_number, 'phases': {}}
+        timings = {'revision': revision, 'platform': platform, 'archiveBuildNumber': args.build_number, 'phases': {}}
         started = time.monotonic()
         try:
             for label, command in phases:
@@ -200,13 +216,16 @@ def execute(args, env=os.environ):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--team', default=os.environ.get('PLACES_TEAM_ID'))
+    parser.add_argument('--platform', choices=('ios', 'macos'), default='ios')
     parser.add_argument('--archive-only', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--skip-tests', action='store_true',
                         help='CI only: tests have already been run locally before pushing.')
     parser.add_argument('--build-number', default=build_number())
-    parser.add_argument('--work-dir', type=Path, default=ROOT / 'build/testflight')
+    parser.add_argument('--work-dir', type=Path)
     args = parser.parse_args()
+    if args.work_dir is None:
+        args.work_dir = ROOT / ('build/testflight-macos' if args.platform == 'macos' else 'build/testflight')
     try:
         execute(args)
     except (ValueError, RuntimeError, OSError) as error:

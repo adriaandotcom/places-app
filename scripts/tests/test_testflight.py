@@ -125,8 +125,62 @@ class TestFlightSmokeTests(unittest.TestCase):
                 self.assertFalse(any(argument.startswith(setting) for argument in archive))
             options = plistlib.loads((Path(directory) / 'ExportOptions.plist').read_bytes())
             self.assertEqual(options['signingStyle'], 'manual')
-            self.assertEqual(options['provisioningProfiles'], {bundle: profile for bundle in
+        self.assertEqual(options['provisioningProfiles'], {bundle: profile for bundle in
                 ['com.adriaan.places', 'com.adriaan.places.watch', 'com.adriaan.places.watch.widgets']})
+
+    def test_mac_archive_and_export_are_separate_from_iphone_and_watch(self):
+        profile = '12345678-ABCD-1234-ABCD-123456789ABC'
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(release, 'clean_revision', return_value='fixture'), \
+             patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run:
+            args = self.options(directory)
+            args.platform = 'macos'
+            args.skip_tests = True
+            release.execute(args, {'PLACES_MAC_PROFILE_UUID': profile})
+            archive = next(call.args[0] for call in run.call_args_list if 'archive' in call.args[0])
+            self.assertIn('PlacesMac', archive)
+            self.assertIn('generic/platform=macOS', archive)
+            self.assertIn('PLACES_MAC_PROFILE_UUID=' + profile, archive)
+            self.assertFalse(any('PLACES_WATCH_PROFILE_UUID' in value for value in archive))
+            self.assertIn(str(Path(directory).resolve() / 'PlacesMac.xcarchive'), archive)
+            options = plistlib.loads((Path(directory) / 'ExportOptions.plist').read_bytes())
+            self.assertEqual(options['provisioningProfiles'], {'com.adriaan.places': profile})
+            self.assertEqual(options['installerSigningCertificate'], 'Mac Installer Distribution')
+            self.assertTrue(options['testFlightInternalTestingOnly'])
+
+    def test_mac_profile_rejects_wrong_platform_development_and_direct_distribution(self):
+        profile = {'TeamIdentifier': ['TEAM'], 'UUID': '12345678-ABCD-1234-ABCD-123456789ABC',
+                   'Platform': ['OSX'], 'ExpirationDate': datetime(2030, 1, 1), 'Entitlements': {
+                       'com.apple.application-identifier': 'TEAM.com.adriaan.places',
+                       'com.apple.developer.icloud-container-identifiers': ['iCloud.com.adriaan.places'],
+                       'com.apple.developer.icloud-container-environment': ['Production']}}
+        def validate(value):
+            return release.validate_distribution_profile(value, 'TEAM', 'com.adriaan.places',
+                datetime(2026, 1, 1, tzinfo=timezone.utc), platform='macos')
+        self.assertEqual(validate(profile), profile['UUID'])
+        for change in ({'Platform': ['iOS']}, {'ProvisionedDevices': ['fixture']}, {'ProvisionsAllDevices': True}):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'App Store'):
+                validate({**profile, **change})
+        for key, value in [('com.apple.security.get-task-allow', True),
+                           ('com.apple.developer.icloud-container-environment', ['Development'])]:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                validate({**profile, 'Entitlements': {**profile['Entitlements'], key: value}})
+
+    def test_mac_workflow_uses_isolated_caches_signing_and_symbols(self):
+        workflow = (SCRIPT.parents[1] / '.github/workflows/testflight-mac.yml').read_text()
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("vars.PLACES_MAC_TESTFLIGHT_ENABLED == 'true'", workflow)
+        self.assertIn("- 'apps/macos/**'", workflow)
+        self.assertIn('python3 scripts/testflight.py --platform macos --skip-tests', workflow)
+        self.assertIn('build/testflight-macos/SourcePackages', workflow)
+        self.assertIn('build/testflight-macos/CompilationCache.noindex', workflow)
+        self.assertIn('build/testflight-macos/PlacesMac.xcarchive/dSYMs/', workflow)
+        self.assertIn("'PLACES_PROFILE_TYPE': 'MAC_APP_STORE'", workflow)
+        self.assertIn("platform='macos'", workflow)
+        self.assertIn('secrets.PLACES_MAC_INSTALLER_P12', workflow)
+        self.assertNotIn('pull_request:', workflow)
+        self.assertNotIn('swift test', workflow)
+        self.assertNotIn('unittest discover', workflow)
 
     @unittest.skipUnless(sys.platform == 'darwin', 'Xcode project validation uses macOS plutil')
     def test_profile_settings_are_scoped_to_the_app_release_target(self):
@@ -136,7 +190,7 @@ class TestFlightSmokeTests(unittest.TestCase):
         objects = settings['objects']
         configured = []
         expected = {'Places': 'PLACES_PROFILE_UUID', 'PlacesWatch': 'PLACES_WATCH_PROFILE_UUID',
-                    'PlacesComplication': 'PLACES_COMPLICATION_PROFILE_UUID'}
+                    'PlacesComplication': 'PLACES_COMPLICATION_PROFILE_UUID', 'PlacesMac': 'PLACES_MAC_PROFILE_UUID'}
         for target in objects.values():
             if target.get('isa') not in ('PBXNativeTarget', 'PBXProject'):
                 continue

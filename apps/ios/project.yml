@@ -90,6 +90,7 @@ targets:
         aps-environment: development
   PlacesMac:
     type: application
+    productName: Places
     platform: macOS
     deploymentTarget: '15.0'
     sources:
@@ -99,13 +100,27 @@ targets:
       - package: PlacesCompanion
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places.mac
+        # A separate native Mac target under the same App Store Connect app.
+        PRODUCT_BUNDLE_IDENTIFIER: com.adriaan.places
+        PRODUCT_NAME: Places
+        MARKETING_VERSION: '1.0'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        Release:
+          PLACES_CODE_SIGN_STYLE: Automatic
+          PLACES_CODE_SIGN_IDENTITY: Apple Development
+          PLACES_MAC_PROFILE_UUID: ''
+          CODE_SIGN_STYLE: $(PLACES_CODE_SIGN_STYLE)
+          CODE_SIGN_IDENTITY: $(PLACES_CODE_SIGN_IDENTITY)
+          PROVISIONING_PROFILE_SPECIFIER: $(PLACES_MAC_PROFILE_UUID)
     info:
       path: ../macos/PlacesMac/Info.plist
       properties:
         CFBundleDisplayName: Places
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.lifestyle
         LSUIElement: true
         CompanionKeychainGroup: $(AppIdentifierPrefix)com.adriaan.places.companions
         NSLocationUsageDescription: Places can contribute locations while you actively use this Mac. Locations are encrypted before delivery to your iPhone through your private iCloud.

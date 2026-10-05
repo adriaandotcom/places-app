@@ -28,7 +28,9 @@ module PlacesTestFlightProfile
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 15, read_timeout: 30) { |http| http.request(request) }
     raise "Apple profile download failed (HTTP #{response.code}); check API key and profile access" unless response.code == '200'
     data = JSON.parse(response.body).fetch('data')
-    raise 'Apple returned an unexpected signing profile' unless data.fetch('id') == profile_id && data.fetch('attributes').fetch('profileType') == 'IOS_APP_STORE'
+    profile_type = env.fetch('PLACES_PROFILE_TYPE', 'IOS_APP_STORE')
+    raise 'Unsupported distribution profile type' unless %w[IOS_APP_STORE MAC_APP_STORE].include?(profile_type)
+    raise 'Apple returned an unexpected signing profile' unless data.fetch('id') == profile_id && data.fetch('attributes').fetch('profileType') == profile_type
     File.binwrite(destination, Base64.strict_decode64(data.fetch('attributes').fetch('profileContent')))
     File.chmod(0600, destination)
     puts 'Downloaded the configured App Store signing profile.'

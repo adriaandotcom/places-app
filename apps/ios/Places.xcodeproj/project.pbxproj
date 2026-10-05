@@ -232,7 +232,6 @@
 		6ED1792B97EE623188206D05 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		738274611DA8F1F53B88808E /* HistoryCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryCalendar.swift; sourceTree = "<group>"; };
 		763BB8E666C49E7CFF673E53 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
-		77C83785EF97F0B7B4578638 /* PlacesMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlacesMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		78CD449D71D51A3B7F30A7F6 /* ZIPFoundation-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ZIPFoundation-LICENSE.txt"; sourceTree = "<group>"; };
 		7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineDetail.swift; sourceTree = "<group>"; };
 		7F1606887387E5B16905FC86 /* MapPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPresentation.swift; sourceTree = "<group>"; };
@@ -288,6 +287,7 @@
 		E6063893AC1BB3EAE496F8E7 /* PlacesComplication.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PlacesComplication.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E86809254C240D475CD2D44A /* AdjacentPlaceRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdjacentPlaceRows.swift; sourceTree = "<group>"; };
 		E911E9A38B5A7EB7327F494A /* PlacesMarker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesMarker.swift; sourceTree = "<group>"; };
+		ECA235B8D546F7B0D78266F7 /* Places.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Places.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EEB102BB0DB953EC91699D45 /* TimelinePager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelinePager.swift; sourceTree = "<group>"; };
 		F135F35535FF26FED0627E38 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPackFiles.swift; sourceTree = "<group>"; };
@@ -431,8 +431,8 @@
 			isa = PBXGroup;
 			children = (
 				A63BC26235D3DD07B406598B /* Places.app */,
+				ECA235B8D546F7B0D78266F7 /* Places.app */,
 				E6063893AC1BB3EAE496F8E7 /* PlacesComplication.appex */,
-				77C83785EF97F0B7B4578638 /* PlacesMac.app */,
 				E2484224F90AFD4F0609C882 /* PlacesTests.xctest */,
 				4BF477ADFC16882EBD9CC8CF /* PlacesUITests.xctest */,
 				1C2D255274BBF1FF00F02D7B /* PlacesWatch.app */,
@@ -656,7 +656,7 @@
 				43682CA1352C8965E043C9D4 /* PlacesCompanion */,
 			);
 			productName = PlacesMac;
-			productReference = 77C83785EF97F0B7B4578638 /* PlacesMac.app */;
+			productReference = ECA235B8D546F7B0D78266F7 /* Places.app */;
 			productType = "com.apple.product-type.application";
 		};
 		7F52809E1315B77EFDB06AFC /* PlacesWatch */ = {
@@ -774,7 +774,6 @@
 				TargetAttributes = {
 					73743F7DC6576BD8A0BFDE46 = {
 						DevelopmentTeam = "";
-						ProvisioningStyle = Automatic;
 					};
 					7F52809E1315B77EFDB06AFC = {
 						DevelopmentTeam = "";
@@ -1064,7 +1063,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places.mac;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
+				PRODUCT_NAME = Places;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -1173,6 +1174,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ../macos/PlacesMac/PlacesMac.entitlements;
+				CODE_SIGN_IDENTITY = "$(PLACES_CODE_SIGN_IDENTITY)";
+				CODE_SIGN_STYLE = "$(PLACES_CODE_SIGN_STYLE)";
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = ../macos/PlacesMac/Info.plist;
@@ -1181,7 +1184,13 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places.mac;
+				MARKETING_VERSION = 1.0;
+				PLACES_CODE_SIGN_IDENTITY = "Apple Development";
+				PLACES_CODE_SIGN_STYLE = Automatic;
+				PLACES_MAC_PROFILE_UUID = "";
+				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
+				PRODUCT_NAME = Places;
+				PROVISIONING_PROFILE_SPECIFIER = "$(PLACES_MAC_PROFILE_UUID)";
 				SDKROOT = macosx;
 			};
 			name = Release;

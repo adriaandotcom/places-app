@@ -11,6 +11,8 @@ Signing.local.xcconfig
 *.xcresult
 *.ipa
 *.mobileprovision
+*.provisionprofile
+*.pkg
 *.p8
 *.p12
 *.xcarchive/
