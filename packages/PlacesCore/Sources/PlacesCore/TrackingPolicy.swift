@@ -25,7 +25,7 @@ public struct SensorPolicy: Equatable, Sendable {
 }
 
 public enum TrackingPolicy {
-    public static let version = "1.10"
+    public static let version = "1.11"
     public static let stationaryDuration: TimeInterval = 180
     public static let confirmationEvidenceGap: TimeInterval = 4 * 60
     public static let evidenceGap: TimeInterval = 20 * 60
@@ -33,19 +33,17 @@ public enum TrackingPolicy {
 
     public static func sensors(state: TrackingState, motion: MotionKind, lowPower: Bool,
                                externalPower: Bool = false) -> SensorPolicy {
-        if externalPower && state != .paused {
-            // Core Location's best-available accuracy is -1; keep platform APIs in the adapter.
-            return SensorPolicy(standardUpdates: true, desiredAccuracy: -1, distanceFilter: 5,
-                                pausesAutomatically: false)
-        }
+        // Charging can lift Low Power Mode's accuracy reduction, but must never
+        // override a confirmed stop or turn a failed search into continuous GPS.
+        let conservePower = lowPower && !externalPower
         let active = [.recovery, .unknown, .moving, .stationaryCandidate].contains(state)
         let distance: Double = switch motion {
         case .cycling: 75
         case .automotive: 150
         default: 35
         }
-        return SensorPolicy(standardUpdates: active, desiredAccuracy: lowPower ? 100 : 10,
-                            distanceFilter: distance * (lowPower ? 2 : 1))
+        return SensorPolicy(standardUpdates: active, desiredAccuracy: conservePower ? 100 : 10,
+                            distanceFilter: distance * (conservePower ? 2 : 1))
     }
 
     public static func sameStationaryArea(_ first: SensorObservation, _ second: SensorObservation) -> Bool {

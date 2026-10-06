@@ -61,6 +61,14 @@ with their original intervals retained for inspection and splitting. One-second
 uncorrected edges of a transport correction join the corrected journey visually;
 the correction's exact interval remains unchanged.
 
+A fresh connection to a learned fixed Wi-Fi access point pauses detailed GPS
+immediately, independently of the three-minute visit confirmation. One subsequent
+connection read can confirm dwell; it does not request a GPS fix. Indoor movement,
+foregrounding, and charging do not override this pause. Disconnection, unavailable
+Wi-Fi information, or a contradictory departure resumes bounded location recovery.
+Unknown access points and portable networks cannot suppress route recording.
+Charging retains adaptive accuracy, automatic pausing, and recovery deadlines.
+
 History uses protection compatible with recording after the first unlock, including
 database sidecars, and is excluded from automatic backups. Full exports contain
 sensitive history: the user chooses where to save them. Apple system location

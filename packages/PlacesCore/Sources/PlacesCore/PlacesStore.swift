@@ -94,6 +94,10 @@ public actor PlacesStore {
             try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
+        migrator.registerMigration("v11-wifi-dwell-continuity") { db in
+            try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
         try migrator.migrate(queue)
     }
 

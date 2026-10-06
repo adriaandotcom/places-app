@@ -35,6 +35,12 @@ public struct VisitConfirmation: Sendable {
     public mutating func observe(_ observation: SensorObservation, place: Place?,
                                  connectedPlace: Place? = nil, motion: MotionKind) -> Candidate? {
         let wifi = observation.source == .wifi && connectedPlace != nil
+        if let candidate, candidate.first.source == .wifi, !wifi,
+           place?.id == candidate.placeID, !Self.isMoving(motion), (observation.speed ?? -1) < 0.8 {
+            // An in-place passive fix must not replace a Wi-Fi-only dwell anchor
+            // (which may have no coordinate). Only fresh Wi-Fi reads advance it.
+            return candidate.confirmed ? candidate : nil
+        }
         if wifi, motion == .walking, let candidate, candidate.walking, candidate.placeID == connectedPlace?.id {
             // A connection read cannot measure a walk, but it also must not
             // discard the GPS evidence for a walk in the same saved area.

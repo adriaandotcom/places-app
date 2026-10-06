@@ -104,6 +104,11 @@ public enum InferenceEngine {
                 continue
             }
 
+            if observation.source == .wifi, wifiPlace == nil, confirmation.candidate?.first.source == .wifi {
+                // Losing the learned connection interrupts Wi-Fi-only dwell, even
+                // without a GPS sample. Reconnecting starts a new confirmation.
+                confirmation.reset()
+            }
             guard observation.usableCoordinate != nil || wifiPlace != nil else { continue }
 
             if let item = current, item.kind == .stay, item.placeID == nil,

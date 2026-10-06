@@ -271,16 +271,14 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
     #expect(TrackingPolicy.sensors(state: .moving, motion: .cycling, lowPower: true).distanceFilter == 150)
 }
 
-@Test func externalPowerUsesDetailedTrackingUnlessPaused() {
+@Test func externalPowerKeepsTrackingAdaptiveAndHonorsStops() {
     for state in TrackingState.allCases {
         for lowPower in [false, true] {
             let policy = TrackingPolicy.sensors(state: state, motion: .automotive, lowPower: lowPower, externalPower: true)
-            #expect(policy.standardUpdates == (state != .paused))
-            #expect(policy.pausesAutomatically == (state == .paused))
-            if state != .paused {
-                #expect(policy.desiredAccuracy == -1)
-                #expect(policy.distanceFilter == 5)
-            }
+            #expect(policy.standardUpdates == [.recovery, .unknown, .moving, .stationaryCandidate].contains(state))
+            #expect(policy.pausesAutomatically)
+            #expect(policy.desiredAccuracy == 10)
+            #expect(policy.distanceFilter == 150)
         }
     }
     let battery = TrackingPolicy.sensors(state: .moving, motion: .automotive, lowPower: false)

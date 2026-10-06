@@ -77,6 +77,36 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     #expect(journey.last?.start == moving.timestamp)
 }
 
+@Test func wifiDwellSurvivesInPlacePassiveFixesButNotConnectionLoss() {
+    let passive = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(60), source: .significantChange,
+        coordinate: wifiHome.coordinate, horizontalAccuracy: 100)
+    let continuous = InferenceEngine.infer(observations: [connection(), passive, connection(180)],
+        places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    #expect(continuous.first?.kind == .stay)
+    #expect(continuous.first?.start == wifiEpoch)
+    let missing = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(100), source: .wifi)
+    let interrupted = InferenceEngine.infer(observations: [connection(), missing, connection(180)],
+        places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    #expect(!interrupted.contains { $0.kind == .stay })
+    let reconnected = InferenceEngine.infer(observations: [connection(), missing, connection(180), connection(360)],
+        places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    #expect(reconnected.last?.kind == .stay)
+    #expect(reconnected.last?.start == wifiEpoch.addingTimeInterval(180))
+}
+
+@Test func passiveFixCannotAdvanceWiFiOnlyDwellOrHideDeparture() {
+    var confirmation = VisitConfirmation()
+    #expect(confirmation.observe(connection(), place: wifiHome, connectedPlace: wifiHome, motion: .stationary) == nil)
+    let inside = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(180), source: .significantChange,
+        coordinate: wifiHome.coordinate, horizontalAccuracy: 10)
+    #expect(confirmation.observe(inside, place: wifiHome, motion: .stationary) == nil)
+    #expect(confirmation.candidate?.lastMeasuredAt == wifiEpoch)
+    let outside = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(181), source: .significantChange,
+        coordinate: .init(latitude: 2, longitude: 2), horizontalAccuracy: 10, speed: 3)
+    #expect(confirmation.observe(outside, place: nil, motion: .cycling) == nil)
+    #expect(confirmation.candidate == nil)
+}
+
 @Test func wifiOnlyEvidencePersistsReplaysAndDoesNotBecomeRoutePoints() async throws {
     let store = try PlacesStore(); try await store.savePlace(wifiHome)
     var first = connection(); first.coordinate = wifiHome.coordinate; first.coordinateTimestamp = first.timestamp; first.horizontalAccuracy = 10
@@ -89,7 +119,8 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     #expect(fixture.expectedTimeline.count == 1)
 }
 
-@Test func wifiMigrationPreservesEvidenceCorrectionsAndSplitPreferences() async throws {
+@Test(arguments: ["v4-connected-wifi-evidence", "v11-wifi-dwell-continuity"])
+func wifiMigrationPreservesEvidenceCorrectionsAndSplitPreferences(migration: String) async throws {
     let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
     defer { try? FileManager.default.removeItem(atPath: path) }
     let store = try PlacesStore(path: path); try await store.savePlace(wifiHome)
@@ -98,7 +129,8 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     try await store.correct(UserOverride(start: wifiEpoch.addingTimeInterval(60), end: wifiEpoch.addingTimeInterval(90), kind: .gap))
     let queue = try DatabaseQueue(path: path)
     try await queue.write { db in
-        try db.execute(sql: "INSERT INTO timelineSeparations(timestamp) VALUES (?); DELETE FROM grdb_migrations WHERE identifier = 'v4-connected-wifi-evidence'", arguments: [wifiEpoch.timeIntervalSince1970 + 60])
+        try db.execute(sql: "INSERT INTO timelineSeparations(timestamp) VALUES (?)", arguments: [wifiEpoch.timeIntervalSince1970 + 60])
+        try db.execute(sql: "DELETE FROM grdb_migrations WHERE identifier = ?", arguments: [migration])
     }
     let reopened = try PlacesStore(path: path)
     let fixture = try InferenceTestCase.decode(await reopened.exportTestCase())
