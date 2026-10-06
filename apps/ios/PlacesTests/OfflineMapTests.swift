@@ -4,6 +4,29 @@ import PlacesCore
 @testable import Places
 
 @MainActor final class OfflineMapTests: XCTestCase {
+    func testRecordedLocationFramesItsAccuracyWithoutChangingPlaceFraming() throws {
+        let point = Coordinate(latitude: 52, longitude: 4)
+        for accuracy in [10.0, 16, 250, 1_000] {
+            let map = MapPresentation(recordedCoordinate: point, accuracy: accuracy)
+            XCTAssertEqual(map.pins.first?.coordinate, point)
+            XCTAssertEqual(map.radius, accuracy)
+            let viewport = try XCTUnwrap(map.fittingViewport)
+            XCTAssertEqual(viewport.center.latitude, point.latitude)
+            XCTAssertEqual(viewport.center.longitude, point.longitude, accuracy: 0.000001)
+            XCTAssertEqual(viewport.latitudeSpan * 111_320, max(100, accuracy * 4), accuracy: 0.001)
+            XCTAssertEqual(viewport.longitudeSpan * 111_320 * cos(point.latitude * .pi / 180),
+                viewport.latitudeSpan * 111_320, accuracy: 0.001)
+        }
+        for accuracy: Double? in [nil, -1, .nan, .infinity] {
+            let map = MapPresentation(recordedCoordinate: point, accuracy: accuracy)
+            XCTAssertNil(map.radius, "Unavailable accuracy must not become a fabricated circle")
+            XCTAssertNotNil(map.fittingViewport)
+        }
+        XCTAssertNil(MapPresentation(recordedCoordinate: .init(latitude: 100, longitude: 4), accuracy: 10).fittingViewport)
+        let place = MapPresentation(place: Place(name: "Fixture", coordinate: point, radius: 16))
+        XCTAssertEqual(try XCTUnwrap(place.fittingViewport).latitudeSpan * 111_320, 1_000, accuracy: 0.001)
+    }
+
     func testWalkingVisitShowsItsPlaceAndRecordedPath() async throws {
         let date = Date(timeIntervalSince1970: 1_735_689_600)
         var place = Place(name: "Fixture park", coordinate: .init(latitude: 0, longitude: 0), radius: 500)

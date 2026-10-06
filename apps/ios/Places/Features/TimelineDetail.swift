@@ -225,12 +225,8 @@ private struct VisitEvidenceView: View {
                         DisclosureGroup {
                             ForEach(group.observations) { observation in
                                 if group.observations.count > 1 { Text(timestamp(observation)).font(.caption.bold()) }
-                            if let point = observation.coordinate {
-                                LabeledContent("Latitude", value: String(format: "%.5f", point.latitude))
-                                LabeledContent("Longitude", value: String(format: "%.5f", point.longitude))
-                            }
-                            if let accuracy = observation.horizontalAccuracy, accuracy >= 0 {
-                                LabeledContent("Location accuracy", value: "±\(Int(accuracy.rounded())) m")
+                            if let point = observation.coordinate, point.isValid {
+                                RecordedLocationPreview(coordinate: point, accuracy: observation.horizontalAccuracy)
                             }
                             if let measured = observation.coordinateTimestamp, measured != observation.timestamp {
                                 LabeledContent("Location measured", value: measured.formatted())
@@ -240,7 +236,6 @@ private struct VisitEvidenceView: View {
                             }
                             if let motion = observation.motion { LabeledContent("Motion", value: motion.rawValue.capitalized) }
                             if let ssid = observation.ssid { LabeledContent("Connected Wi-Fi", value: ssid) }
-                            LabeledContent("Time zone", value: observation.timezoneIdentifier)
                             if model.nerdMode { LabeledContent("Recording policy", value: observation.policyVersion) }
                             }
                         } label: {
@@ -252,7 +247,8 @@ private struct VisitEvidenceView: View {
                                         .font(.caption).foregroundStyle(Palette.muted)
                                 }
                             }.padding(.vertical, Layout.compact)
-                        }.accessibilityIdentifier("evidence-observation-\(observation.id)")
+                                .accessibilityIdentifier("evidence-observation-\(observation.id)")
+                        }
                     }
                     if observations.count < Set(item.evidenceIDs).count {
                         Text("Some referenced observations are no longer available.").foregroundStyle(Palette.muted)

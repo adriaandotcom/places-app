@@ -18,6 +18,31 @@ struct MapPreviewCard: View {
     }
 }
 
+struct RecordedLocationPreview: View {
+    private let presentation: MapPresentation
+    @State private var viewport: MapViewport?
+
+    init(coordinate: Coordinate, accuracy: Double?) {
+        let presentation = MapPresentation(recordedCoordinate: coordinate, accuracy: accuracy)
+        self.presentation = presentation
+        // Restore this tight framing on both renderers, including on-device maps
+        // whose usual single-place view shows the surrounding neighbourhood.
+        _viewport = State(initialValue: presentation.fittingViewport)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Layout.compact) {
+            PrivacyMapView(customPresentation: presentation, retainedViewport: $viewport)
+                .frame(height: Layout.mapHeight)
+                .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
+            if let accuracy = presentation.radius {
+                LabeledContent("Location accuracy", value: "±\(accuracy.formatted(.number.precision(.fractionLength(0)))) m")
+                    .font(.caption).foregroundStyle(Palette.muted)
+            }
+        }
+    }
+}
+
 // All MapKit construction lives here behind the appropriate live consent gate.
 struct PrivacyMapView: View {
     @Environment(AppModel.self) private var model
@@ -68,6 +93,7 @@ private struct AppleMapSurface: View {
     let rawPointSelected: ((RawMapPoint) -> Void)?
     @State private var selectedPlace: Place?
     @State private var camera: MapCameraPosition = .automatic
+    @State private var hasFramed = false
     private var presentation: MapPresentation {
         customPresentation ?? MapPresentation(items: items, routePoints: routePoints, places: model.places)
     }
@@ -81,16 +107,21 @@ private struct AppleMapSurface: View {
                     .stroke(Palette.accent(pin.colorIndex, hex: pin.customColorHex), lineWidth: 2)
             }
             ForEach(presentation.pins) { pin in
-                Annotation(pin.name, coordinate: CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)) {
-                    if let place = model.places.first(where: { $0.id == pin.placeID }) {
-                        Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40) }
-                            .accessibilityLabel(pin.name)
-                    } else if let letter = pin.letter {
-                        Text(letter).font(.headline.bold()).foregroundStyle(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex))
-                            .frame(width: 32, height: 32).background(Palette.accent(pin.colorIndex, hex: pin.customColorHex), in: Circle())
-                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                            .accessibilityLabel("Endpoint \(letter)").accessibilityIdentifier("endpoint-\(letter)")
-                    } else { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40).accessibilityLabel(pin.name) }
+                if pin.isRecordedLocation {
+                    Marker(pin.name, coordinate: pin.coordinate.mapCoordinate)
+                        .tint(Palette.accent(pin.colorIndex)).annotationTitles(.hidden)
+                } else {
+                    Annotation(pin.name, coordinate: CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)) {
+                        if let place = model.places.first(where: { $0.id == pin.placeID }) {
+                            Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40) }
+                                .accessibilityLabel(pin.name)
+                        } else if let letter = pin.letter {
+                            Text(letter).font(.headline.bold()).foregroundStyle(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex))
+                                .frame(width: 32, height: 32).background(Palette.accent(pin.colorIndex, hex: pin.customColorHex), in: Circle())
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                                .accessibilityLabel("Endpoint \(letter)").accessibilityIdentifier("endpoint-\(letter)")
+                        } else { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40).accessibilityLabel(pin.name) }
+                    }
                 }
             }
             ForEach(presentation.paths) { path in
@@ -115,10 +146,11 @@ private struct AppleMapSurface: View {
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
         .mapControls { MapCompass(); MapScaleView() }
         .onMapCameraChange(frequency: .onEnd) { context in
+            guard hasFramed else { return }
             viewport = MapViewport(center: Coordinate(latitude: context.region.center.latitude, longitude: context.region.center.longitude),
                 latitudeSpan: context.region.span.latitudeDelta, longitudeSpan: context.region.span.longitudeDelta)
         }
-        .onAppear { frame(restoreViewport: true) }
+        .onAppear { frame(restoreViewport: true); hasFramed = true }
         .onChange(of: presentation.coordinates) { _, _ in frame(restoreViewport: false) }
         .onChange(of: focusRequest) { _, _ in frame(restoreViewport: false) }
         .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) }.environment(\.hasMainNavigation, false) }

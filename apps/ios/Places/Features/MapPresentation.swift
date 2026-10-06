@@ -17,6 +17,7 @@ struct MapPin: Equatable, Identifiable, Sendable {
     var photoJPEG: Data?
     var placeID: String?
     var letter: String?
+    var isRecordedLocation = false
 }
 
 struct MapPath: Equatable, Identifiable, Sendable {
@@ -46,6 +47,7 @@ struct MapPresentation: Equatable, Sendable {
     var paths: [MapPath] = []
     var radius: Double?
     var areas: [PlaceArea] = []
+    private var minimumSpanMeters = 1_000.0
     var coordinates: [Coordinate] { pins.map(\.coordinate) + rawPoints.map(\.coordinate) + paths.flatMap(\.coordinates) + areas.flatMap(\.vertices) }
     var fittingViewport: MapViewport? {
         let points = coordinates.filter(\.isValid)
@@ -62,13 +64,20 @@ struct MapPresentation: Equatable, Sendable {
             }
         }
         let longitude = (west + span / 2 + 180).truncatingRemainder(dividingBy: 360) - 180
-        let minimumLatitude = max(1_000, (radius ?? 100) * 4) / 111_320
+        let minimumLatitude = max(minimumSpanMeters, (radius ?? 100) * 4) / 111_320
         return MapViewport(center: Coordinate(latitude: (south + north) / 2, longitude: longitude),
             latitudeSpan: min(170, max(minimumLatitude, (north - south) * 1.6)),
             longitudeSpan: min(360, max(minimumLatitude / max(0.01, cos(first.latitude * .pi / 180)), span * 1.6)))
     }
 
     init(pins: [MapPin], radius: Double? = nil) { self.pins = pins; self.radius = radius }
+    init(recordedCoordinate: Coordinate, accuracy: Double?) {
+        guard recordedCoordinate.isValid else { return }
+        pins = [MapPin(id: "recorded-location", name: "Recorded location", coordinate: recordedCoordinate,
+            symbol: "circle.fill", colorIndex: 1, isRecordedLocation: true)]
+        radius = accuracy.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        minimumSpanMeters = 100
+    }
     init(observations: [SensorObservation], photos: [PhotoLocationEvidence] = []) {
         rawPoints = observations.compactMap { observation in
             // Raw means raw: retain poor accuracy and cached coordinates as well.

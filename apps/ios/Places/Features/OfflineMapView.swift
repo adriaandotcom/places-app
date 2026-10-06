@@ -247,9 +247,13 @@ struct OfflineMapSurface: UIViewRepresentable {
                 let id = "place-radius"
                 let source = MLNShapeSource(identifier: id, shape: MLNPolygon(coordinates: &points, count: UInt(points.count)), options: nil)
                 let layer = MLNFillStyleLayer(identifier: id, source: source)
-                layer.fillColor = NSExpression(forConstantValue: UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex)))
+                let color = UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex))
+                layer.fillColor = NSExpression(forConstantValue: color)
                 layer.fillOpacity = NSExpression(forConstantValue: 0.2)
-                style.addSource(source); style.addLayer(layer); routeLayerIDs.append(id)
+                let outline = MLNLineStyleLayer(identifier: id + "-outline", source: source)
+                outline.lineColor = NSExpression(forConstantValue: color); outline.lineWidth = NSExpression(forConstantValue: 2)
+                style.addSource(source); style.addLayer(layer); style.addLayer(outline)
+                routeLayerIDs += [id, id + "-outline"]
             }
             for (index, polygon) in parent.presentation.areas.flatMap(\.polygons).enumerated() {
                 let interior = polygon.holes.map { ring -> MLNPolygon in
@@ -311,6 +315,13 @@ struct OfflineMapSurface: UIViewRepresentable {
             guard let annotation = annotation as? MapAnnotation else { return nil }
             let pin = annotation.pin
             let view = OfflineAnnotationView(annotation: annotation, reuseIdentifier: nil)
+            if pin.isRecordedLocation {
+                view.frame = CGRect(x: 0, y: 0, width: 14, height: 14)
+                view.backgroundColor = UIColor(Palette.accent(pin.colorIndex)); view.layer.cornerRadius = 7
+                view.layer.borderColor = UIColor.white.cgColor; view.layer.borderWidth = 2
+                view.isAccessibilityElement = true; view.accessibilityLabel = pin.name
+                return view
+            }
             if pin.name.isEmpty, let letter = pin.letter {
                 view.frame = CGRect(x: 0, y: 0, width: 26, height: 26)
                 view.backgroundColor = UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex)); view.layer.cornerRadius = 13

@@ -1241,6 +1241,10 @@ import XCTest
         XCTAssertTrue(app.staticTexts["Recorded observations"].waitForExistence(timeout: 5))
         let arrival = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Visit arrival")).firstMatch
         XCTAssertTrue(arrival.waitForExistence(timeout: 5)); arrival.tap()
+        XCTAssertFalse(app.maps.firstMatch.exists, "Evidence previews require map consent too")
+        XCTAssertFalse(app.staticTexts["Latitude"].exists)
+        XCTAssertFalse(app.staticTexts["Longitude"].exists)
+        XCTAssertFalse(app.staticTexts["Time zone"].exists)
         XCTAssertTrue(app.staticTexts["Location accuracy"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", "±10 m", "±10 m")).firstMatch.exists)
         let evidenceShot = XCTAttachment(screenshot: app.screenshot())
@@ -1263,6 +1267,35 @@ import XCTest
         app.buttons["tab-places"].tap()
         XCTAssertEqual(app.staticTexts.matching(identifier: "Fixture Existing").count, 1)
         XCTAssertFalse(app.staticTexts["Unfinished draft"].exists)
+    }
+
+    func testEvidenceLocationPreviewOnBothMapProviders() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-airport-stay"]
+                + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            XCTAssertTrue(app.staticTexts["timeline-heading"].waitForExistence(timeout: 10))
+            if !offline {
+                app.buttons["tab-map"].tap(); enableAppleMaps(in: app)
+                app.buttons["tab-timeline"].tap()
+            }
+            app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Somewhere new")).firstMatch.tap()
+            app.buttons["visit-evidence"].tap()
+            let arrival = app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Visit arrival")).firstMatch
+            XCTAssertTrue(arrival.waitForExistence(timeout: 5)); arrival.tap()
+            let map = app.descendants(matching: .any).matching(identifier: offline ? "on-device-map" : "apple-map").firstMatch
+            XCTAssertTrue(map.waitForExistence(timeout: 10))
+            XCTAssertTrue(map.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Recorded location")).firstMatch.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Location accuracy"].exists)
+            XCTAssertFalse(app.staticTexts["Latitude"].exists)
+            XCTAssertFalse(app.staticTexts["Longitude"].exists)
+            XCTAssertFalse(app.staticTexts["Time zone"].exists)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Evidence accuracy map \(offline ? "on-device" : "Apple")"
+            screenshot.lifetime = .keepAlways; add(screenshot)
+            app.terminate()
+        }
     }
 
     func testCompactVisitSuggestsVenueAboveConsentedMap() throws {
