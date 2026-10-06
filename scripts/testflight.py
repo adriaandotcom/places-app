@@ -82,7 +82,8 @@ def export_options(team, profile=None, watch_profile=None, complication_profile=
     options = {'method': 'app-store-connect', 'destination': 'upload',
             'signingStyle': 'automatic', 'teamID': team,
             'testFlightInternalTestingOnly': True,
-            'manageAppVersionAndBuildNumber': True, 'uploadSymbols': True}
+            'manageAppVersionAndBuildNumber': True, 'uploadSymbols': True,
+            'iCloudContainerEnvironment': 'Production'}
     if profile:
         options.update(signingStyle='manual', signingCertificate='Apple Distribution',
                        provisioningProfiles={'com.adriaan.places': profile})

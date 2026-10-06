@@ -29,6 +29,7 @@ import Network
     private var recordingStarted: Date?
     private var saving: Task<Void, Never>?
     private var storageFailed = false
+    private var syncFailure: String?
     private var deletingQueue = false
     private let keys = CompanionKeychain()
 
@@ -59,6 +60,7 @@ import Network
         if enabled { prepare() }
     }
     func setEnabled(_ value: Bool) {
+        syncFailure = nil
         generation += 1; enabled = value; UserDefaults.standard.set(value, forKey: "companionEnabled")
         if value { storageFailed = false; prepare(); location.requestWhenInUseAuthorization(); Task { await sync() } }
         else { cloud = nil; link = nil; network?.cancel(); network = nil; updateCollection(); status = "Paused. Queued records stay encrypted on this Mac." }
@@ -82,10 +84,13 @@ import Network
         updateCollection()
     }
     func sync() async {
-        guard enabled, !syncing, let cloud, let outbox else { return }
+        guard enabled, !syncing else { return }
+        if cloud == nil { prepare() }
+        guard let cloud, let outbox else { return }
         syncing = true; defer { syncing = false; updateCollection() }
         let epoch = generation
         do {
+            queued = try await outbox.pending().count
             let currentLink = try await cloud.link()
             guard enabled, epoch == generation else { return }
             link = currentLink
@@ -103,12 +108,16 @@ import Network
                 lastUploaded = Date()
             }
             queued = try await outbox.pending().count
+            syncFailure = nil
         } catch {
+            let remaining = try? await outbox.pending().count
             guard epoch == generation else { return }
+            if let remaining { queued = remaining }
             if error is CompanionError || (error as? CKError)?.code == .zoneNotFound || (error as? CKError)?.code == .unknownItem {
                 link = nil; try? keys.remove("mac-link")
             }
-            status = CompanionIdentity.message(for: error)
+            let message = CompanionIdentity.message(for: error)
+            syncFailure = message; status = message
         }
     }
     private func updateCollection() {
@@ -138,6 +147,7 @@ import Network
             location.stopMonitoringSignificantLocationChanges()
         }
         if storageFailed { status = "Collection paused: queued locations could not be saved. Free storage, then re-enable collection." }
+        else if let syncFailure { status = syncFailure }
         else if enabled, authorized, link != nil {
             status = active ? (resting ? "Resting at this location. Movement can resume collection." : "Collecting while you use this Mac.") : "Paused while this Mac is idle or asleep."
         } else if enabled && !authorized { status = "Allow location access in System Settings → Privacy & Security → Location Services." }

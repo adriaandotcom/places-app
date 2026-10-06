@@ -1042,6 +1042,7 @@
 				);
 				PLACES_CODE_SIGN_IDENTITY = "iPhone Developer";
 				PLACES_CODE_SIGN_STYLE = Automatic;
+				PLACES_ICLOUD_ENVIRONMENT = Production;
 				PLACES_PROFILE_UUID = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
 				PROVISIONING_PROFILE_SPECIFIER = "$(PLACES_PROFILE_UUID)";
@@ -1064,6 +1065,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
+				PLACES_ICLOUD_ENVIRONMENT = Development;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
 				PRODUCT_NAME = Places;
 				SDKROOT = macosx;
@@ -1187,6 +1189,7 @@
 				MARKETING_VERSION = 1.0;
 				PLACES_CODE_SIGN_IDENTITY = "Apple Development";
 				PLACES_CODE_SIGN_STYLE = Automatic;
+				PLACES_ICLOUD_ENVIRONMENT = Production;
 				PLACES_MAC_PROFILE_UUID = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
 				PRODUCT_NAME = Places;
@@ -1345,6 +1348,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				PLACES_ICLOUD_ENVIRONMENT = Development;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adriaan.places;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;

@@ -1,4 +1,7 @@
 import Foundation
+#if !os(watchOS)
+import CloudKit
+#endif
 
 public enum CompanionIdentity {
     public static func deviceID(keys: CompanionKeychain = CompanionKeychain()) throws -> UUID {
@@ -19,7 +22,20 @@ public enum CompanionIdentity {
         return try CompanionOutbox(directory: root, localKey: key)
     }
     public static func message(for error: any Error) -> String {
-        switch error as? CompanionError {
+        #if !os(watchOS)
+        if let cloudError = error as? CKError {
+            switch cloudError.code {
+            case .zoneNotFound, .unknownItem:
+                return "Enable Mac reception in Places on your iPhone, then try syncing again. Use the same iCloud account on both devices."
+            case .notAuthenticated:
+                return "Sign in to iCloud, then try syncing again."
+            case .badContainer, .missingEntitlement:
+                return "This version of Places cannot access iCloud. Update Places on both devices, then try again."
+            default: break
+            }
+        }
+        #endif
+        return switch error as? CompanionError {
         case .missingKey: "Waiting for the encryption key. Enable companions on your iPhone and turn on iCloud Keychain on both devices."
         case .wrongAccount: "Sign in to the same iCloud account on your iPhone and Mac."
         case .notLinked: "Open Places on your iPhone to connect this companion."

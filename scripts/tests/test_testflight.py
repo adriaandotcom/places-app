@@ -90,6 +90,7 @@ class TestFlightSmokeTests(unittest.TestCase):
                 self.assertTrue(options['testFlightInternalTestingOnly'])
                 self.assertEqual(options['destination'], 'upload')
                 self.assertTrue(options['uploadSymbols'])
+                self.assertEqual(options['iCloudContainerEnvironment'], 'Production')
                 self.assertTrue((Path(directory) / 'timings.json').exists())
 
     def test_changed_source_prevents_upload(self):
