@@ -137,7 +137,12 @@ struct TimelineDetail: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button(item.kind == .stay ? "Change place" : "I was at a place", systemImage: "mappin") { namingDraft = NamingDraft(suggestion: nil) }
+                        Button(item.kind == .stay ? "Change place" : "Add a stop", systemImage: "mappin") { namingDraft = NamingDraft(suggestion: nil) }
+                        if item.kind == .stay {
+                            Button("Just passing through", systemImage: "point.topleft.down.to.point.bottomright.curvepath") {
+                                Task { if await model.passingThrough(item) { dismiss() } }
+                            }.accessibilityIdentifier("just-passing-through")
+                        }
                         transportMenu
                         if (item.originalItems?.count ?? 0) > 1 {
                             Button("Split into original entries…", systemImage: "arrow.triangle.branch") { splitting = true }

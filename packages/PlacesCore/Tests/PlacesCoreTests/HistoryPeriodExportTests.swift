@@ -53,9 +53,10 @@ private let exportArea = Coordinate(latitude: 0, longitude: 0)
     let store = try PlacesStore()
     try await store.savePlace(Place(id: "home", name: "Fixture Home", coordinate: exportArea))
     try await store.append([SensorObservation(timestamp: exportStart, source: .location, coordinate: exportArea, horizontalAccuracy: 5),
-        SensorObservation(timestamp: exportStart.addingTimeInterval(100), source: .location, coordinate: exportArea, horizontalAccuracy: 5),
+        SensorObservation(timestamp: exportStart.addingTimeInterval(180), source: .location, coordinate: exportArea, horizontalAccuracy: 5),
         SensorObservation(timestamp: exportStart.addingTimeInterval(600), source: .recovery),
-        SensorObservation(timestamp: exportStart.addingTimeInterval(700), source: .location, coordinate: exportArea, horizontalAccuracy: 5)])
+        SensorObservation(timestamp: exportStart.addingTimeInterval(700), source: .location, coordinate: exportArea, horizontalAccuracy: 5),
+        SensorObservation(timestamp: exportStart.addingTimeInterval(880), source: .location, coordinate: exportArea, horizontalAccuracy: 5)])
     let period = DateInterval(start: exportStart.addingTimeInterval(200), duration: 600)
     let archive = try await store.fullHistoryArchive(in: period)
     #expect(archive.timeline.count == 1)

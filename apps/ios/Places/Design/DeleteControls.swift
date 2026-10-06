@@ -23,7 +23,7 @@ import Observation
         guard !working, let entry = entries.last else { return }
         working = true
         do { try await entry.restore(); entries.removeAll { $0.id == entry.id }; toastID = nil }
-        catch { self.error = "Couldn’t undo that deletion. Please try again." }
+        catch { self.error = "Couldn’t undo that change. Please try again." }
         working = false
     }
 }
@@ -56,7 +56,7 @@ struct DeleteUndoPresentation: ViewModifier {
                 do { try await Task.sleep(for: .seconds(6)); undo.hideToast() } catch { }
             }
             .background(UndoShakeReceiver(enabled: enabled && undo.canUndo) { confirmUndo = true }.frame(width: 0, height: 0))
-            .alert("Undo deletion?", isPresented: $confirmUndo) {
+            .alert("Undo last change?", isPresented: $confirmUndo) {
                 Button("Undo") { Task { await undo.undo() } }
                 Button("Cancel", role: .cancel) { }
             }

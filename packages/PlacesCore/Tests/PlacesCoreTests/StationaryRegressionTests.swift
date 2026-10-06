@@ -5,8 +5,10 @@ import GRDB
 
 private let start = Date(timeIntervalSince1970: 1_735_689_600)
 private func sample(_ seconds: Double, metres: Double = 0, speed: Double = -1, source: ObservationSource = .location) -> SensorObservation {
-    SensorObservation(timestamp: start.addingTimeInterval(seconds), source: source,
+    var observation = SensorObservation(timestamp: start.addingTimeInterval(seconds), source: source,
                       coordinate: Coordinate(latitude: 0, longitude: metres / 111_195), horizontalAccuracy: 30, speed: speed)
+    if source == .visitArrival { observation.systemVisitDuration = 180 }
+    return observation
 }
 
 @Test func systemArrivalAtAnotherUnnamedStopIsNotDiscardedAsTravel() {

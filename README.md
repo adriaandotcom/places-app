@@ -47,6 +47,14 @@ The canonical contribution and privacy rules are in [AGENTS.md](AGENTS.md).
 - SQLite transactions and versioned migrations; raw evidence is preserved separately
   from inference and durable user corrections. There is no automatic retention cutoff.
 
+Automatic stops require at least three minutes of fresh, reasonably accurate
+evidence with little movement, including at saved places. Nearby place membership
+alone never confirms a visit. An explicit **Count walks as visits** preference on
+each place also permits a three-minute walk within its area; cycling remains travel.
+Walking visits retain their measured path, with recording gaps left unconnected.
+**Just passing through** converts a visit back to travel and supports Undo. Policy
+upgrades rebuild derived history while retaining raw observations and manual edits.
+
 History uses protection compatible with recording after the first unlock, including
 database sidecars, and is excluded from automatic backups. Full exports contain
 sensitive history: the user chooses where to save them. Apple system location
@@ -55,9 +63,9 @@ AI, third-party runtime services, or background cloud sync are included.
 
 ## Validation and remaining acceptance work
 
-CI runs critical core tests, static privacy/resource checks, simulator compilation,
-and UI tests for skipped permissions, local editing/search, map consent, and
-accessibility navigation. Debug-only UI fixtures are synthetic and in memory;
+Run `python3 scripts/validate_local.py --simulator <QA-simulator-UUID>` locally
+for core and companion tests, the Mac build, and app/UI tests. CI checks privacy
+and builds/releases the apps. Debug-only UI fixtures are synthetic and in memory;
 `--ui-testing --ui-fixture` is available only in Debug builds.
 
 **This is a working foundation, not yet a device-validated tracker.** Before claiming

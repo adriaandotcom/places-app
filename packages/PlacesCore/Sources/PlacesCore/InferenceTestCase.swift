@@ -108,9 +108,11 @@ public struct InferenceTestCase: Codable, Sendable {
             return copy
         }
         let places = archive.places.map { value in
-            Place(id: placeIDs[value.id]!, name: placeIDs[value.id]!, coordinate: rotation.apply(value.coordinate),
+            var place = Place(id: placeIDs[value.id]!, name: placeIDs[value.id]!, coordinate: rotation.apply(value.coordinate),
                   radius: value.radius, expectedSSIDs: value.expectedSSIDs.compactMap { ssids[$0] }, createdAt: date(value.createdAt),
                   area: value.area?.transformed(rotation.apply))
+            place.countsWalksAsVisits = value.countsWalksAsVisits
+            return place
         }
         let networks = archive.networks.map { value in
             WiFiNetwork(id: networkIDs[value.id]!, ssid: ssids[value.ssid]!, classification: value.classification,

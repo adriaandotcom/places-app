@@ -86,6 +86,10 @@ public actor PlacesStore {
                 CREATE TABLE photoReview (assetID TEXT PRIMARY KEY);
                 """)
         }
+        migrator.registerMigration("v9-confirmed-visits-and-walking-routes") { db in
+            try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
         try migrator.migrate(queue)
     }
 
@@ -291,7 +295,31 @@ public actor PlacesStore {
     }
 
     public func correct(_ edit: UserOverride) throws {
-        try queue.write { try StoreSQL.saveCorrection(edit, db: $0) }
+        try queue.write { db in
+            try StoreSQL.saveCorrection(edit, db: db)
+            try StoreSQL.rebuild(db: db, since: edit.start)
+        }
+    }
+
+    public func undoCorrection(id: String) throws {
+        try queue.write { db in
+            guard let edit = try StoreSQL.decodeAll(UserOverride.self, db: db,
+                sql: "SELECT payload FROM overrides WHERE id = ?", arguments: [id]).first else { return }
+            try db.execute(sql: "DELETE FROM overrides WHERE id = ?", arguments: [id])
+            try StoreSQL.rebuild(db: db, since: edit.start)
+        }
+    }
+
+    public func passingThrough(_ item: TimelineItem, now: Date = Date()) throws -> UserOverride {
+        let end = max(item.end ?? now, item.start.addingTimeInterval(1))
+        let context = try timeline(in: DateInterval(start: item.start.addingTimeInterval(-1), end: end.addingTimeInterval(1)))
+        let modes = Set(context.filter {
+            $0.kind == .journey && ($0.end == item.start || $0.start == end) && $0.mode != .unknown
+        }.map(\.mode))
+        let mode: TransportMode = item.recordsRoute ? item.mode : modes.count == 1 ? modes.first! : .unknown
+        let edit = UserOverride(start: item.start, end: end, kind: .journey, mode: mode)
+        try correct(edit)
+        return edit
     }
 
     public func networks() throws -> [WiFiNetwork] {
@@ -587,13 +615,23 @@ enum StoreSQL {
                 try db.execute(sql: "INSERT OR IGNORE INTO evidenceLinks(timelineID, observationID) VALUES (?, ?)", arguments: [item.id, observationID])
             }
         }
-        // Associate measured route samples with inferred journeys, never manufacture coordinates.
+        // Corrections can turn a former stay into travel. Retain the measured
+        // path for those intervals and for walking visits, using real fixes only.
+        let corrections = try decodeAll(UserOverride.self, db: db, sql: "SELECT payload FROM overrides ORDER BY createdAt")
+        let corrected = InferenceEngine.applying(corrections, to: items)
+        var correctedIndex = 0
         var itemIndex = 0
         for observation in CompanionEvidence.selected(observations, places: places, networks: networks, accessPoints: accessPoints) {
             guard let coordinate = observation.usableCoordinate, [.location, .significantChange].contains(observation.source), !items.isEmpty else { continue }
             while itemIndex + 1 < items.count, items[itemIndex + 1].start <= observation.timestamp { itemIndex += 1 }
             let item = items[itemIndex]
-            guard item.kind == .journey, observation.timestamp >= item.start,
+            while correctedIndex + 1 < corrected.count, corrected[correctedIndex + 1].start <= observation.timestamp { correctedIndex += 1 }
+            let route = !corrected.isEmpty && corrected[correctedIndex].recordsRoute
+                && observation.timestamp >= corrected[correctedIndex].start
+                && observation.timestamp <= (corrected[correctedIndex].end ?? .distantFuture)
+            let routeEndpoint = correctedIndex > 0 && corrected[correctedIndex - 1].recordsRoute
+                && corrected[correctedIndex - 1].end == observation.timestamp
+            guard route || routeEndpoint, observation.timestamp >= item.start,
                   observation.timestamp <= (item.end ?? .distantFuture) else { continue }
             let point = RoutePoint(id: observation.id, observationID: observation.id, timelineID: item.id,
                 timestamp: observation.timestamp, coordinate: coordinate, horizontalAccuracy: observation.horizontalAccuracy ?? 0)

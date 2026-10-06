@@ -18,7 +18,7 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     #expect(place?.id == wifiHome.id)
     #expect(observation.coordinate == nil)
     #expect(!TrackingPolicy.sensors(state: .knownWiFi, motion: .walking, lowPower: false).standardUpdates)
-    let history = InferenceEngine.infer(observations: [observation, connection(3600)], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    let history = InferenceEngine.infer(observations: [observation, connection(180), connection(3600)], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
     #expect(history.count == 1 && history[0].kind == .stay && history[0].placeID == wifiHome.id)
     #expect(history[0].lastEvidenceAt == wifiEpoch.addingTimeInterval(3600))
     #expect(history[0].coordinate == wifiHome.coordinate)
@@ -62,22 +62,22 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
 }
 
 @Test func losingWiFiDoesNotInventDepartureAndGPSCanEstablishTravel() {
-    let missing = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(100), source: .wifi)
-    let stopped = InferenceEngine.infer(observations: [connection(), missing], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    let missing = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(280), source: .wifi)
+    let stopped = InferenceEngine.infer(observations: [connection(), connection(180), missing], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
     #expect(stopped.count == 1 && stopped[0].kind == .stay)
-    #expect(stopped[0].lastEvidenceAt == wifiEpoch)
-    let moving = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(150), source: .location,
+    #expect(stopped[0].lastEvidenceAt == wifiEpoch.addingTimeInterval(180))
+    let moving = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(330), source: .location,
         coordinate: .init(latitude: 1, longitude: 1.01), horizontalAccuracy: 10, speed: 4)
-    let journey = InferenceEngine.infer(observations: [connection(), missing, moving], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    let journey = InferenceEngine.infer(observations: [connection(), connection(180), missing, moving], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
     #expect(journey.map(\.kind) == [.stay, .journey])
 }
 
 @Test func wifiOnlyEvidencePersistsReplaysAndDoesNotBecomeRoutePoints() async throws {
     let store = try PlacesStore(); try await store.savePlace(wifiHome)
     var first = connection(); first.coordinate = wifiHome.coordinate; first.coordinateTimestamp = first.timestamp; first.horizontalAccuracy = 10
-    try await store.append([first, connection(3600)])
+    try await store.append([first, connection(180), connection(3600)])
     let observations = try await store.observations()
-    #expect(observations.count == 2 && observations.first?.coordinate == nil)
+    #expect(observations.count == 3 && observations.first?.coordinate == nil)
     #expect(try await store.routePoints(from: wifiEpoch, to: wifiEpoch.addingTimeInterval(4000)).isEmpty)
     let fixture = try InferenceTestCase.decode(await store.exportTestCase())
     #expect(fixture.replay() == fixture.expectedTimeline)
@@ -89,7 +89,7 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     defer { try? FileManager.default.removeItem(atPath: path) }
     let store = try PlacesStore(path: path); try await store.savePlace(wifiHome)
     var first = connection(); first.coordinate = wifiHome.coordinate; first.coordinateTimestamp = first.timestamp; first.horizontalAccuracy = 10
-    try await store.append([first, connection(3600)])
+    try await store.append([first, connection(180), connection(3600)])
     try await store.correct(UserOverride(start: wifiEpoch.addingTimeInterval(60), end: wifiEpoch.addingTimeInterval(90), kind: .gap))
     let queue = try DatabaseQueue(path: path)
     try await queue.write { db in
@@ -98,6 +98,6 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     let reopened = try PlacesStore(path: path)
     let fixture = try InferenceTestCase.decode(await reopened.exportTestCase())
     #expect(fixture.replay() == fixture.expectedTimeline)
-    #expect(fixture.input.observations.count == 2 && fixture.input.corrections.count == 1)
+    #expect(fixture.input.observations.count == 3 && fixture.input.corrections.count == 1)
     #expect(fixture.input.separatedAt?.count == 1)
 }

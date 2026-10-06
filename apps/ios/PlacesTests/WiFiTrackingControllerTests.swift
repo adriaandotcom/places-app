@@ -18,35 +18,96 @@ import PlacesCore
 
     private func makeTracker(timeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90),
                              settlingDelay: Duration = .seconds(TrackingPolicy.stationaryDuration),
-                             device: UIDevice = DeviceSpy()) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
+                             device: UIDevice = DeviceSpy(), clock: TrackingClock = TrackingClock()) -> (TrackingController, LocationSpy, LocationSpy, WiFiReaderSpy) {
         let live = LocationSpy(), passive = LocationSpy(), reader = WiFiReaderSpy()
-        let tracker = TrackingController(live: live, passive: passive, device: device, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, settlingDelay: settlingDelay, monitorSystemChanges: false,
+        let tracker = TrackingController(live: live, passive: passive, device: device, wifiTimeout: timeout, recoveryTimeout: recoveryTimeout, settlingDelay: settlingDelay, monitorSystemChanges: false, now: { clock.time },
                                          wifiReader: { reader.callbacks.append($0) })
         tracker.updateWiFiKnowledge(places: [home], networks: [network], accessPoints: points)
         tracker.configure(places: [home], enabled: true)
         return (tracker, live, passive, reader)
     }
 
-    func testLiveKnownWiFiStopsLocationAndMotionDoesNotRestartIt() {
+    func testSavedPlaceRequiresThreeMinutesBeforeStoppingGPS() {
+        let clock = TrackingClock()
+        let (tracker, live, _, reader) = makeTracker(clock: clock)
+        reader.complete(0, nil)
+        func fix() { tracker.locationManager(live, didUpdateLocations: [CLLocation(
+            coordinate: .init(latitude: 1, longitude: 1), altitude: 0,
+            horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: clock.time)]) }
+        fix()
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
+        XCTAssertTrue(live.updating)
+        clock.time.addTimeInterval(179); fix()
+        XCTAssertTrue(live.updating)
+        clock.time.addTimeInterval(1); fix()
+        XCTAssertEqual(tracker.state, .knownPlace)
+        XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testFreshWiFiConfirmsDwellAndPersistsTheConfirmationForReplay() {
+        let clock = TrackingClock()
+        let (tracker, live, _, reader) = makeTracker(clock: clock)
+        var observations: [SensorObservation] = []
+        tracker.onObservations = { observations += $0 }
+        reader.complete(0, connection)
+        XCTAssertTrue(live.updating)
+        clock.time.addTimeInterval(180)
+        tracker.refreshCurrentWiFi(); reader.complete(1, connection)
+        XCTAssertEqual(tracker.state, .knownWiFi)
+        XCTAssertFalse(live.updating)
+        XCTAssertEqual(observations.filter { $0.source == .wifi }.count, 2)
+        let items = InferenceEngine.infer(observations: observations, places: [home], networks: [network], accessPoints: points)
+        XCTAssertEqual(items.first?.kind, .stay)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testWalkingVisitKeepsGPSAndCyclingCannotSettleInThePark() {
+        let clock = TrackingClock()
+        let (tracker, live, _, reader) = makeTracker(clock: clock)
+        var park = home; park.countsWalksAsVisits = true; park.radius = 500
+        tracker.configure(places: [park], enabled: true)
+        reader.complete(0, nil)
+        tracker.receivedMotion(.walking, at: clock.time); reader.complete(1, nil)
+        for step in 0...3 {
+            if step > 0 { clock.time.addTimeInterval(60) }
+            tracker.locationManager(live, didUpdateLocations: [CLLocation(
+                coordinate: .init(latitude: 1, longitude: 1 + Double(step) * 0.0005), altitude: 0,
+                horizontalAccuracy: 10, verticalAccuracy: 10, course: 90, speed: 1, timestamp: clock.time)])
+        }
+        XCTAssertEqual(tracker.state, .moving)
+        XCTAssertTrue(live.updating)
+        tracker.receivedMotion(.automotive, at: clock.time)
+        reader.complete(reader.callbacks.count - 1, nil)
+        clock.time.addTimeInterval(180)
+        tracker.locationManager(live, didUpdateLocations: [CLLocation(
+            coordinate: .init(latitude: 1, longitude: 1), altitude: 0,
+            horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: clock.time)])
+        XCTAssertTrue(live.updating)
+        XCTAssertNotEqual(tracker.state, .knownPlace)
+        tracker.configure(places: [], enabled: false)
+    }
+
+    func testUnconfirmedWiFiKeepsRecordingAndWalkingDoesNotConfirmAStop() {
         let (tracker, live, passive, reader) = makeTracker()
         var observations: [SensorObservation] = []
         tracker.onObservations = { observations += $0 }
         XCTAssertEqual(live.starts, 0, "Check Wi-Fi before requesting location at launch")
         reader.complete(0, connection)
-        XCTAssertEqual(tracker.state, .knownWiFi)
-        XCTAssertEqual(live.starts, 0)
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
+        XCTAssertEqual(live.starts, 1)
         XCTAssertTrue(passive.visits && passive.significantChanges)
         XCTAssertTrue(passive.regions.contains { $0.identifier == home.id })
         tracker.receivedMotion(.walking, at: Date())
         XCTAssertEqual(reader.callbacks.count, 2, "Movement requires a live read, not a cached BSSID")
         reader.complete(1, connection)
-        XCTAssertEqual(tracker.state, .knownWiFi)
-        XCTAssertEqual(live.starts, 0)
+        XCTAssertEqual(tracker.state, .moving)
+        XCTAssertEqual(live.starts, 1)
         let energy = tracker.energySnapshot()
         XCTAssertEqual(energy.wifiReads, 2)
         XCTAssertEqual(energy.motionCallbacks, 1)
-        XCTAssertEqual(energy.locationStarts, 0)
-        XCTAssertEqual(energy.standardLocationSeconds, 0)
+        XCTAssertEqual(energy.locationStarts, 1)
+        XCTAssertTrue(live.updating)
         XCTAssertEqual(observations.filter { $0.source == .wifi }.count, 1)
         XCTAssertTrue(observations.filter { $0.source == .wifi }.allSatisfy { $0.coordinate == nil })
         tracker.configure(places: [], enabled: false)
@@ -64,6 +125,19 @@ import PlacesCore
         tracker.configure(places: [], enabled: false)
     }
 
+    func testImpreciseStationaryFixesDoNotKeepDetailedGPSRunning() async throws {
+        let (tracker, live, _, reader) = makeTracker(recoveryTimeout: .milliseconds(160))
+        reader.complete(0, nil)
+        for _ in 0..<3 {
+            tracker.locationManager(live, didUpdateLocations: [CLLocation(coordinate: .init(latitude: 1, longitude: 1),
+                altitude: 0, horizontalAccuracy: 100, verticalAccuracy: 100, timestamp: Date())])
+            try await Task.sleep(for: .milliseconds(60))
+        }
+        XCTAssertEqual(tracker.state, .lowPowerFallback)
+        XCTAssertFalse(live.updating)
+        tracker.configure(places: [], enabled: false)
+    }
+
     func testQuietStopRequestsFreshEvidenceBeforeRecoveryExpires() async throws {
         let (tracker, live, _, reader) = makeTracker(recoveryTimeout: .milliseconds(80), settlingDelay: .milliseconds(180))
         reader.complete(0, nil)
@@ -73,6 +147,8 @@ import PlacesCore
         tracker.receivedMotion(.walking, at: Date()); reader.complete(1, nil)
         XCTAssertEqual(tracker.state, .moving)
         tracker.receivedMotion(.stationary, at: Date())
+        tracker.locationManager(live, didUpdateLocations: [CLLocation(coordinate: fix.coordinate, altitude: 0,
+            horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: Date())])
         XCTAssertEqual(tracker.state, .stationaryCandidate)
         try await Task.sleep(for: .milliseconds(120))
         XCTAssertEqual(tracker.state, .stationaryCandidate, "The shorter recovery timeout must not cancel stop confirmation")
@@ -132,17 +208,17 @@ import PlacesCore
         reader.complete(0, connection)
         tracker.wifiPathChanged()
         reader.complete(1, ConnectedWiFi(ssid: network.ssid, bssid: points[1].bssid))
-        XCTAssertEqual(tracker.state, .knownWiFi); XCTAssertEqual(live.starts, 0)
+        XCTAssertEqual(tracker.state, .stationaryCandidate); XCTAssertEqual(live.starts, 1)
         // A path change can be loss of internet while association remains intact.
         tracker.wifiPathChanged(); reader.complete(2, connection)
-        XCTAssertEqual(live.starts, 0)
+        XCTAssertEqual(live.starts, 1)
         tracker.wifiPathChanged(); reader.complete(3, nil)
         XCTAssertEqual(tracker.state, .recovery)
         XCTAssertEqual(live.starts, 1)
         XCTAssertNil(tracker.currentSSID)
         tracker.wifiPathChanged(); reader.complete(4, connection)
-        XCTAssertEqual(tracker.state, .knownWiFi)
-        XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
+        XCTAssertTrue(live.updating)
         tracker.configure(places: [], enabled: false)
     }
 
@@ -163,7 +239,7 @@ import PlacesCore
         reader.complete(0, ConnectedWiFi(ssid: network.ssid, bssid: "02:00:00:00:00:99"))
         XCTAssertEqual(tracker.state, .recovery); XCTAssertTrue(live.updating)
         tracker.wifiPathChanged(); reader.complete(1, connection)
-        XCTAssertFalse(live.updating)
+        XCTAssertTrue(live.updating)
         var portable = network; portable.classification = .portable
         tracker.updateWiFiKnowledge(places: [home], networks: [portable], accessPoints: points)
         XCTAssertEqual(tracker.state, .recovery); XCTAssertTrue(live.updating)
@@ -187,9 +263,9 @@ import PlacesCore
         let location = CLLocation(coordinate: .init(latitude: 1, longitude: 1), altitude: 0,
                                   horizontalAccuracy: 10, verticalAccuracy: 10, timestamp: Date())
         tracker.locationManager(live, didUpdateLocations: [location])
-        XCTAssertEqual(tracker.state, .knownPlace); XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .stationaryCandidate); XCTAssertTrue(live.updating)
         tracker.receivedMotion(.walking, at: Date()); reader.complete(reader.callbacks.count - 1, connection)
-        XCTAssertEqual(tracker.state, .knownWiFi); XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .moving); XCTAssertTrue(live.updating)
         tracker.configure(places: [], enabled: false)
     }
 
@@ -278,11 +354,11 @@ import PlacesCore
         tracker.configure(places: [], enabled: false)
     }
 
-    func testChargingKeepsDetailedGPSAtKnownWiFiAndUnpluggingStopsIt() {
+    func testUnconfirmedWiFiDoesNotStopRecordingWhenUnplugged() {
         let device = DeviceSpy()
         let (tracker, live, _, reader) = makeTracker(device: device)
         reader.complete(0, connection)
-        XCTAssertFalse(live.updating)
+        XCTAssertTrue(live.updating)
         device.mockState = .charging
         tracker.powerChanged()
         XCTAssertTrue(live.updating)
@@ -301,20 +377,25 @@ import PlacesCore
         XCTAssertTrue(live.updating)
         device.mockState = .unplugged
         tracker.powerChanged()
-        XCTAssertEqual(tracker.state, .knownWiFi)
-        XCTAssertFalse(live.updating)
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
+        XCTAssertTrue(live.updating)
         XCTAssertTrue(live.pausesLocationUpdatesAutomatically)
         tracker.configure(places: [], enabled: false)
     }
 
     func testLaunchingOnFullExternalPowerRecordsAtKnownPlace() {
+        let clock = TrackingClock()
         let device = DeviceSpy(); device.mockState = .full
-        let (tracker, live, _, reader) = makeTracker(device: device)
+        let (tracker, live, _, reader) = makeTracker(device: device, clock: clock)
         XCTAssertTrue(live.updating, "Start immediately without waiting for Wi-Fi")
         reader.complete(0, nil)
         let fix = CLLocation(coordinate: .init(latitude: 1, longitude: 1), altitude: 0,
-                             horizontalAccuracy: 3, verticalAccuracy: 3, timestamp: Date())
+                             horizontalAccuracy: 3, verticalAccuracy: 3, timestamp: clock.time)
         tracker.locationManager(live, didUpdateLocations: [fix])
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
+        clock.time.addTimeInterval(180)
+        tracker.locationManager(live, didUpdateLocations: [CLLocation(coordinate: fix.coordinate, altitude: 0,
+            horizontalAccuracy: 3, verticalAccuracy: 3, timestamp: clock.time)])
         XCTAssertEqual(tracker.state, .knownPlace)
         XCTAssertTrue(live.updating)
         XCTAssertEqual(live.desiredAccuracy, kCLLocationAccuracyBest)
@@ -384,13 +465,14 @@ import PlacesCore
     }
 
     func testChargingHonorsForegroundOnlyAccessAndReappliesMissedPowerChanges() {
-        let device = DeviceSpy()
-        let (tracker, live, _, reader) = makeTracker(device: device)
+        let device = DeviceSpy(), clock = TrackingClock()
+        let (tracker, live, _, reader) = makeTracker(device: device, clock: clock)
         reader.complete(0, connection)
         tracker.sceneChanged(isForeground: false)
         device.mockState = .charging
         tracker.sceneChanged(isForeground: true)
         XCTAssertTrue(live.updating)
+        clock.time = clock.time.addingTimeInterval(180)
         reader.complete(1, connection)
         XCTAssertTrue(live.updating)
         device.mockState = .unplugged
@@ -417,7 +499,7 @@ import PlacesCore
         XCTAssertEqual(live.starts, starts + 1)
         XCTAssertTrue(live.updating)
         XCTAssertFalse(live.pausesLocationUpdatesAutomatically)
-        XCTAssertEqual(tracker.state, .knownWiFi)
+        XCTAssertEqual(tracker.state, .stationaryCandidate)
         tracker.configure(places: [], enabled: false)
     }
 }
@@ -460,3 +542,5 @@ private final class LocationSpy: CLLocationManager {
     override func startMonitoring(for region: CLRegion) { regions.insert(region) }
     override func stopMonitoring(for region: CLRegion) { regions.remove(region) }
 }
+
+@MainActor private final class TrackingClock { var time = Date() }

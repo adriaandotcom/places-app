@@ -37,6 +37,7 @@ public enum TimelinePresentation {
             var combined = members[0]
             if members.count > 1 {
                 combined.end = members.last!.end
+                if combined.kind == .stay, members.contains(where: \.recordsRoute) { combined.mode = .walking }
                 combined.lastEvidenceAt = members.map(\.lastEvidenceAt).max()!
                 combined.isUserEdited = members.contains(where: \.isUserEdited)
                 combined.evidenceIDs = Array(Set(members.flatMap(\.evidenceIDs))).sorted()

@@ -25,18 +25,18 @@ private func wifi(_ seconds: Double, ssid: String = "Fixture Network", bssid: St
 
 @Test func knownPlaceToJourneyToPlace() {
     let destination = Place(id: "fixture-stop", name: "Fixture Stop", coordinate: Coordinate(latitude: 0, longitude: 0.02))
-    let items = InferenceEngine.infer(observations: [fix(0), fix(60), fix(180, coordinate: Coordinate(latitude: 0, longitude: 0.005), speed: 4),
-        fix(300, coordinate: destination.coordinate)], places: [home(), destination])
+    let items = InferenceEngine.infer(observations: [fix(0), fix(180), fix(240, coordinate: Coordinate(latitude: 0, longitude: 0.005), speed: 4),
+        fix(300, coordinate: destination.coordinate), fix(480, coordinate: destination.coordinate)], places: [home(), destination])
     #expect(items.map(\.kind) == [.stay, .journey, .stay])
     #expect(items.first?.placeID == home().id)
     #expect(items.last?.placeID == destination.id)
 }
 
 @Test func recoveryDoesNotInventContinuityOrShutdownReason() {
-    let items = InferenceEngine.infer(observations: [fix(0), fix(60),
-        SensorObservation(timestamp: epoch.addingTimeInterval(3600), source: .recovery), fix(3610)], places: [home()])
+    let items = InferenceEngine.infer(observations: [fix(0), fix(180),
+        SensorObservation(timestamp: epoch.addingTimeInterval(3600), source: .recovery), fix(3610), fix(3790)], places: [home()])
     let gap = items.first { $0.kind == .gap }
-    #expect(gap?.start == epoch.addingTimeInterval(60))
+    #expect(gap?.start == epoch.addingTimeInterval(180))
     #expect(gap?.end == epoch.addingTimeInterval(3610))
     #expect(gap?.reasons.joined().contains("off") == false)
 }
@@ -59,12 +59,12 @@ private func wifi(_ seconds: Double, ssid: String = "Fixture Network", bssid: St
 }
 
 @Test func unrelatedRegionExitDoesNotEndKnownStay() {
-    let values = [fix(0), SensorObservation(timestamp: epoch.addingTimeInterval(30), source: .regionExit,
-        monitoredPlaceID: "fixture-neighbour"), fix(60),
-        SensorObservation(timestamp: epoch.addingTimeInterval(90), source: .regionExit, monitoredPlaceID: home().id)]
+    let values = [fix(0), fix(180), SensorObservation(timestamp: epoch.addingTimeInterval(210), source: .regionExit,
+        monitoredPlaceID: "fixture-neighbour"), fix(240),
+        SensorObservation(timestamp: epoch.addingTimeInterval(270), source: .regionExit, monitoredPlaceID: home().id)]
     let items = InferenceEngine.infer(observations: values, places: [home()])
     #expect(items.map(\.kind) == [.stay, .journey])
-    #expect(items.first?.end == epoch.addingTimeInterval(90))
+    #expect(items.first?.end == epoch.addingTimeInterval(270))
 }
 
 @Test func incrementalInferenceRetainsMotionBeforeJourneyBoundary() async throws {
@@ -257,11 +257,11 @@ func explicitClassificationsSurviveLearning(classification: WiFiClassification) 
 }
 
 @Test func pausedTrackingLeavesExplicitGap() {
-    let items = InferenceEngine.infer(observations: [fix(0), SensorObservation(timestamp: epoch.addingTimeInterval(50), source: .paused),
-        SensorObservation(timestamp: epoch.addingTimeInterval(100), source: .resumed), fix(110)], places: [home()])
+    let items = InferenceEngine.infer(observations: [fix(0), fix(180), SensorObservation(timestamp: epoch.addingTimeInterval(250), source: .paused),
+        SensorObservation(timestamp: epoch.addingTimeInterval(300), source: .resumed), fix(310), fix(490)], places: [home()])
     #expect(items.map(\.kind) == [.stay, .gap, .stay])
-    #expect(items[1].start == epoch.addingTimeInterval(50))
-    #expect(items[1].end == epoch.addingTimeInterval(110))
+    #expect(items[1].start == epoch.addingTimeInterval(250))
+    #expect(items[1].end == epoch.addingTimeInterval(310))
 }
 
 @Test func stationaryAndLowPowerStatesStopStandardUpdates() {

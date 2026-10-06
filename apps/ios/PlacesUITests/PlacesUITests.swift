@@ -1,6 +1,36 @@
 import XCTest
 
 @MainActor final class PlacesUITests: XCTestCase {
+    func testPassingThroughUndoAndWalkingVisitPreferencePersists() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]
+        app.launch()
+        let visit = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "timeline-stay-")).firstMatch
+        XCTAssertTrue(visit.waitForExistence(timeout: 10))
+        visit.tap()
+        app.buttons["edit-entry"].tap()
+        app.buttons["just-passing-through"].tap()
+        XCTAssertTrue(app.buttons["undo-delete"].waitForExistence(timeout: 5))
+        XCTAssertFalse(visit.exists)
+        app.buttons["undo-delete"].tap()
+        XCTAssertTrue(visit.waitForExistence(timeout: 5))
+        app.buttons["tab-places"].tap()
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Little park")).firstMatch.tap()
+        app.buttons["edit-place-details"].tap()
+        let toggle = app.switches["count-walks-as-visits"]
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Park walking visits are explicitly enabled"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["save-place"].tap()
+        XCTAssertTrue(app.buttons["edit-place-details"].waitForExistence(timeout: 8))
+        app.buttons["edit-place-details"].tap()
+        reveal(toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "1")
+    }
+
     func testPhotoSuggestionDeletionUndoAndDirectMemoryCreation() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-photo-suggestions"]

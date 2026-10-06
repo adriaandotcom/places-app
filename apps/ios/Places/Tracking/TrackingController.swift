@@ -19,6 +19,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     private let live: CLLocationManager
     private let passive: CLLocationManager
     private let device: UIDevice
+    private let now: @MainActor () -> Date
     private var externallyPowered: Bool { device.batteryState == .charging || device.batteryState == .full }
     private var appliedExternalPower = false
     private let wifiReader: WiFiReader
@@ -40,6 +41,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     private var wifiPathMonitor: NWPathMonitor?
     private var departureNeedsFixAfter: Date?
     private var candidate: CLLocation?
+    private var confirmation = VisitConfirmation()
     private var enteredState = Date()
     private var lastWiFiRead = Date.distantPast
     private var hasStarted = false
@@ -62,7 +64,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     private(set) var currentBSSID: String?
     private(set) var currentWiFiObservation: SensorObservation?
     private(set) var motion: MotionKind = .unknown
-    private var recentMotion: MotionKind { Date().timeIntervalSince(motionTime) <= 300 ? motion : .unknown }
+    private var recentMotion: MotionKind { now().timeIntervalSince(motionTime) <= 300 ? motion : .unknown }
     private(set) var lowPower = false
     private(set) var monitoredRegionCount = 0
     var onObservations: (([SensorObservation]) -> Void)?
@@ -71,10 +73,11 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     init(live: CLLocationManager = CLLocationManager(), passive: CLLocationManager = CLLocationManager(), device: UIDevice = .current,
          wifiTimeout: Duration = .seconds(3), recoveryTimeout: Duration = .seconds(90),
          settlingDelay: Duration = .seconds(TrackingPolicy.stationaryDuration), monitorSystemChanges: Bool = true,
+         now: @escaping @MainActor () -> Date = Date.init,
          wifiReader: @escaping WiFiReader = TrackingController.fetchWiFi) {
         self.live = live; self.passive = passive; self.device = device; self.wifiReader = wifiReader
         self.recoveryTimeout = recoveryTimeout; self.wifiTimeout = wifiTimeout; self.monitorSystemChanges = monitorSystemChanges
-        self.settlingDelay = settlingDelay
+        self.settlingDelay = settlingDelay; self.now = now
         super.init()
         live.delegate = self; passive.delegate = self
         live.allowsBackgroundLocationUpdates = true
@@ -105,7 +108,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         // Reclassification/deletion revokes suppression immediately. Metadata updates
         // never turn a cached connection into a fresh Wi-Fi observation.
         if let wifiPlaceID {
-            let connection = SensorObservation(timestamp: Date(), source: .wifi, ssid: currentSSID, bssid: currentBSSID)
+            let connection = SensorObservation(timestamp: now(), source: .wifi, ssid: currentSSID, bssid: currentBSSID)
             if TrackingPolicy.connectedPlace(for: connection, places: places, networks: networks, accessPoints: accessPoints)?.id != wifiPlaceID {
                 invalidateWiFi()
                 if hasStarted { checkLocation(.recovery, reason: "Saved Wi-Fi no longer confirms this place.") }
@@ -145,7 +148,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     func requestMotion() {
         guard CMMotionActivityManager.isActivityAvailable() else { return }
         if motionAuthorization == .denied || motionAuthorization == .restricted { openSettings(); return }
-        activity.queryActivityStarting(from: Date().addingTimeInterval(-60), to: Date(), to: .main) { [weak self] _, _ in
+        activity.queryActivityStarting(from: now().addingTimeInterval(-60), to: now(), to: .main) { [weak self] _, _ in
             Task { @MainActor in self?.refreshAuthorization(); self?.reconcileMotion() }
         }
     }
@@ -175,7 +178,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         sensorGeneration += 1
         energy = EnergyCounters()
         invalidateWiFi()
-        currentLocation = nil; currentSSID = nil; currentBSSID = nil; currentWiFiObservation = nil; candidate = nil; places = []
+        currentLocation = nil; currentSSID = nil; currentBSSID = nil; currentWiFiObservation = nil; candidate = nil; confirmation.reset(); places = []
         networks = []; accessPoints = []; departureNeedsFixAfter = nil
         motion = .unknown; motionTime = .distantPast; lastWiFiRead = .distantPast
     }
@@ -201,9 +204,9 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         }
         reconcileMotion()
         if !hasStarted {
-            enteredState = Date()
+            enteredState = now()
             hasStarted = true
-            onObservations?([SensorObservation(timestamp: Date(), source: .recovery)])
+            onObservations?([SensorObservation(timestamp: now(), source: .recovery)])
             if externallyPowered { checkLocation(.recovery, reason: "External power enables detailed location recording.") }
             readWiFi(force: true, fallback: .recovery)
         } else if appliedExternalPower != externallyPowered {
@@ -225,8 +228,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         for region in passive.monitoredRegions { passive.stopMonitoring(for: region) }
         monitoredRegionCount = 0
         activity.stopActivityUpdates(); motionActive = false
-        candidate = nil
-        if wasStarted { onObservations?([SensorObservation(timestamp: Date(), source: .paused)]) }
+        candidate = nil; confirmation.reset()
+        if wasStarted { onObservations?([SensorObservation(timestamp: now(), source: .paused)]) }
         transition(.paused, reason: "Tracking is paused or location access is unavailable.")
         hasStarted = false; wifiEvidence = WiFiEvidenceGate()
     }
@@ -239,8 +242,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         motionActive = true
         activity.startActivityUpdates(to: .main) { [weak self] value in
             guard let value, value.confidence != .low else { return }
-            let kind: MotionKind = value.stationary ? .stationary : value.cycling ? .cycling
-                : value.running ? .running : value.walking ? .walking : value.automotive ? .automotive : .unknown
+            let kind = VisitConfirmation.motion(stationary: value.stationary, walking: value.walking,
+                running: value.running, cycling: value.cycling, automotive: value.automotive)
             let time = value.startDate
             Task { @MainActor in self?.receivedMotion(kind, at: time) }
         }
@@ -249,13 +252,14 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         guard hasStarted else { return }
         energy.motionCallbacks += 1
         onObservations?([SensorObservation(timestamp: time, source: .motion, motion: kind)])
-        guard abs(Date().timeIntervalSince(time)) <= 300, time >= motionTime else { return }
+        guard abs(now().timeIntervalSince(time)) <= 300, time >= motionTime else { return }
         motion = kind; motionTime = time
+        confirmation.motionChanged(kind)
         if kind == .stationary, candidate == nil,
            [.recovery, .unknown, .moving].contains(state), let location = currentLocation,
            (0...120).contains(time.timeIntervalSince(location.timestamp)),
            makeObservation(location, source: .location).usableCoordinate != nil {
-            beginStationaryCheck(at: location)
+            checkLocation(.recovery, reason: "A change to stationary activity needs a fresh location check.")
         }
         if kind != .stationary && kind != .unknown {
             candidate = nil; settlingTask?.cancel(); settlingTask = nil
@@ -306,8 +310,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         return snapshot
     }
     func recordEnergyCheckpoint(reason: String = "Activity snapshot requested.") {
-        var event = TrackingEvent(timestamp: Date(), state: state, reason: reason,
-            previousStateDuration: hasStarted ? Date().timeIntervalSince(enteredState) : 0,
+        var event = TrackingEvent(timestamp: now(), state: state, reason: reason,
+            previousStateDuration: hasStarted ? now().timeIntervalSince(enteredState) : 0,
             standardLocationActive: standardActive,
             build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "development")
         event.energy = energySnapshot()
@@ -384,35 +388,35 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
            !place.contains(coordinate, tolerance: min(100, location.horizontalAccuracy)) {
             invalidateWiFi()
         }
-        if wifiPlaceID != nil && departureNeedsFixAfter == nil {
-            // Recheck the actual connection on this event; a cached BSSID cannot
-            // indefinitely override passive location or departure signals.
-            // Charging delivers frequent GPS fixes; retain the normal Wi-Fi read throttle.
-            readWiFi(force: !externallyPowered, fallback: .recovery)
-            return
-        }
-        if TrackingPolicy.matchingPlace(for: observation, places: places) != nil {
+        evaluateEvidence(observation)
+        readWiFi()
+    }
+    private func evaluateEvidence(_ observation: SensorObservation, connectedPlace: Place? = nil) {
+        let place = connectedPlace ?? TrackingPolicy.matchingPlace(for: observation, places: places)
+        let previousStart = confirmation.candidate?.first.timestamp
+        let confirmed = confirmation.observe(observation, place: place, connectedPlace: connectedPlace, motion: recentMotion)
+        if let confirmed, !confirmed.walking {
             candidate = nil; settlingTask?.cancel(); settlingTask = nil; endRecovery()
-            transition(.knownPlace, reason: "A recent fix matches a saved place.")
-            configureRegions(); readWiFi()
-        } else if candidate.map({ TrackingPolicy.sameStationaryArea(makeObservation($0, source: .location), observation) }) ?? true {
-
-            if let candidate, TrackingPolicy.sameStationaryArea(makeObservation(candidate, source: .location), observation) {
-                if location.timestamp.timeIntervalSince(candidate.timestamp) >= TrackingPolicy.stationaryDuration {
-                    settlingTask?.cancel(); settlingTask = nil; endRecovery()
-                    transition(.stationaryUnknown, reason: "Location observations indicate a stop.")
-                    monitorStop(location); readWiFi()
-                }
-            } else {
-                beginStationaryCheck(at: location)
+            transition(connectedPlace != nil ? .knownWiFi : place != nil ? .knownPlace : .stationaryUnknown,
+                       reason: "Fresh evidence confirms at least three minutes with little movement.")
+            if let location = currentLocation { monitorStop(location) }
+            configureRegions()
+        } else if let pending = confirmation.candidate, !pending.walking {
+            if previousStart != pending.first.timestamp || state != .stationaryCandidate {
+                beginStationaryCheck(at: currentLocation)
             }
         } else {
             candidate = nil; settlingTask?.cancel(); settlingTask = nil
-            transition(.moving, reason: "Recent fixes indicate movement.")
+            if VisitConfirmation.isMoving(recentMotion) || (observation.speed ?? -1) >= 0.8 {
+                endRecovery()
+            }
+            transition(.moving, reason: confirmed?.walking == true
+                ? "Recording the route while walking through a visited place."
+                : "Movement or uncertain evidence does not establish a stop.")
             beginRecoveryDeadline()
         }
     }
-    private func beginStationaryCheck(at location: CLLocation) {
+    private func beginStationaryCheck(at location: CLLocation?) {
         candidate = location
         endRecovery()
         transition(.stationaryCandidate, reason: "Checking whether this is a meaningful stop.")
@@ -428,6 +432,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             self.energy.setStandardLocation(active: false, uptime: ProcessInfo.processInfo.systemUptime)
             self.energy.singleLocationRequests += 1
             self.live.requestLocation()
+            self.readWiFi(force: true)
             self.beginRecoveryDeadline()
         }
     }
@@ -437,6 +442,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             horizontalAccuracy: location.horizontalAccuracy, speed: location.speed)
     }
     private func invalidateWiFi() {
+        if confirmation.candidate?.first.source == .wifi { confirmation.reset() }
         wifiCheckID += 1; wifiCheckTask?.cancel(); wifiCheckTask = nil
         wifiFallback = nil; wifiPlaceID = nil
     }
@@ -486,12 +492,12 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         }
         // Passive UI reads must not cancel a pending departure check.
         if wifiCheckTask != nil && fallback == nil { return }
-        guard force || Date().timeIntervalSince(lastWiFiRead) >= 60 else { return }
+        guard force || now().timeIntervalSince(lastWiFiRead) >= 60 else { return }
         let next = fallback ?? wifiFallback
         wifiCheckID += 1; wifiCheckTask?.cancel(); wifiFallback = next
         let request = wifiCheckID
         let started = ContinuousClock.now
-        lastWiFiRead = Date()
+        lastWiFiRead = now()
         let expectedGeneration = sensorGeneration
         wifiCheckTask = Task { [weak self, wifiTimeout] in
             try? await Task.sleep(for: wifiTimeout)
@@ -512,7 +518,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             self.wifiCheckTask?.cancel(); self.wifiCheckTask = nil; self.wifiFallback = nil
             self.currentSSID = network?.ssid; self.currentBSSID = network?.bssid.lowercased()
             let location = network == nil ? nil : self.currentLocation
-            let observation = SensorObservation(timestamp: Date(), source: .wifi,
+            let observation = SensorObservation(timestamp: self.now(), source: .wifi,
                 coordinate: location.map { Coordinate(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude) },
                 coordinateTimestamp: location?.timestamp, horizontalAccuracy: location?.horizontalAccuracy,
                 ssid: network?.ssid, bssid: network?.bssid)
@@ -520,13 +526,15 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             guard self.hasStarted else { return }
             let place = self.departureNeedsFixAfter == nil ? TrackingPolicy.connectedPlace(for: observation,
                 places: self.places, networks: self.networks, accessPoints: self.accessPoints) : nil
-            if self.wifiEvidence.shouldRecord(observation, placeID: place?.id) { self.onObservations?([observation]) }
+            let shouldRecord = self.wifiEvidence.shouldRecord(observation, placeID: place?.id)
+            let confirmsPending = place != nil && self.confirmation.candidate?.confirmed == false
+                && observation.timestamp.timeIntervalSince(self.confirmation.candidate!.first.timestamp) >= TrackingPolicy.stationaryDuration
+            if shouldRecord || confirmsPending { self.onObservations?([observation]) }
             let wasTrusted = self.wifiPlaceID != nil
             self.wifiPlaceID = place?.id
-            if place != nil {
-                self.candidate = nil; self.settlingTask?.cancel(); self.settlingTask = nil; self.endRecovery()
-                self.transition(.knownWiFi, reason: "A live connection matches a learned fixed-place access point.")
+            if let place {
                 self.configureRegions()
+                self.evaluateEvidence(observation, connectedPlace: place)
             } else if let next = next ?? (wasTrusted ? .recovery : nil) {
                 self.checkLocation(next, reason: "Wi-Fi does not confirm this place; checking location.")
             }
@@ -541,7 +549,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         // pause/recovery gap. Revocation and background foreground-only access
         // still go through stopAll via reconcile.
         if hasStarted, canLocate, oldAccuracy != accuracy {
-            candidate = nil; settlingTask?.cancel(); settlingTask = nil
+            candidate = nil; confirmation.reset(); settlingTask?.cancel(); settlingTask = nil
             readWiFi(force: true, fallback: .recovery)
         }
         reconcile()
@@ -552,12 +560,13 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard hasStarted else { return }
         energy.locationCallbacks += 1
-        let accepted = locations.filter { $0.horizontalAccuracy >= 0 && $0.timestamp <= Date().addingTimeInterval(60) }
+        let accepted = locations.filter { $0.horizontalAccuracy >= 0 && $0.timestamp <= now().addingTimeInterval(60) }
         energy.locationSamples += accepted.count
         onObservations?(accepted.map { makeObservation($0, source: manager === passive ? .significantChange : .location) })
-        guard let latest = accepted.max(by: { $0.timestamp < $1.timestamp }), Date().timeIntervalSince(latest.timestamp) <= 120 else { return }
+        guard let latest = accepted.max(by: { $0.timestamp < $1.timestamp }), now().timeIntervalSince(latest.timestamp) <= 120 else { return }
         currentLocation = latest
-        if makeObservation(latest, source: .location).usableCoordinate != nil, abs(Date().timeIntervalSince(latest.timestamp)) <= 30 {
+        if makeObservation(latest, source: .location).usableCoordinate != nil, abs(now().timeIntervalSince(latest.timestamp)) <= 30,
+           latest.horizontalAccuracy <= 50 || VisitConfirmation.isMoving(recentMotion) || latest.speed >= 0.8 {
             endRecovery()
         }
         evaluate(latest)
@@ -571,8 +580,11 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         let coordinate = Coordinate(latitude: visit.coordinate.latitude, longitude: visit.coordinate.longitude)
         var observations: [SensorObservation] = []
         if visit.arrivalDate != .distantPast {
-            observations.append(SensorObservation(timestamp: visit.arrivalDate, source: .visitArrival, coordinate: coordinate,
-                horizontalAccuracy: visit.horizontalAccuracy, speed: 0))
+            var arrival = SensorObservation(timestamp: visit.arrivalDate, source: .visitArrival, coordinate: coordinate,
+                horizontalAccuracy: visit.horizontalAccuracy, speed: 0)
+            arrival.systemVisitDuration = max(0, (visit.departureDate == .distantFuture ? now() : visit.departureDate)
+                .timeIntervalSince(visit.arrivalDate))
+            observations.append(arrival)
         }
         if visit.departureDate != .distantFuture {
             observations.append(SensorObservation(timestamp: visit.departureDate, source: .visitDeparture, coordinate: coordinate,
@@ -580,7 +592,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         }
         onObservations?(observations)
         if visit.departureDate != .distantFuture {
-            invalidateWiFi(); departureNeedsFixAfter = Date()
+            invalidateWiFi(); confirmation.reset(); departureNeedsFixAfter = now()
             checkLocation(.recovery, reason: "A visit departure needs a fresh location check.")
         } else { readWiFi(force: true, fallback: .recovery) }
     }
@@ -590,11 +602,11 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         guard hasStarted else { return }
         // A queued circular callback can arrive after a place changes to an area.
         guard !places.contains(where: { $0.id == region.identifier && $0.area != nil }) else { return }
-        onObservations?([SensorObservation(timestamp: Date(), source: entering ? .regionEnter : .regionExit,
+        onObservations?([SensorObservation(timestamp: now(), source: entering ? .regionEnter : .regionExit,
                                     monitoredPlaceID: region.identifier == "temporary-stop" ? nil : region.identifier)])
         if !entering {
             if let wifiPlaceID, region.identifier != wifiPlaceID { return }
-            invalidateWiFi(); departureNeedsFixAfter = Date()
+            invalidateWiFi(); confirmation.reset(); departureNeedsFixAfter = now()
             checkLocation(.recovery, reason: "A monitored departure needs a fresh location check.")
         } else { readWiFi(force: true, fallback: .recovery) }
     }
@@ -612,7 +624,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             return
         }
         guard hasStarted, state != .knownPlace, state != .knownWiFi, let location = currentLocation else { return }
-        transition(.stationaryUnknown, reason: "iOS paused location updates while stationary."); monitorStop(location)
+        transition(.lowPowerFallback, reason: "iOS paused updates; waiting for fresh evidence of a stop."); monitorStop(location)
     }
     private func notifyPermissionProblem() async {
         let expectedGeneration = sensorGeneration

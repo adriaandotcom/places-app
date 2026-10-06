@@ -110,21 +110,26 @@ struct MapPresentation: Equatable, Sendable {
             if item.kind == .stay, !places.contains(where: { $0.id == item.placeID }), let coordinate = item.coordinate, coordinate.isValid {
                 pins.append(MapPin(id: item.id, name: "Somewhere new", coordinate: coordinate, symbol: "mappin", colorIndex: 4))
             }
-            let points = routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) && $0.coordinate.isValid }
-                .sorted { $0.timestamp < $1.timestamp }.map(\.coordinate)
-            if item.kind == .journey, points.count > 1 {
-                paths.append(MapPath(id: item.id, coordinates: points, dashed: false))
-                if let connection = item.connection {
-                    for (suffix, from, to) in [("start", connection.from.coordinate, points[0]),
-                                                ("end", points[points.count - 1], connection.to.coordinate)] where from.distance(to: to) > 1 {
-                        paths.append(MapPath(id: item.id + suffix, coordinates: [from, to], dashed: true))
+            // A grouped walking visit can contain an unrecorded interval. Draw
+            // each recorded member separately instead of connecting across it.
+            let routes = item.kind == .stay ? (item.originalItems ?? [item]).filter(\.recordsRoute) : [item]
+            for item in routes {
+                let points = routePoints.filter { $0.timestamp >= item.start && $0.timestamp <= (item.end ?? .distantFuture) && $0.coordinate.isValid }
+                    .sorted { $0.timestamp < $1.timestamp }.map(\.coordinate)
+                if item.recordsRoute, points.count > 1 {
+                    paths.append(MapPath(id: item.id, coordinates: points, dashed: false))
+                    if let connection = item.connection {
+                        for (suffix, from, to) in [("start", connection.from.coordinate, points[0]),
+                                                    ("end", points[points.count - 1], connection.to.coordinate)] where from.distance(to: to) > 1 {
+                            paths.append(MapPath(id: item.id + suffix, coordinates: [from, to], dashed: true))
+                        }
                     }
-                }
-            } else if let connection = item.connection, item.kind == .gap || item.kind == .journey {
-                paths.append(MapPath(id: item.id, coordinates: [connection.from.coordinate, connection.to.coordinate], dashed: true))
-                for (letter, endpoint) in [("A", connection.from), ("B", connection.to)] {
-                    guard !pins.contains(where: { $0.coordinate == endpoint.coordinate }) else { continue }
-                    pins.append(MapPin(id: item.id + letter, name: places.first { $0.id == endpoint.placeID }?.name ?? (letter == "A" ? "Earlier location" : "Later location"), coordinate: endpoint.coordinate, symbol: "circle.fill", colorIndex: letter == "A" ? 1 : 0, letter: letter))
+                } else if let connection = item.connection, item.kind == .gap || item.kind == .journey {
+                    paths.append(MapPath(id: item.id, coordinates: [connection.from.coordinate, connection.to.coordinate], dashed: true))
+                    for (letter, endpoint) in [("A", connection.from), ("B", connection.to)] {
+                        guard !pins.contains(where: { $0.coordinate == endpoint.coordinate }) else { continue }
+                        pins.append(MapPin(id: item.id + letter, name: places.first { $0.id == endpoint.placeID }?.name ?? (letter == "A" ? "Earlier location" : "Later location"), coordinate: endpoint.coordinate, symbol: "circle.fill", colorIndex: letter == "A" ? 1 : 0, letter: letter))
+                    }
                 }
             }
         }

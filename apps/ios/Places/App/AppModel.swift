@@ -584,7 +584,7 @@ final class AppModel {
         do {
             let edit = item.map {
                 var edit = UserOverride(start: $0.start, end: max($0.end ?? Date(), $0.start.addingTimeInterval(1)),
-                                        kind: .stay, placeID: place.id)
+                                        kind: .stay, placeID: place.id, mode: $0.kind == .stay ? $0.mode : .unknown)
                 edit.coordinate = place.coordinate
                 return edit
             }
@@ -624,6 +624,18 @@ final class AppModel {
             try await store?.correct(UserOverride(start: item.start, end: max(end, item.start.addingTimeInterval(1)),
                                                  kind: kind, placeID: placeID, mode: mode))
             await refresh(); return true
+        } catch { fail("Could not save this correction. Please try again."); return false }
+    }
+    func passingThrough(_ item: TimelineItem) async -> Bool {
+        guard let store else { return false }
+        do {
+            let edit = try await store.passingThrough(item)
+            deleteUndo.register("Kept as part of your route") { [weak self] in
+                try await store.undoCorrection(id: edit.id)
+                await self?.refresh()
+            }
+            await refresh()
+            return true
         } catch { fail("Could not save this correction. Please try again."); return false }
     }
     func search() async {

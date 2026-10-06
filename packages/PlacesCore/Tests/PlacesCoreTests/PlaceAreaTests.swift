@@ -77,8 +77,8 @@ private let concave = [point(0, 0), point(0.02, 0), point(0.02, 0.005), point(0.
     var place = Place(name: "Fixture park", coordinate: coordinate, area: PlaceArea(vertices: concave))
     let observations = [
         SensorObservation(timestamp: time, source: .location, coordinate: coordinate, horizontalAccuracy: 8),
-        SensorObservation(timestamp: time.addingTimeInterval(10), source: .regionExit, monitoredPlaceID: place.id),
-        SensorObservation(timestamp: time.addingTimeInterval(20), source: .location, coordinate: coordinate, horizontalAccuracy: 8)
+        SensorObservation(timestamp: time.addingTimeInterval(190), source: .regionExit, monitoredPlaceID: place.id),
+        SensorObservation(timestamp: time.addingTimeInterval(180), source: .location, coordinate: coordinate, horizontalAccuracy: 8)
     ]
     let areaTimeline = InferenceEngine.infer(observations: observations, places: [place])
     #expect(areaTimeline.count == 1 && areaTimeline.first?.kind == .stay)

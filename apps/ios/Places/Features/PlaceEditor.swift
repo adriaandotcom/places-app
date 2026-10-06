@@ -20,6 +20,7 @@ struct PlaceEditor: View {
     @State private var coordinate: Coordinate?
     @State private var radius: Double
     @State private var area: PlaceArea?
+    @State private var countsWalksAsVisits: Bool
     @State private var choosingArea = false
     @State private var symbol: String
     @State private var tripRole: PlaceTripRole
@@ -85,6 +86,7 @@ struct PlaceEditor: View {
         _coordinate = State(initialValue: point)
         _radius = State(initialValue: place?.radius ?? 100)
         _area = State(initialValue: place?.area)
+        _countsWalksAsVisits = State(initialValue: place?.countsWalksAsVisits == true)
         _symbol = State(initialValue: place?.symbol ?? suggestion?.symbol ?? PlaceIconMatcher.suggestedSymbol(name: suggestedName) ?? "mappin")
         _userChoseIcon = State(initialValue: place != nil)
         _tripRole = State(initialValue: place?.tripRole ?? .automatic)
@@ -169,6 +171,16 @@ struct PlaceEditor: View {
                     TextField("Country (optional)", text: $country).accessibilityIdentifier("place-country").focused($focusedField, equals: .country)
                     NavigationLink("Apple Location Details…") { CityLookupSettings() }
                 }
+            }
+            Section {
+                Toggle("Count walks as visits", isOn: $countsWalksAsVisits)
+                    .accessibilityIdentifier("count-walks-as-visits")
+            } footer: {
+                Text(countsWalksAsVisits
+                    ? "Walking inside this place for three minutes counts as a visit. Cycling through stays part of your route. Requires Motion & Fitness access."
+                    : (symbol == "tree.fill" || catalogCategory?.localizedCaseInsensitiveContains("park") == true)
+                        ? "For parks, you can count a walk as a visit without stopping."
+                        : "Visits normally start after three minutes with little movement.")
             }
             Section("Location") {
                 LabeledContent("Address") {
@@ -455,6 +467,7 @@ struct PlaceEditor: View {
         var place = Place(id: original?.id ?? UUID().uuidString, name: name.trimmingCharacters(in: .whitespacesAndNewlines), address: address,
             coordinate: point, radius: radius, symbol: symbol, colorIndex: colorIndex,
             expectedSSIDs: wifi.names, createdAt: original?.createdAt ?? Date(), catalogReference: catalogReference, locality: savedLocality, tripRole: tripRole, area: area, customColorHex: customColorHex, userEditedAt: original?.userEditedAt, mergedPlaceIDs: original?.mergedPlaceIDs, photoJPEG: photoJPEG)
+        place.countsWalksAsVisits = countsWalksAsVisits ? true : nil
         if original?.tripRole == nil && tripRole == .automatic { place.tripRole = nil }
         if original != place { place.userEditedAt = Date() }
         return place

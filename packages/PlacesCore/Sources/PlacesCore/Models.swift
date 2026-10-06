@@ -93,6 +93,8 @@ public struct SensorObservation: Codable, Identifiable, Hashable, Sendable {
     public var policyVersion: String
     public var companionDevice: ObservationDevice?
     public var companionDeviceID: String?
+    /// Duration explicitly reported by a system visit callback, not GPS silence.
+    public var systemVisitDuration: TimeInterval?
 
     public init(id: String = UUID().uuidString, timestamp: Date, source: ObservationSource,
                 coordinate: Coordinate? = nil, coordinateTimestamp: Date? = nil,
@@ -143,6 +145,8 @@ public struct Place: Codable, Identifiable, Hashable, Sendable {
     public var userEditedAt: Date?
     public var mergedPlaceIDs: [String]?
     public var photoJPEG: Data?
+    /// Nil in older backups; walks count only after the user opts in.
+    public var countsWalksAsVisits: Bool?
     public init(id: String = UUID().uuidString, name: String, address: String = "", coordinate: Coordinate,
                 radius: Double = 100, symbol: String = "mappin", colorIndex: Int = 0,
                 expectedSSIDs: [String] = [], createdAt: Date = Date(), catalogReference: PlaceCatalogReference? = nil, locality: PlaceLocality? = nil, tripRole: PlaceTripRole? = nil, area: PlaceArea? = nil, customColorHex: String? = nil, userEditedAt: Date? = nil, mergedPlaceIDs: [String]? = nil, photoJPEG: Data? = nil) {
@@ -206,6 +210,7 @@ public struct TimelineItem: Codable, Identifiable, Hashable, Sendable {
         self.mode = mode; self.reasons = reasons; self.evidenceIDs = evidenceIDs
         self.isUserEdited = isUserEdited; self.lastEvidenceAt = lastEvidenceAt; self.coordinate = coordinate
     }
+    public var recordsRoute: Bool { kind == .journey || (kind == .stay && mode == .walking) }
     public func duration(until now: Date = Date()) -> TimeInterval { max(0, (end ?? now).timeIntervalSince(start)) }
 
     // Presentation metadata. Inferred records and raw observations remain intact.

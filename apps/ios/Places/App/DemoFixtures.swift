@@ -155,6 +155,7 @@ enum DemoFixtures {
         let home = Place(id: "gap-home", name: "Home", coordinate: Coordinate(latitude: 1, longitude: 1), symbol: "house.fill")
         try await store.savePlace(home)
         try await store.append([SensorObservation(timestamp: start, source: .visitArrival, coordinate: home.coordinate, horizontalAccuracy: 10),
+            SensorObservation(timestamp: start.addingTimeInterval(180), source: .location, coordinate: home.coordinate, horizontalAccuracy: 10),
             SensorObservation(timestamp: start.addingTimeInterval(1100), source: .location, coordinate: home.coordinate, horizontalAccuracy: 10)])
         try await store.correct(UserOverride(start: start.addingTimeInterval(300), end: start.addingTimeInterval(600), kind: .gap))
         return calendar.startOfDay(for: start)
@@ -168,7 +169,7 @@ enum DemoFixtures {
             let start = Calendar.current.date(byAdding: .day, value: -daysAgo, to: today)!
             try await store.append([
                 SensorObservation(timestamp: start, source: .visitArrival, coordinate: home.coordinate, horizontalAccuracy: 10),
-                SensorObservation(timestamp: start.addingTimeInterval(120), source: .visitDeparture, coordinate: home.coordinate, horizontalAccuracy: 10)
+                SensorObservation(timestamp: start.addingTimeInterval(300), source: .visitDeparture, coordinate: home.coordinate, horizontalAccuracy: 10)
             ])
         }
     }
@@ -182,8 +183,8 @@ enum DemoFixtures {
                 coordinate: learnsLocation ? home.coordinate : nil, horizontalAccuracy: learnsLocation ? 10 : nil,
                 ssid: "Fixture Wi-Fi", bssid: "02:00:00:00:00:01")
         }
-        try await store.append([wifi(-600, learnsLocation: true), wifi(42),
-            SensorObservation(timestamp: start.addingTimeInterval(1314), source: .recovery), wifi(1315)])
+        try await store.append([wifi(-600, learnsLocation: true), wifi(-420), wifi(42),
+            SensorObservation(timestamp: start.addingTimeInterval(1314), source: .recovery), wifi(1315), wifi(1495)])
     }
 
     static func seedGroupedHistory(_ store: PlacesStore) async throws {
@@ -196,7 +197,7 @@ enum DemoFixtures {
         }
         try await store.append([
             fix(0, coordinate: Coordinate(latitude: 1, longitude: 1.01)), fix(1800), fix(2000),
-            SensorObservation(timestamp: start.addingTimeInterval(2001), source: .recovery), fix(2010), fix(2100)
+            SensorObservation(timestamp: start.addingTimeInterval(2001), source: .recovery), fix(2010), fix(2190)
         ])
         try await store.correct(UserOverride(start: start.addingTimeInterval(2000), end: start.addingTimeInterval(2010),
                                             kind: .stay, placeID: home.id))
@@ -210,6 +211,7 @@ enum DemoFixtures {
         let start = Date().addingTimeInterval(-600)
         try await store.append([
             SensorObservation(timestamp: start, source: .visitArrival, coordinate: coordinate, horizontalAccuracy: 10),
+            SensorObservation(timestamp: start.addingTimeInterval(180), source: .location, coordinate: coordinate, horizontalAccuracy: 10),
             SensorObservation(timestamp: start.addingTimeInterval(300), source: .location, coordinate: coordinate, horizontalAccuracy: 10)
         ])
     }
@@ -241,6 +243,15 @@ enum DemoFixtures {
         }
         values += [sample(12.45, cafe.coordinate), sample(13.25, cafe.coordinate),
                    SensorObservation(timestamp: start.addingTimeInterval(14 * 3600 * scale), source: .recovery), sample(14.1, studio.coordinate)]
+        // Each fixture stop includes a real confirmation interval; isolated
+        // location membership must not bypass the production dwell rule.
+        for (hours, coordinate) in [(0.0, home.coordinate), (9, studio.coordinate), (12.45, cafe.coordinate), (14.1, studio.coordinate)] {
+            var fix = sample(hours, coordinate)
+            fix.id = UUID().uuidString
+            fix.timestamp = fix.timestamp.addingTimeInterval(180)
+            fix.coordinateTimestamp = fix.timestamp
+            values.append(fix)
+        }
         try await store.append(values)
     }
 }

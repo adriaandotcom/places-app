@@ -4,6 +4,47 @@ import PlacesCore
 @testable import Places
 
 @MainActor final class OfflineMapTests: XCTestCase {
+    func testWalkingVisitShowsItsPlaceAndRecordedPath() async throws {
+        let date = Date(timeIntervalSince1970: 1_735_689_600)
+        var place = Place(name: "Fixture park", coordinate: .init(latitude: 0, longitude: 0), radius: 500)
+        place.countsWalksAsVisits = true
+        let store = try PlacesStore()
+        try await store.savePlace(place)
+        let samples = [0, 90, 180].map { second in
+            SensorObservation(timestamp: date.addingTimeInterval(Double(second)), source: .location,
+                coordinate: .init(latitude: 0, longitude: Double(second) / 100_000), horizontalAccuracy: 10,
+                speed: 1, motion: .walking)
+        }
+        try await store.append(samples)
+        let visits = try await store.timeline(on: date)
+        let points = try await store.routePoints(from: date, to: date.addingTimeInterval(180))
+        let map = MapPresentation(items: visits, routePoints: points, places: [place])
+        XCTAssertEqual(map.pins.first?.placeID, place.id)
+        XCTAssertEqual(map.paths.first?.coordinates, samples.compactMap(\.coordinate))
+        XCTAssertEqual(map.paths.first?.dashed, false)
+    }
+
+    func testGroupedParkWalkDoesNotDrawThroughAnUnrecordedInterval() async throws {
+        let date = Date(timeIntervalSince1970: 1_735_689_600)
+        var place = Place(name: "Fixture park", coordinate: .init(latitude: 0, longitude: 0), radius: 500)
+        place.countsWalksAsVisits = true
+        let store = try PlacesStore()
+        try await store.savePlace(place)
+        let samples = [0, 90, 180, 240, 330, 420].map { second in
+            SensorObservation(timestamp: date.addingTimeInterval(Double(second)), source: .location,
+                coordinate: .init(latitude: 0, longitude: Double(second) / 100_000), horizontalAccuracy: 10,
+                speed: 1, motion: .walking)
+        }
+        try await store.append(samples + [SensorObservation(timestamp: date.addingTimeInterval(181), source: .recovery)])
+        let visits = try await store.timeline(on: date)
+        XCTAssertEqual(visits.count, 1)
+        XCTAssertEqual(visits.first?.originalItems?.count, 3)
+        let points = try await store.routePoints(from: date, to: date.addingTimeInterval(420))
+        let map = MapPresentation(items: visits, routePoints: points, places: [place])
+        XCTAssertEqual(map.paths.count, 2)
+        XCTAssertEqual(map.paths.map { $0.coordinates.count }, [3, 3])
+    }
+
     func testRawMapPreservesInaccurateAndCoincidentPointsWithoutInventingARoute() throws {
         let start = Date(timeIntervalSince1970: 1_735_732_800)
         let point = Coordinate(latitude: 1, longitude: 1)

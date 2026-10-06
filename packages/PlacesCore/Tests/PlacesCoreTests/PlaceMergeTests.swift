@@ -27,6 +27,8 @@ import Testing
     try await store.append([
         SensorObservation(id: "arrival", timestamp: date, source: .wifi, coordinate: old.coordinate,
             horizontalAccuracy: 5, ssid: "Fixture WiFi", bssid: "02:00:00:00:00:01"),
+        SensorObservation(id: "confirmation", timestamp: date.addingTimeInterval(180), source: .wifi,
+            ssid: "Fixture WiFi", bssid: "02:00:00:00:00:01"),
         SensorObservation(id: "exit", timestamp: date.addingTimeInterval(600), source: .regionExit, monitoredPlaceID: old.id)
     ])
     let correction = UserOverride(id: "imported-visit", start: date.addingTimeInterval(3600), end: date.addingTimeInterval(4200),

@@ -25,8 +25,9 @@ public struct SensorPolicy: Equatable, Sendable {
 }
 
 public enum TrackingPolicy {
-    public static let version = "1.8"
+    public static let version = "1.9"
     public static let stationaryDuration: TimeInterval = 180
+    public static let confirmationEvidenceGap: TimeInterval = 4 * 60
     public static let evidenceGap: TimeInterval = 20 * 60
     public static let stationaryRadius: Double = 60
 

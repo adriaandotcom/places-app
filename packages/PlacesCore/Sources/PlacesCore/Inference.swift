@@ -4,6 +4,17 @@ public enum InferenceEngine {
     public static func infer(observations: [SensorObservation], places: [Place], networks: [WiFiNetwork] = [],
                              accessPoints: [WiFiAccessPoint] = []) -> [TimelineItem] {
         let sorted = CompanionEvidence.selected(observations, places: places, networks: networks, accessPoints: accessPoints)
+        // Older observations stored the two CLVisit boundaries separately.
+        var arrivals: [String: SensorObservation] = [:]
+        var reportedDurations: [String: TimeInterval] = [:]
+        for observation in sorted where observation.source == .visitArrival || observation.source == .visitDeparture {
+            guard let coordinate = observation.usableCoordinate else { continue }
+            let key = "\(observation.companionDeviceID ?? "iphone")-\(coordinate.latitude)-\(coordinate.longitude)"
+            if observation.source == .visitArrival { arrivals[key] = observation }
+            else if let arrival = arrivals.removeValue(forKey: key) {
+                reportedDurations[arrival.id] = observation.timestamp.timeIntervalSince(arrival.timestamp)
+            }
+        }
         var result: [TimelineItem] = []
         var current: TimelineItem?
         var stationaryAnchor: SensorObservation?
@@ -12,6 +23,7 @@ public enum InferenceEngine {
         var latestMotion: MotionKind = .unknown
         var motionTime = Date.distantPast
         var activeDevice: String?
+        var confirmation = VisitConfirmation()
 
         func close(at time: Date) {
             guard var item = current else { return }
@@ -27,7 +39,8 @@ public enum InferenceEngine {
         }
         func addEvidence(_ observation: SensorObservation) {
             guard current != nil else { return }
-            current?.lastEvidenceAt = observation.timestamp
+            let lastEvidenceAt = max(current!.lastEvidenceAt, observation.timestamp)
+            current?.lastEvidenceAt = lastEvidenceAt
             if current?.evidenceIDs.contains(observation.id) == false { current?.evidenceIDs.append(observation.id) }
         }
 
@@ -49,7 +62,7 @@ public enum InferenceEngine {
                         start(.gap, at: boundary, observation: observation,
                               reason: "The evidence changes device; no route establishes this interval.")
                     }
-                    stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+                    stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []; confirmation.reset()
                     latestMotion = .unknown; motionTime = .distantPast
                 }
                 activeDevice = device
@@ -57,7 +70,7 @@ public enum InferenceEngine {
             // Phone motion does not describe a Mac or Watch location.
             if observation.usableCoordinate == nil && wifiPlace == nil && observation.companionDevice == nil,
                activeDevice != nil && activeDevice != "iphone" { continue }
-            if let motion = observation.motion { latestMotion = motion; motionTime = time }
+            if let motion = observation.motion { latestMotion = motion; motionTime = time; confirmation.motionChanged(motion) }
             let motion = time.timeIntervalSince(motionTime) <= 300 ? latestMotion : .unknown
 
             if [.recovery, .paused, .resumed].contains(observation.source) {
@@ -68,7 +81,7 @@ public enum InferenceEngine {
                 } else if current == nil {
                     start(.gap, at: time, observation: observation, reason: "Waiting for location evidence.")
                 }
-                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []; confirmation.reset()
                 continue
             }
 
@@ -87,7 +100,7 @@ public enum InferenceEngine {
                 close(at: time)
                 start(.journey, at: time, observation: observation, mode: TrackingPolicy.mode(for: motion),
                       reason: "A departure was observed; the route is recorded only where fixes are available.")
-                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []; confirmation.reset()
                 continue
             }
 
@@ -101,7 +114,7 @@ public enum InferenceEngine {
                 let boundary = item.lastEvidenceAt
                 close(at: boundary)
                 start(.gap, at: boundary, observation: observation, reason: "No observations establish this interval.")
-                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []; confirmation.reset()
             }
 
             if let item = current, item.kind != .stay,
@@ -114,39 +127,66 @@ public enum InferenceEngine {
                     close(at: boundary)
                     start(.gap, at: boundary, observation: observation, reason: "No observations establish this interval.")
                 }
-                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
+                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []; confirmation.reset()
             }
 
             let place = wifiPlace ?? TrackingPolicy.matchingPlace(for: observation, places: places)
             let wifiReason = "Connected to an access point previously learned at this place."
 
-            if let place {
-                stationaryAnchor = nil; departureCandidate = nil; stationaryEvidence = []
-                if current?.kind == .stay && current?.placeID == place.id {
-                    addEvidence(observation)
-                    if wifiPlace != nil, current?.reasons.contains(wifiReason) == false {
-                        current?.reasons.append(wifiReason)
-                    }
+            let drivingOrCycling = [.cycling, .automotive].contains(motion)
+            if let place, current?.kind == .stay, current?.placeID == place.id, !drivingOrCycling {
+                addEvidence(observation)
+                if wifiPlace != nil, current?.reasons.contains(wifiReason) == false { current?.reasons.append(wifiReason) }
+                continue
+            }
+
+            if current?.kind == .stay, current?.placeID == nil, place == nil, !drivingOrCycling,
+               let anchor = stationaryAnchor, TrackingPolicy.sameStationaryArea(anchor, observation) {
+                addEvidence(observation)
+                continue
+            }
+            let confirmed = confirmation.observe(observation, place: place, connectedPlace: wifiPlace, motion: motion)
+            let reportedVisit = observation.source == .visitArrival
+                && max(observation.systemVisitDuration ?? 0, reportedDurations[observation.id] ?? 0) >= TrackingPolicy.stationaryDuration
+            if reportedVisit || confirmed != nil {
+                let first = confirmed?.first ?? observation
+                let boundary = max(current?.start ?? first.timestamp, first.timestamp)
+                close(at: boundary)
+                start(.stay, at: boundary, observation: first, place: place,
+                    mode: confirmed?.walking == true ? .walking : .unknown,
+                    reason: reportedVisit ? "iOS reported a visit lasting at least three minutes."
+                        : confirmed?.walking == true ? "Walking inside this place for at least three minutes. The walking route is retained."
+                        : "Fresh observations support at least three minutes with little movement.")
+                current?.evidenceIDs = confirmed?.evidenceIDs ?? [observation.id]
+                addEvidence(observation)
+                stationaryAnchor = first; stationaryEvidence = [first]; departureCandidate = nil
+                confirmation.reset()
+                continue
+            }
+            guard let coordinate = observation.usableCoordinate else {
+                // Fresh connected-network evidence advances confirmation even when
+                // GPS is unavailable; it cannot establish a measured route.
+                if current == nil {
+                    start(.gap, at: time, observation: observation, reason: "Waiting for enough evidence to confirm a stop.")
                 } else {
-                    close(at: time)
-                    start(.stay, at: time, observation: observation, place: place,
-                          reason: wifiPlace != nil ? wifiReason : "Location observations fall inside this place. Arrival and departure boundaries are estimates.")
+                    addEvidence(observation)
                 }
                 continue
             }
-            guard let coordinate = observation.usableCoordinate else { continue }
 
-            if observation.source == .visitArrival {
-                // A system-reported arrival establishes a stop even when it is
-                // displaced from the previous unnamed stop. Do not turn it into
-                // travel while waiting for a second displaced GPS sample.
-                let sameStop = current?.kind == .stay && current?.placeID == nil
-                    && stationaryAnchor.map { TrackingPolicy.sameStationaryArea($0, observation) } == true
-                if sameStop { addEvidence(observation) }
-                else {
-                    close(at: time)
-                    start(.stay, at: time, observation: observation, reason: "iOS reported an arrival at this location. This place has not been named.")
-                }
+            if current == nil,
+               VisitConfirmation.isMoving(motion) || (observation.speed ?? -1) >= 0.8 {
+                close(at: time)
+                start(.journey, at: time, observation: observation, mode: TrackingPolicy.mode(for: motion),
+                      reason: "Movement evidence supports travel; nearby places do not establish a stop.")
+                stationaryAnchor = observation; stationaryEvidence = [observation]; departureCandidate = nil
+                continue
+            }
+
+            if current?.kind == .stay, drivingOrCycling, (observation.speed ?? 0) >= 0.8 {
+                close(at: time)
+                start(.journey, at: time, observation: observation, mode: TrackingPolicy.mode(for: motion),
+                      reason: "Cycling or driving continues through this place.")
                 stationaryAnchor = observation; stationaryEvidence = [observation]; departureCandidate = nil
                 continue
             }
@@ -172,16 +212,8 @@ public enum InferenceEngine {
             if inSameArea {
                 departureCandidate = nil
                 stationaryEvidence.append(observation)
-                let duration = (observation.coordinateTimestamp ?? time).timeIntervalSince(anchor.coordinateTimestamp ?? anchor.timestamp)
-                let stationary = duration >= TrackingPolicy.stationaryDuration
-                if current?.kind == .stay && current?.placeID == nil {
+                if current?.kind == .stay {
                     addEvidence(observation)
-                } else if stationary {
-                    let boundary = max(current?.start ?? anchor.timestamp, anchor.timestamp)
-                    close(at: boundary)
-                    start(.stay, at: boundary, observation: anchor,
-                          reason: "Repeated locations remain in the same area. This place has not been named.")
-                    for evidence in stationaryEvidence { addEvidence(evidence) }
                 } else if current?.kind == .journey {
                     addEvidence(observation)
                 } else if current?.kind == .gap {

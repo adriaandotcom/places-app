@@ -87,8 +87,8 @@ private func stay(_ id: String, _ start: Double, _ end: Double, _ place: String?
     let store = try PlacesStore(path: path)
     try await store.savePlace(Place(id: "a", name: "Fixture", coordinate: point))
     func fix(_ seconds: Double) -> SensorObservation { SensorObservation(timestamp: moment(seconds), source: .location, coordinate: point, horizontalAccuracy: 10) }
-    try await store.append([fix(0), fix(100), SensorObservation(timestamp: moment(101), source: .recovery), fix(110)])
-    try await store.correct(UserOverride(start: moment(100), end: moment(110), kind: .stay, placeID: "a"))
+    try await store.append([fix(0), fix(200), SensorObservation(timestamp: moment(201), source: .recovery), fix(220), fix(400)])
+    try await store.correct(UserOverride(start: moment(200), end: moment(220), kind: .stay, placeID: "a"))
     let combined = try #require(await store.timeline(on: epoch).first)
     let originals = try #require(combined.originalItems)
     #expect(originals.count == 3)
@@ -97,7 +97,7 @@ private func stay(_ id: String, _ start: Double, _ end: Double, _ place: String?
     let result = try await reopened.timeline(on: epoch)
     #expect(result.count == 2)
     #expect(result.last?.originalItems?.count == 2)
-    #expect(try await reopened.observations().count == 4)
+    #expect(try await reopened.observations().count == 5)
 }
 
 @Test func localityIsBackwardCompatibleAndDoesNotOverwriteConcurrentManualEdits() async throws {

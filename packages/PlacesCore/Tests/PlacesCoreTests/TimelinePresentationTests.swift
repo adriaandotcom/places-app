@@ -155,25 +155,25 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
         SensorObservation(timestamp: midnight.addingTimeInterval(seconds), source: .location,
                           coordinate: origin, horizontalAccuracy: 10)
     }
-    let observations = [location(-1800), location(3100),
-        SensorObservation(timestamp: midnight.addingTimeInterval(3108), source: .recovery), location(3109),
-        SensorObservation(timestamp: midnight.addingTimeInterval(30000), source: .recovery), location(30001)]
+    let observations = [location(-1800), location(-1620), location(3100),
+        SensorObservation(timestamp: midnight.addingTimeInterval(3108), source: .recovery), location(3109), location(3289),
+        SensorObservation(timestamp: midnight.addingTimeInterval(30000), source: .recovery), location(30001), location(30181)]
     try await store.append(observations)
     let fixture = try InferenceTestCase.decode(await store.exportTestCase())
     let inferred = InferenceEngine.infer(observations: observations, places: fixture.input.places)
-    #expect(inferred.map(\.kind) == [.stay, .gap, .gap, .stay])
+    #expect(inferred.map(\.kind) == [.stay, .gap, .stay, .gap, .stay])
     let today = try await store.timeline(on: midnight, calendar: calendar)
     #expect(today.count == 1)
     let combined = try #require(today.first)
     #expect(combined.start == midnight && combined.placeID == "home")
     #expect(combined.end == calendar.dateInterval(of: .day, for: midnight)?.end)
     #expect(combined.originalItems?.last?.end == nil)
-    #expect(combined.originalItems?.map(\.kind) == [.stay, .gap, .gap, .stay])
-    #expect(combined.unrecordedDuration == 26901)
+    #expect(combined.originalItems?.map(\.kind) == [.stay, .gap, .stay, .gap, .stay])
+    #expect(combined.unrecordedDuration == 26721)
     #expect(fixture.replay() == fixture.expectedTimeline)
     try await store.split(combined)
     let split = try await store.timeline(on: midnight, calendar: calendar)
-    #expect(split.map(\.kind) == [.stay, .gap, .gap, .stay])
+    #expect(split.map(\.kind) == [.stay, .gap, .stay, .gap, .stay])
     #expect(split.filter { $0.kind == .gap }.allSatisfy { $0.connection == nil })
     #expect(try await store.observations() == observations.reversed())
 }
@@ -189,21 +189,21 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
             coordinate: learnsLocation ? origin : nil, horizontalAccuracy: learnsLocation ? 10 : nil,
             ssid: "Fixture Wi-Fi", bssid: "02:00:00:00:00:01")
     }
-    try await store.append([wifi(-1800, learnsLocation: true), wifi(-600),
-        SensorObservation(timestamp: midnight.addingTimeInterval(41), source: .recovery), wifi(42), wifi(43),
-        SensorObservation(timestamp: midnight.addingTimeInterval(1314), source: .recovery), wifi(1315)])
+    try await store.append([wifi(-1800, learnsLocation: true), wifi(-1620), wifi(-600),
+        SensorObservation(timestamp: midnight.addingTimeInterval(41), source: .recovery), wifi(42), wifi(43), wifi(222),
+        SensorObservation(timestamp: midnight.addingTimeInterval(1314), source: .recovery), wifi(1315), wifi(1495)])
     let today = try await store.timeline(on: midnight, calendar: calendar)
     #expect(today.count == 1)
     let item = try #require(today.first)
     #expect(item.start == midnight && item.placeID == home.id)
     // The earlier recovery crosses midnight: count only today's missing coverage.
-    #expect(item.unrecordedDuration == 1314)
+    #expect(item.unrecordedDuration == 1135)
     #expect(item.originalItems?.filter { $0.kind == .gap }.count == 2)
     try await store.split(item)
     let split = try await store.timeline(on: midnight, calendar: calendar)
     #expect(split.map(\.kind) == [.gap, .stay, .gap, .stay])
     #expect(split.filter { $0.kind == .gap }.allSatisfy { $0.connection == nil })
-    #expect(try await store.observations().count == 7)
+    #expect(try await store.observations().count == 10)
 }
 
 @Test func groupingDoesNotConfuseDifferentPlacesOrHideATrip() {
@@ -226,8 +226,8 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
         SensorObservation(timestamp: midnight.addingTimeInterval(seconds), source: .location,
                           coordinate: origin, horizontalAccuracy: 10)
     }
-    try await store.append([location(85800), location(86300),
-        SensorObservation(timestamp: midnight.addingTimeInterval(87600), source: .recovery), location(87601)])
+    try await store.append([location(85800), location(85980), location(86300),
+        SensorObservation(timestamp: midnight.addingTimeInterval(87600), source: .recovery), location(87601), location(87781)])
     let joined = try await store.timeline(on: midnight, calendar: calendar)
     #expect(joined.count == 1 && joined[0].kind == .stay)
     #expect(joined[0].unrecordedDuration == 100)
@@ -272,17 +272,17 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
     defer { try? FileManager.default.removeItem(atPath: path) }
     let store = try PlacesStore(path: path)
     try await store.savePlace(Place(id: "home", name: "Fixture Home", coordinate: origin))
-    try await store.append([fix(0), fix(100), SensorObservation(timestamp: at(101), source: .recovery), fix(110)])
-    try await store.correct(UserOverride(start: at(100), end: at(110), kind: .stay, placeID: "home"))
+    try await store.append([fix(0), fix(200), SensorObservation(timestamp: at(201), source: .recovery), fix(220), fix(400)])
+    try await store.correct(UserOverride(start: at(200), end: at(220), kind: .stay, placeID: "home"))
     let combined = try #require(await store.timeline(on: day).first)
     #expect(combined.originalItems?.count == 3)
     try await store.split(combined)
-    try await store.append([fix(300)])
+    try await store.append([fix(500)])
     let reopened = try PlacesStore(path: path)
     let split = try await reopened.timeline(on: day)
     #expect(split.count == 3 && split.allSatisfy { $0.isSeparated == true })
     #expect(split[1].isUserEdited)
-    #expect(try await reopened.observations().count == 5)
+    #expect(try await reopened.observations().count == 6)
     let fixture = try InferenceTestCase.decode(await reopened.exportTestCase())
     #expect(fixture.input.separatedAt?.count == 2)
     #expect(fixture.replay() == fixture.expectedTimeline)
@@ -332,16 +332,18 @@ private func fix(_ seconds: Double, coordinate: Coordinate = origin) -> SensorOb
         return value
     }
     let observations = [observation(0, watch: false, longitude: 0, speed: 0),
-        observation(60, watch: false, longitude: 0.001, speed: 1.2),
-        observation(600, watch: true, longitude: 0.002, speed: 1.3),
+        observation(180, watch: false, longitude: 0.0001, speed: 0),
+        observation(600, watch: true, longitude: 0.002, speed: 0),
+        observation(780, watch: true, longitude: 0.002, speed: 0),
         observation(900, watch: true, longitude: 0.001, speed: 1.0),
-        observation(1500, watch: false, longitude: 0.001, speed: 0)]
+        observation(1500, watch: false, longitude: 0.001, speed: 0),
+        observation(1680, watch: false, longitude: 0.001, speed: 0)]
     let inferred = InferenceEngine.infer(observations: observations, places: [place])
     #expect(inferred.map(\.kind) == [.stay, .gap, .stay, .gap, .stay])
     let joined = TimelinePresentation.make(items: inferred, observations: observations, places: [place])
     #expect(joined.count == 1 && joined[0].end == nil)
     #expect(joined[0].originalItems == inferred)
-    #expect(joined[0].unrecordedDuration == 1140)
+    #expect(joined[0].unrecordedDuration == 1020)
     var outside = observations
     outside[2].coordinate = .init(latitude: 0, longitude: 0.01)
     #expect(TimelinePresentation.make(items: inferred, observations: outside, places: [place]).count > 1)
