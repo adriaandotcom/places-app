@@ -248,7 +248,8 @@ private struct VisitEvidenceView: View {
                                 }
                             }.padding(.vertical, Layout.compact)
                                 .accessibilityIdentifier("evidence-observation-\(observation.id)")
-                        }
+                        }.disclosureGroupStyle(EvidenceDisclosureStyle())
+                            .listRowSeparator(.hidden)
                     }
                     if observations.count < Set(item.evidenceIDs).count {
                         Text("Some referenced observations are no longer available.").foregroundStyle(Palette.muted)
@@ -272,6 +273,25 @@ private struct VisitEvidenceView: View {
         return observation.timestamp.formatted(style)
     }
     private func sourceName(_ source: ObservationSource) -> String { source.displayName }
+}
+
+private struct EvidenceDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { configuration.isExpanded.toggle() } label: {
+                HStack(spacing: Layout.compact) {
+                    configuration.label
+                    Spacer(minLength: Layout.compact)
+                    Image(systemName: configuration.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
+            if configuration.isExpanded {
+                VStack(alignment: .leading, spacing: Layout.compact) { configuration.content }
+            }
+        }
+    }
 }
 
 extension ObservationSource {

@@ -31,15 +31,9 @@ struct RecordedLocationPreview: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.compact) {
-            PrivacyMapView(customPresentation: presentation, retainedViewport: $viewport)
-                .frame(height: Layout.mapHeight)
-                .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
-            if let accuracy = presentation.radius {
-                LabeledContent("Location accuracy", value: "±\(accuracy.formatted(.number.precision(.fractionLength(0)))) m")
-                    .font(.caption).foregroundStyle(Palette.muted)
-            }
-        }
+        PrivacyMapView(customPresentation: presentation, retainedViewport: $viewport)
+            .frame(height: Layout.mapHeight)
+            .clipShape(RoundedRectangle(cornerRadius: Layout.cardRadius))
     }
 }
 

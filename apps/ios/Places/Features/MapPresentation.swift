@@ -73,9 +73,10 @@ struct MapPresentation: Equatable, Sendable {
     init(pins: [MapPin], radius: Double? = nil) { self.pins = pins; self.radius = radius }
     init(recordedCoordinate: Coordinate, accuracy: Double?) {
         guard recordedCoordinate.isValid else { return }
-        pins = [MapPin(id: "recorded-location", name: "Recorded location", coordinate: recordedCoordinate,
-            symbol: "circle.fill", colorIndex: 1, isRecordedLocation: true)]
         radius = accuracy.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        let name = radius.map { "Recorded location, accuracy ±\($0.formatted(.number.precision(.fractionLength(0)))) m" } ?? "Recorded location"
+        pins = [MapPin(id: "recorded-location", name: name, coordinate: recordedCoordinate,
+            symbol: "circle.fill", colorIndex: 1, isRecordedLocation: true)]
         minimumSpanMeters = 100
     }
     init(observations: [SensorObservation], photos: [PhotoLocationEvidence] = []) {
