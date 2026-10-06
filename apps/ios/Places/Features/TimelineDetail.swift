@@ -45,7 +45,7 @@ struct TimelineDetail: View {
                     Text("\(Text(Display.range(item)).font(BrandFont.title)) · \(Text(item.start.formatted(date: .abbreviated, time: .omitted)).font(.subheadline))")
                         .accessibilityIdentifier("visit-time-date")
                     if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: Layout.compact) }
-                    Text(Display.duration(item.duration())).font(.subheadline).foregroundStyle(Palette.muted)
+                    Text(Display.duration(item.duration(), ongoing: item.end == nil)).font(.subheadline).foregroundStyle(Palette.muted)
                 }
                 if isUnnamedStay || item.kind == .gap {
                     Button(isUnnamedStay ? "Name this place" : "Add a missing visit") {

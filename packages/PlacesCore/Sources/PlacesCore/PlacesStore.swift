@@ -90,6 +90,10 @@ public actor PlacesStore {
             try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
+        migrator.registerMigration("v10-confirmed-departures") { db in
+            try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
+            try StoreSQL.rebuild(db: db, since: nil)
+        }
         try migrator.migrate(queue)
     }
 

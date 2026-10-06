@@ -125,6 +125,10 @@ public struct SensorObservation: Codable, Identifiable, Hashable, Sendable {
               let coordinateTimestamp, abs(timestamp.timeIntervalSince(coordinateTimestamp)) <= 120 else { return nil }
         return coordinate
     }
+    /// Fresh path evidence, excluding cached Wi-Fi coordinates and CLVisit centres.
+    var isMeasuredLocation: Bool {
+        [.location, .significantChange].contains(source) && usableCoordinate != nil
+    }
 }
 
 public struct Place: Codable, Identifiable, Hashable, Sendable {

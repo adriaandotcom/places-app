@@ -621,7 +621,7 @@ final class AppModel {
     func correct(_ item: TimelineItem, kind: TimelineKind, placeID: String? = nil, mode: TransportMode = .unknown) async -> Bool {
         do {
             let end = item.end ?? Date()
-            try await store?.correct(UserOverride(start: item.start, end: max(end, item.start.addingTimeInterval(1)),
+            try await store?.correct(UserOverride(start: item.start, end: end > item.start ? end : item.start.addingTimeInterval(1),
                                                  kind: kind, placeID: placeID, mode: mode))
             await refresh(); return true
         } catch { fail("Could not save this correction. Please try again."); return false }

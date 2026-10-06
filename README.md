@@ -54,6 +54,12 @@ each place also permits a three-minute walk within its area; cycling remains tra
 Walking visits retain their measured path, with recording gaps left unconnected.
 **Just passing through** converts a visit back to travel and supports Undo. Policy
 upgrades rebuild derived history while retaining raw observations and manual edits.
+Leaving an established stop requires two fresh displaced fixes at least 15 seconds
+apart, or a system departure event; an isolated speed spike cannot start a journey.
+Brief same-place returns are grouped only when recorded fixes support staying put,
+with their original intervals retained for inspection and splitting. One-second
+uncorrected edges of a transport correction join the corrected journey visually;
+the correction's exact interval remains unchanged.
 
 History uses protection compatible with recording after the first unlock, including
 database sidecars, and is excluded from automatic backups. Full exports contain

@@ -135,6 +135,7 @@ public enum InferenceEngine {
 
             let drivingOrCycling = [.cycling, .automotive].contains(motion)
             if let place, current?.kind == .stay, current?.placeID == place.id, !drivingOrCycling {
+                departureCandidate = nil
                 addEvidence(observation)
                 if wifiPlace != nil, current?.reasons.contains(wifiReason) == false { current?.reasons.append(wifiReason) }
                 continue
@@ -142,6 +143,7 @@ public enum InferenceEngine {
 
             if current?.kind == .stay, current?.placeID == nil, place == nil, !drivingOrCycling,
                let anchor = stationaryAnchor, TrackingPolicy.sameStationaryArea(anchor, observation) {
+                departureCandidate = nil
                 addEvidence(observation)
                 continue
             }
@@ -183,24 +185,6 @@ public enum InferenceEngine {
                 continue
             }
 
-            if current?.kind == .stay, drivingOrCycling, (observation.speed ?? 0) >= 0.8 {
-                close(at: time)
-                start(.journey, at: time, observation: observation, mode: TrackingPolicy.mode(for: motion),
-                      reason: "Cycling or driving continues through this place.")
-                stationaryAnchor = observation; stationaryEvidence = [observation]; departureCandidate = nil
-                continue
-            }
-
-            if let item = current, item.kind == .stay, item.placeID != nil,
-               let previous = item.coordinate, previous.distance(to: coordinate) > 250,
-               observation.speed.map({ $0 >= 0.8 }) == true || [.walking, .running, .cycling, .automotive].contains(motion) {
-                close(at: time)
-                start(.journey, at: time, observation: observation, mode: TrackingPolicy.mode(for: motion),
-                      reason: "Location and movement evidence establish departure from the saved place.")
-                stationaryAnchor = observation; stationaryEvidence = [observation]; departureCandidate = nil
-                continue
-            }
-
             // Lack of speed or motion is not evidence of travel. In particular,
             // connected Wi-Fi samples must not reset a stop or create a journey.
             if stationaryAnchor == nil {
@@ -208,7 +192,11 @@ public enum InferenceEngine {
                 stationaryEvidence = [observation]
             }
             let anchor = stationaryAnchor!
-            let inSameArea = TrackingPolicy.sameStationaryArea(anchor, observation)
+            // A Wi-Fi-only stay can have a place coordinate without a GPS anchor.
+            guard let anchorCoordinate = anchor.usableCoordinate ?? current?.coordinate else { continue }
+            let uncertainty = min(150, (anchor.horizontalAccuracy ?? 0) + (observation.horizontalAccuracy ?? 0))
+            let distance = anchorCoordinate.distance(to: coordinate)
+            let inSameArea = distance <= max(TrackingPolicy.stationaryRadius, uncertainty)
             if inSameArea {
                 departureCandidate = nil
                 stationaryEvidence.append(observation)
@@ -224,14 +212,17 @@ public enum InferenceEngine {
                           reason: "Waiting for enough locations to distinguish a stop from travel.")
                 }
             } else {
-                // Ignore a lone drifting fix. Require a second displaced sample,
-                // or a clear displacement with independent movement evidence.
-                let distance = anchor.usableCoordinate!.distance(to: coordinate)
-                let strongMovement = distance > 250 && (observation.speed.map { $0 >= 0.8 } == true
+                // An established stay needs two fresh displaced fixes. A speed
+                // spike or motion label alone cannot establish departure.
+                let confirmingDeparture = current?.kind == .stay
+                if confirmingDeparture && (!observation.isMeasuredLocation || (observation.horizontalAccuracy ?? .infinity) > 100) {
+                    continue
+                }
+                let strongMovement = !confirmingDeparture && distance > 250 && (observation.speed.map { $0 >= 0.8 } == true
                     || [.walking, .running, .cycling, .automotive].contains(motion))
                 let repeatedDeparture = departureCandidate.map {
-                    (observation.coordinateTimestamp ?? time).timeIntervalSince($0.coordinateTimestamp ?? $0.timestamp) >= 15
-                        && !TrackingPolicy.sameStationaryArea(anchor, $0)
+                    let elapsed = (observation.coordinateTimestamp ?? time).timeIntervalSince($0.coordinateTimestamp ?? $0.timestamp)
+                    return elapsed >= 15 && (!confirmingDeparture || elapsed <= TrackingPolicy.confirmationEvidenceGap)
                 } ?? false
                 if current?.kind == .journey || strongMovement || repeatedDeparture {
                     let departure = departureCandidate ?? observation
@@ -244,7 +235,9 @@ public enum InferenceEngine {
                     if current?.mode == .unknown { current?.mode = TrackingPolicy.mode(for: motion) }
                     stationaryAnchor = observation; stationaryEvidence = [observation]; departureCandidate = nil
                 } else {
-                    if departureCandidate == nil { departureCandidate = observation }
+                    if departureCandidate == nil || (confirmingDeparture && time.timeIntervalSince(departureCandidate!.timestamp) > TrackingPolicy.confirmationEvidenceGap) {
+                        departureCandidate = observation
+                    }
                 }
             }
 

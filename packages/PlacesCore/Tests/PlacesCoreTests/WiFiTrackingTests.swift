@@ -68,8 +68,13 @@ private func connection(_ seconds: Double = 0) -> SensorObservation {
     #expect(stopped[0].lastEvidenceAt == wifiEpoch.addingTimeInterval(180))
     let moving = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(330), source: .location,
         coordinate: .init(latitude: 1, longitude: 1.01), horizontalAccuracy: 10, speed: 4)
-    let journey = InferenceEngine.infer(observations: [connection(), connection(180), missing, moving], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    let unconfirmed = InferenceEngine.infer(observations: [connection(), connection(180), missing, moving], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
+    #expect(unconfirmed.map(\.kind) == [.stay])
+    let continued = SensorObservation(timestamp: wifiEpoch.addingTimeInterval(345), source: .location,
+        coordinate: .init(latitude: 1, longitude: 1.011), horizontalAccuracy: 10, speed: 4)
+    let journey = InferenceEngine.infer(observations: [connection(), connection(180), missing, moving, continued], places: [wifiHome], networks: [wifiNetwork], accessPoints: [wifiAP])
     #expect(journey.map(\.kind) == [.stay, .journey])
+    #expect(journey.last?.start == moving.timestamp)
 }
 
 @Test func wifiOnlyEvidencePersistsReplaysAndDoesNotBecomeRoutePoints() async throws {

@@ -158,9 +158,9 @@ struct InfoRow: View {
     }
 }
 enum Display {
-    static func duration(_ seconds: TimeInterval) -> String {
+    static func duration(_ seconds: TimeInterval, ongoing: Bool = false) -> String {
         let minutes = Int(max(0, seconds) / 60)
-        if minutes < 1 { return "Just now" }
+        if minutes < 1 { return ongoing ? "Just now" : "Less than 1 min" }
         if minutes < 60 { return "\(minutes) min" }
         let hours = minutes / 60, remainder = minutes % 60
         return remainder == 0 ? "\(hours) h" : "\(hours) h \(remainder) min"

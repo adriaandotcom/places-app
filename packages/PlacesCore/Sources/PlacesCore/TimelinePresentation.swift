@@ -11,12 +11,27 @@ public enum TimelinePresentation {
         var index = 0
         while index < originals.count {
             var members = [originals[index]]
+            var representative = originals[index]
             index += 1
             while index < originals.count {
                 let last = members.last!, next = originals[index]
                 guard touches(last, next), !boundaries.contains(next.start) else { break }
-                if compatible(members[0], next) {
+                if compatible(representative, next) {
                     members.append(next); index += 1
+                } else if let mode = correctionFragmentMode(last, next),
+                          members.allSatisfy({ !$0.isUserEdited || $0.mode == mode }) {
+                    // A later arrival can leave a subsecond unedited edge next
+                    // to a mode correction. Keep it available under Split.
+                    representative.mode = mode
+                    members.append(next); index += 1
+                } else if representative.kind == .stay, next.kind == .journey,
+                          !next.isUserEdited, let end = next.end,
+                          end.timeIntervalSince(next.start) < 60, index + 1 < originals.count,
+                          touches(next, originals[index + 1]), !boundaries.contains(end),
+                          compatible(representative, originals[index + 1]),
+                          supportsStationaryReturn(representative, during: next.start...end,
+                                                   observations: observations, places: places) {
+                    members.append(contentsOf: originals[index...index + 1]); index += 2
                 } else if members[0].kind == .stay, next.kind == .gap {
                     // Repeated recoveries can leave consecutive gaps without an intervening stay.
                     // Check the entire run before joining, and retain every original for splitting.
@@ -35,9 +50,10 @@ public enum TimelinePresentation {
                 } else { break }
             }
             var combined = members[0]
+            combined.mode = representative.mode
             if members.count > 1 {
                 combined.end = members.last!.end
-                if combined.kind == .stay, members.contains(where: \.recordsRoute) { combined.mode = .walking }
+                if combined.kind == .stay, members.contains(where: { $0.kind == .stay && $0.recordsRoute }) { combined.mode = .walking }
                 combined.lastEvidenceAt = members.map(\.lastEvidenceAt).max()!
                 combined.isUserEdited = members.contains(where: \.isUserEdited)
                 combined.evidenceIDs = Array(Set(members.flatMap(\.evidenceIDs))).sorted()
@@ -68,6 +84,34 @@ public enum TimelinePresentation {
             return a.distance(to: b) <= TrackingPolicy.stationaryRadius
         case .journey: return left.mode == right.mode
         case .gap: return true
+        }
+    }
+
+    private static func correctionFragmentMode(_ left: TimelineItem, _ right: TimelineItem) -> TransportMode? {
+        guard left.kind == .journey, right.kind == .journey, left.isUserEdited != right.isUserEdited,
+              !Set(left.evidenceIDs).isDisjoint(with: right.evidenceIDs) else { return nil }
+        let fragment = left.isUserEdited ? right : left
+        guard let end = fragment.end, end.timeIntervalSince(fragment.start) <= 1.001 else { return nil }
+        return left.isUserEdited ? left.mode : right.mode
+    }
+
+    private static func supportsStationaryReturn(_ stay: TimelineItem, during interval: ClosedRange<Date>,
+                                                 observations: [SensorObservation], places: [Place]) -> Bool {
+        guard let anchor = stay.coordinate ?? places.first(where: { $0.id == stay.placeID })?.coordinate else { return false }
+        let within = observations.filter { interval.contains($0.timestamp) }
+        guard !within.contains(where: { [.paused, .resumed, .recovery].contains($0.source)
+            || $0.motion == .walking || $0.motion == .running }) else { return false }
+        let fixes = within.filter(\.isMeasuredLocation)
+        // No fixes is missing coverage, not proof of staying. Visit centres and
+        // repeated cached Wi-Fi locations cannot establish a stationary return.
+        guard Set(fixes.map { $0.coordinateTimestamp ?? $0.timestamp }).count >= 2,
+              fixes.allSatisfy({ ($0.horizontalAccuracy ?? .infinity) <= 50 }),
+              Set(fixes.map { ($0.companionDevice?.rawValue ?? "iphone") + ($0.companionDeviceID ?? "") }).count == 1,
+              fixes.filter({ ($0.speed ?? -1) >= 0.8 }).count < 2 else { return false }
+        return within.allSatisfy { observation in
+            guard let coordinate = observation.usableCoordinate else { return true }
+            let uncertainty = min(100, observation.horizontalAccuracy ?? 0)
+            return anchor.distance(to: coordinate) <= max(TrackingPolicy.stationaryRadius, uncertainty)
         }
     }
 

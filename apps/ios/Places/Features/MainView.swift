@@ -148,7 +148,7 @@ struct TimelineRow: View {
                     Text(Display.range(item)).font(.subheadline).foregroundStyle(Palette.muted)
                     HStack(spacing: 5) {
                         if item.isUserEdited { Image(systemName: "checkmark.circle.fill") }
-                        Text(Display.duration(item.duration()))
+                        Text(Display.duration(item.duration(), ongoing: item.end == nil))
                     }.font(.caption.weight(.semibold)).foregroundStyle(Palette.ink)
                 }
                 Spacer(minLength: 0)
@@ -163,7 +163,7 @@ struct TimelineRow: View {
                     Image(systemName: item.kind == .gap ? (item.connection == nil ? "questionmark.circle" : "point.topleft.down.to.point.bottomright.curvepath") : item.mode.symbol)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.kind == .gap ? (item.connection == nil ? "An unknown interval" : "Between recorded locations") : item.mode.title).font(.subheadline.weight(.semibold))
-                        Text(Display.duration(item.duration())).font(.caption).foregroundStyle(Palette.muted)
+                        Text(Display.duration(item.duration(), ongoing: item.end == nil)).font(.caption).foregroundStyle(Palette.muted)
                         if item.kind == .gap && item.connection != nil {
                             Text("Path not recorded").font(.caption).foregroundStyle(Palette.muted)
                         }
