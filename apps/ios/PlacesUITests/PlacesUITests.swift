@@ -208,9 +208,13 @@ import XCTest
         XCTAssertTrue(app.navigationBars["Add a memory"].waitForExistence(timeout: 5))
         let addTile = app.buttons["add-memory-photos"]
         reveal(addTile, in: app)
-        let tile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "draft-photo-")).element(boundBy: 2)
-        XCTAssertEqual(addTile.frame.width, tile.frame.width, accuracy: 1)
-        XCTAssertEqual(addTile.frame.height, tile.frame.height, accuracy: 1)
+        // The lazy grid exposes only the cells currently in view after scrolling.
+        let tiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "draft-photo-")).allElementsBoundByIndex
+        XCTAssertFalse(tiles.isEmpty)
+        for tile in tiles {
+            XCTAssertEqual(addTile.frame.width, tile.frame.width, accuracy: 1)
+            XCTAssertEqual(addTile.frame.height, tile.frame.height, accuracy: 1)
+        }
         XCTAssertEqual(addTile.frame.width, addTile.frame.height, accuracy: 1)
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Matching memory photo and add tiles"; shot.lifetime = .keepAlways; add(shot)
     }
