@@ -10,6 +10,7 @@ import PlacesCompanion
 final class AppModel {
     static let shared = AppModel()
     let tracking = TrackingController()
+    let traccar = TraccarController()
     let deleteUndo = DeleteUndo()
     private(set) var store: PlacesStore?
     private(set) var ready = false
@@ -22,6 +23,8 @@ final class AppModel {
     private(set) var historyRevision = 0
     private(set) var historyDays: [HistoryDay] = []
     private(set) var firstHistoryDate: Date?
+    private(set) var firstTraccarDate: Date?
+    var firstMapDate: Date? { nerdMode && showTraccarPoints ? [firstHistoryDate, firstTraccarDate].compactMap { $0 }.min() : firstHistoryDate }
     private(set) var networks: [WiFiNetwork] = []
     private(set) var accessPoints: [WiFiAccessPoint] = []
     private(set) var recentObservations: [SensorObservation] = []
@@ -41,6 +44,9 @@ final class AppModel {
     private var mapPreference = UUID()
     private(set) var mapsChoiceMade = false
     private(set) var nerdMode = false
+    private(set) var traccarEnabled = false
+    private(set) var showPlacesPoints = true
+    private(set) var showTraccarPoints = true
     private(set) var trackingEnabled = true
     private(set) var onboardingComplete = false
     private(set) var replayingOnboarding = false
@@ -153,6 +159,9 @@ final class AppModel {
                     mapDownloads.start()
                     mapsChoiceMade = try await opened.setting("mapsChoiceMade") == "true" || mapsAvailable
                     nerdMode = try await opened.setting("nerdMode") == "true"
+                    traccarEnabled = try await opened.setting("traccarEnabled") == "true"
+                    showPlacesPoints = try await opened.setting("showPlacesPoints") != "false"
+                    showTraccarPoints = try await opened.setting("showTraccarPoints") != "false"
                     monthlyRewindReminders = try await opened.setting("monthlyRewindReminders") == "true"
                     weeklyReviewReminders = try await opened.setting("weeklyReviewReminders") == "true"
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
@@ -173,6 +182,13 @@ final class AppModel {
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-map-periods") {
                         try await DemoFixtures.seedMapPeriods(opened)
+                        if ProcessInfo.processInfo.arguments.contains("--ui-traccar") {
+                            let start = Calendar.current.date(byAdding: .day, value: -2, to: Calendar.current.startOfDay(for: Date()))!
+                            for index in 0..<2 {
+                                try await opened.appendTraccar(TraccarPoint(timestamp: start.addingTimeInterval(Double(index) * 600 + 60),
+                                    coordinate: Coordinate(latitude: 36.82 + Double(index) * 0.01, longitude: 27.10 + Double(index) * 0.02), accuracy: 20))
+                            }
+                        }
                         onboardingComplete = true
                     } else if uiTesting && ProcessInfo.processInfo.arguments.contains("--ui-transport-choices") {
                         let calendar = Calendar.current
@@ -233,7 +249,9 @@ final class AppModel {
                     }
                     #endif
                     if !uiTesting {
+                        tracking.reserveTraccarRegion = traccarEnabled
                         tracking.configure(places: places, enabled: trackingEnabled)
+                        await reconcileTraccar()
                         companions.start { [weak self] batch in
                             guard let self else { throw CancellationError() }
                             try await self.importCompanion(batch)
@@ -280,6 +298,7 @@ final class AppModel {
         let period = mapPeriod
         let selectionRequest = mapSelectionRequest
         let showingRawPoints = nerdMode
+        let placesLayer = showPlacesPoints, traccarLayer = showTraccarPoints
         let expectedGeneration = generation
         do {
             let newPlaces = try await store.places()
@@ -287,6 +306,7 @@ final class AppModel {
             let newTimeline = try await store.timeline(on: day)
             let newDays = try await store.historyDays()
             let newFirstDate = try await store.firstHistoryDate()
+            let newFirstTraccarDate = try await store.firstTraccarDate()
             let calendar = Calendar.current
             let interval = calendar.dateInterval(of: .day, for: day)!
             let newPoints = try await store.routePoints(from: interval.start, to: interval.end)
@@ -299,10 +319,12 @@ final class AppModel {
             let rawMap: MapPresentation?
             if showingRawPoints {
                 let range = period?.interval ?? interval
-                let observations = try await store.observations(from: range.start, to: range.end)
-                let photos = try await store.photoEvidence(from: range.start, to: range.end)
+                let observations = placesLayer ? try await store.observations(from: range.start, to: range.end) : []
+                let photos = placesLayer ? try await store.photoEvidence(from: range.start, to: range.end) : []
+                let traccarPoints = traccarLayer ? try await store.traccarPoints(from: range.start, to: range.end) : []
                 rawMap = await Task.detached(priority: .userInitiated) {
-                    MapPresentation(observations: observations, photos: photos)
+                    MapPresentation(observations: observations, photos: photos, traccar: traccarPoints,
+                        showPlaces: placesLayer, showTraccar: traccarLayer)
                 }.value
             } else { rawMap = nil }
             let newNetworks = try await store.networks()
@@ -312,12 +334,12 @@ final class AppModel {
             let newEvents = showingRawPoints ? try await store.trackingEvents(limit: 60) : []
             guard !deleting, generation == expectedGeneration else { return }
             historyDays = newDays
-            firstHistoryDate = newFirstDate
+            firstHistoryDate = newFirstDate; firstTraccarDate = newFirstTraccarDate
             memories = newMemories
             places = newPlaces; networks = newNetworks; accessPoints = newAccessPoints; diagnostics = newDiagnostics
             if !uiTesting { tracking.updateWiFiKnowledge(places: newPlaces, networks: newNetworks, accessPoints: newAccessPoints) }
             if day == selectedDay { timeline = newTimeline; routePoints = newPoints }
-            if day == selectedDay && period == mapPeriod && selectionRequest == mapSelectionRequest && showingRawPoints == nerdMode {
+            if day == selectedDay && period == mapPeriod && selectionRequest == mapSelectionRequest && showingRawPoints == nerdMode && placesLayer == showPlacesPoints && traccarLayer == showTraccarPoints {
                 if mapFocusRequest != selectionRequest { mapViewport = nil }
                 mapTimeline = mapItems; mapRoutePoints = mapPoints
                 mapRawPresentation = rawMap
@@ -444,6 +466,7 @@ final class AppModel {
                 LocalDiagnostics.shared.record(.historyWriteFailed, error: error)
                 self.retryObservations = batch
                 self.tracking.configure(places: self.places, enabled: false)
+                await self.traccar.stop()
                 self.storageNeedsRetry = true
                 self.fail("Recording paused because your history could not be saved. Free some storage, then try again. Unsaved observations are kept while the app remains open.")
             }
@@ -465,7 +488,7 @@ final class AppModel {
         do {
             try await store.append(retryObservations); retryObservations = []
             if !uiTesting { tracking.configure(places: places, enabled: trackingEnabled) }
-            storageNeedsRetry = false; errorMessage = nil; await refresh()
+            storageNeedsRetry = false; errorMessage = nil; await reconcileTraccar(); await refresh()
         } catch { fail("Storage is still unavailable. Your history has not been deleted.") }
     }
     func restartOnboarding() {
@@ -572,11 +595,44 @@ final class AppModel {
         }
         catch { fail("Could not save this setting.") }
     }
+    func setComparisonLayer(traccar: Bool, visible: Bool) async {
+        guard let store, !deleting else { return }
+        let epoch = generation
+        do {
+            try await store.setSetting(traccar ? "showTraccarPoints" : "showPlacesPoints", value: String(visible))
+            guard epoch == generation, !deleting else { return }
+            if traccar { showTraccarPoints = visible } else { showPlacesPoints = visible }
+            mapSelectionRequest = UUID(); await refresh()
+        } catch { fail("Could not save this map setting.") }
+    }
+    func setTraccarEnabled(_ value: Bool) async {
+        guard let store, !deleting else { return }
+        let epoch = generation
+        if !value { await traccar.stop() }
+        do {
+            try await store.setSetting("traccarEnabled", value: String(value))
+            guard epoch == generation, !deleting else { return }
+            traccarEnabled = value
+            await reconcileTraccar()
+        } catch { fail("Could not save your collector preference.") }
+    }
+    func reconcileTraccar() async {
+        guard !uiTesting else { return }
+        tracking.reserveTraccarRegion = traccarEnabled
+        guard let store, ready, !deleting, !storageNeedsRetry, traccarEnabled, trackingEnabled,
+              tracking.authorization == .authorizedAlways else { await traccar.stop(); return }
+        await traccar.start(store: store) { [weak self] in
+            guard let self, UIApplication.shared.applicationState == .active,
+                  self.selectedTab == .map, self.nerdMode else { return }
+            await self.refresh()
+        }
+    }
     func setTrackingEnabled(_ value: Bool) async {
-        if !value { tracking.configure(places: places, enabled: false) }
+        if !value { tracking.configure(places: places, enabled: false); await traccar.stop() }
         do {
             try await store?.setSetting("trackingEnabled", value: String(value)); trackingEnabled = value
             if !uiTesting { tracking.configure(places: places, enabled: value) }
+            await reconcileTraccar()
         } catch { fail("Could not save your tracking preference.") }
     }
     func save(_ place: Place, assigning item: TimelineItem? = nil) async -> Bool {
@@ -678,6 +734,7 @@ final class AppModel {
     func restoreBackup(_ backup: PreparedBackup) async throws {
         guard let store, !deleting else { throw CancellationError() }
         deleting = true; generation += 1
+        await traccar.stop()
         let previousTracking = trackingEnabled, previousLookup = placeLookupEnabled
         let previousProvider = mapProvider
         photoLibrary.reset(); deleteUndo.clear()
@@ -692,11 +749,13 @@ final class AppModel {
             deleting = false; mapProvider = previousProvider; placeLookupEnabled = previousLookup
             regionLookup.setEnabled(previousLookup && !uiTesting)
             if !uiTesting { tracking.configure(places: places, enabled: previousTracking) }
+            await reconcileTraccar()
             await photoLibrary.start(store: store)
             throw error
         }
         // Nothing below can fail after the durable transaction has committed.
         companions.pauseAfterRestore()
+        traccarEnabled = false
         trackingEnabled = false; mapsChoiceMade = false; placeLookupExplained = false
         monthlyRewindReminders = false; weeklyReviewReminders = false; rewindRequest = nil
         rewindNotifications.update([])
@@ -708,10 +767,12 @@ final class AppModel {
         mapTimeline = []; mapRoutePoints = []; mapRawPresentation = nil
         recentObservations = []; events = []; searchResults = []; searchText = ""
         places = []; timeline = []; memories = MemoryLibrary(); routePoints = []
-        historyDays = []; firstHistoryDate = nil; diagnostics = nil
+        historyDays = []; firstHistoryDate = nil; firstTraccarDate = nil; diagnostics = nil
         showExporter = false; exportDocument = nil; errorMessage = nil; storageNeedsRetry = false
         selectedDay = Date(); selectedTab = .timeline; librarySection = "Places"
         nerdMode = (try? await store.setting("nerdMode")) == "true"
+        showPlacesPoints = (try? await store.setting("showPlacesPoints")) != "false"
+        showTraccarPoints = (try? await store.setting("showTraccarPoints")) != "false"
         deleting = false
         await photoLibrary.start(store: store)
         await refresh()
@@ -725,11 +786,12 @@ final class AppModel {
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
+        await traccar.stop()
         photoLibrary.reset()
         deleteUndo.clear()
         rewindNotifications.update([])
         monthlyRewindReminders = false; weeklyReviewReminders = false; rewindRequest = nil
-        mapPreference = UUID(); mapProvider = .off; trackingEnabled = false
+        mapPreference = UUID(); mapProvider = .off; trackingEnabled = false; traccarEnabled = false
         lookupPreference = UUID(); regionLookup.setEnabled(false); placeLookupEnabled = false
         placeLookupExplained = false; regionLookupIssues = [:]
         regionRun = UUID(); regionTask?.cancel(); regionTask = nil; regionAttempts = []; lookingUpRegions = false
@@ -743,11 +805,12 @@ final class AppModel {
             try BackupTransferView.clearAbandonedTransfers()
             try await store.eraseHistory(resetSettings: true)
             try await LocalDiagnostics.shared.log.clear()
-            retryObservations = []; timeline = []; historyDays = []; firstHistoryDate = nil; places = []; networks = []; accessPoints = []
+            retryObservations = []; timeline = []; historyDays = []; firstHistoryDate = nil; firstTraccarDate = nil; places = []; networks = []; accessPoints = []
             memories = MemoryLibrary()
             routePoints = []; recentObservations = []; events = []; searchResults = []; searchText = ""
             showExporter = false; exportDocument = nil; tracking.clearSensitiveState()
             exportFilename = "Places"; pendingWrite = nil; diagnostics = nil; errorMessage = nil; storageNeedsRetry = false
+            showPlacesPoints = true; showTraccarPoints = true
             mapsChoiceMade = false; nerdMode = false; selectedDay = Date(); selectedTab = .timeline; librarySection = "Places"; navigationRoots = [:]
             UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
             UNUserNotificationCenter.current().removeAllDeliveredNotifications()

@@ -227,7 +227,7 @@ struct OfflineMapSurface: UIViewRepresentable {
                 let shape = MLNPolyline(coordinates: &points, count: UInt(points.count))
                 let source = MLNShapeSource(identifier: id, shape: shape, options: nil)
                 let layer = MLNLineStyleLayer(identifier: id, source: source)
-                layer.lineColor = NSExpression(forConstantValue: UIColor(path.dashed ? Palette.muted : Palette.green))
+                layer.lineColor = NSExpression(forConstantValue: UIColor(path.colorIndex.map { Palette.accent($0) } ?? (path.dashed ? Palette.muted : Palette.green)))
                 layer.lineWidth = NSExpression(forConstantValue: path.dashed ? 3 : 4)
                 if path.dashed { layer.lineDashPattern = NSExpression(forConstantValue: [2, 2]) }
                 style.addSource(source)

@@ -70,12 +70,13 @@ public enum PlacesBackup {
             let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
             let manifest = try decoder.decode(BackupManifest.self, from: manifestData)
             guard manifest.format == "PlacesBackup" else { throw BackupError.invalid }
-            guard manifest.version == 1 else { throw BackupError.newerVersion }
+            guard (1...2).contains(manifest.version) else { throw BackupError.newerVersion }
+            let tables = manifest.version == 1 ? BackupTable.all.filter { $0.name != "traccarPoints" } : BackupTable.all
             let paths = Set(manifest.files.map(\.path))
             guard paths.count == manifest.files.count, !paths.contains("manifest.json"),
                   paths == Set(entries.keys).subtracting(["manifest.json"]),
-                  Set(BackupTable.all.map(\.path)).isSubset(of: paths),
-                  Set(manifest.counts.keys) == Set(BackupTable.all.map(\.name)),
+                  Set(tables.map(\.path)).isSubset(of: paths),
+                  Set(manifest.counts.keys) == Set(tables.map(\.name)),
                   manifest.counts.values.allSatisfy({ $0 >= 0 }) else { throw BackupError.invalid }
             // Extraction plus the staged database and the live rollback journal.
             // Fail before writing if there is not enough room for the complete restore.
@@ -100,7 +101,7 @@ public enum PlacesBackup {
             }
             let destination = try PlacesStore(path: databaseURL.path)
             try destination.queue.write { db in
-                for table in BackupTable.all {
+                for table in tables {
                     var count = 0
                     try BackupIO.lines(root.appendingPathComponent(table.path)) { line in
                         try table.restore(line, root: root, files: paths, db: db); count += 1
@@ -162,7 +163,7 @@ public enum PlacesBackup {
             files.append(.init(path: path, bytes: bytes, sha256: hash))
         }
         guard files.count < maxFiles, files.reduce(UInt64(0), { $0 + $1.bytes }) <= maxBytes else { throw BackupError.tooLarge }
-        let manifest = BackupManifest(format: "PlacesBackup", version: 1, createdAt: Date(), counts: counts, files: files.sorted { $0.path < $1.path })
+        let manifest = BackupManifest(format: "PlacesBackup", version: 2, createdAt: Date(), counts: counts, files: files.sorted { $0.path < $1.path })
         let manifestData = try StoreSQL.exportEncoder.encode(manifest)
         guard manifestData.count <= 32 * 1024 * 1024 else { throw BackupError.tooLarge }
         try manifestData.write(to: root.appendingPathComponent("manifest.json"))
@@ -208,13 +209,13 @@ extension PlacesStore {
                     try Task.checkCancellation()
                     let columns = table.columns.joined(separator: ",")
                     try db.execute(sql: "INSERT INTO \(table.name)(\(columns)) SELECT \(columns) FROM restored.\(table.name)")
-                    guard try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table.name)") == backup.manifest.counts[table.name] else { throw BackupError.invalid }
+                    guard try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table.name)") == (backup.manifest.counts[table.name] ?? 0) else { throw BackupError.invalid }
                 }
                 try BackupTable.validateRelationships(db)
                 try db.execute(sql: "INSERT INTO placeSearch(placeID, name, address) SELECT id, name, address FROM places")
                 // A portable backup never grants permissions or resumes sensors,
                 // network services or library scanning on another device.
-                for key in ["trackingEnabled", "mapsEnabled", "mapsChoiceMade", "placeLookupEnabled", "placeLookupExplained",
+                for key in ["traccarEnabled", "traccarPaused", "trackingEnabled", "mapsEnabled", "mapsChoiceMade", "placeLookupEnabled", "placeLookupExplained",
                             "photoEvidenceEnabled", "monthlyRewindReminders", "weeklyReviewReminders"] {
                     try db.execute(sql: "INSERT OR REPLACE INTO settings(key, value) VALUES (?, 'false')", arguments: [key])
                 }

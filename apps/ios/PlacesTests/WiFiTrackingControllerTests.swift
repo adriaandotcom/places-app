@@ -27,6 +27,21 @@ import PlacesCore
         return (tracker, live, passive, reader)
     }
 
+    func testTraccarGeofenceDoesNotBecomePlacesEvidenceOrGetRemoved() {
+        let (tracker, _, passive, _) = makeTracker()
+        let region = CLCircularRegion(center: .init(latitude: 1, longitude: 1), radius: 100, identifier: "traccar.stationary")
+        passive.startMonitoring(for: region)
+        var observations: [SensorObservation] = []
+        tracker.onObservations = { observations += $0 }
+        tracker.locationManager(passive, didExitRegion: region)
+        tracker.locationManager(passive, didEnterRegion: region)
+        XCTAssertTrue(observations.isEmpty)
+        tracker.reserveTraccarRegion = true
+        XCTAssertTrue(passive.monitoredRegions.contains(region))
+        tracker.configure(places: [], enabled: false)
+        XCTAssertTrue(passive.monitoredRegions.contains(region))
+    }
+
     func testSavedPlaceRequiresThreeMinutesBeforeStoppingGPS() {
         let clock = TrackingClock()
         let (tracker, live, _, reader) = makeTracker(clock: clock)

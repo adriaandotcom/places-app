@@ -52,6 +52,6 @@ extension HistoryArchive {
             places: places, observations: observations, timeline: timeline, corrections: corrections,
             networks: networks, accessPoints: points, routePoints: routePoints.filter { contains($0.timestamp) },
             trackingEvents: trackingEvents.filter { contains($0.timestamp) }, separatedAt: separatedAt?.filter(contains),
-            memories: memories, photoEvidence: photos, period: period, includesPhotos: includePhotos)
+            memories: memories, photoEvidence: photos, period: period, includesPhotos: includePhotos, traccarPoints: traccarPoints?.filter { contains($0.timestamp) })
     }
 }

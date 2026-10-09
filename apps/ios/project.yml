@@ -6,6 +6,9 @@ options:
   xcodeVersion: '27.0'
   groupSortPosition: top
 packages:
+  TraccarClientSDK:
+    url: https://github.com/adriaandotcom/traccar-client-sdk
+    exactVersion: 1.1.1-places.1
   MapLibre:
     url: https://github.com/maplibre/maplibre-native-distribution
     exactVersion: 6.31.0
@@ -33,6 +36,7 @@ targets:
       - path: Places/Resources/OfflineMaps
         type: folder
     dependencies:
+      - package: TraccarClientSDK
       - package: PlacesCore
       - package: MapLibre
       - package: PlacesCompanion

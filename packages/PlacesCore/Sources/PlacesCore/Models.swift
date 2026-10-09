@@ -302,6 +302,7 @@ public struct HistoryArchive: Codable, Sendable {
     public var photoEvidence: [PhotoLocationEvidence]? = nil
     public var period: DateInterval? = nil
     public var includesPhotos: Bool? = nil
+    public var traccarPoints: [TraccarPoint]? = nil
 }
 
 public struct DiagnosticReport: Codable, Sendable {

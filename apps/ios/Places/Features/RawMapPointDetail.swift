@@ -34,6 +34,7 @@ struct RawMapPointDetail: View {
                         LabeledContent("Time zone", value: TimeZone.current.identifier)
                         LabeledContent("Latitude", value: String(format: "%.6f", point.coordinate.latitude))
                         LabeledContent("Longitude", value: String(format: "%.6f", point.coordinate.longitude))
+                        LabeledContent("Collector", value: point.collector)
                         LabeledContent("Source", value: point.source)
                         LabeledContent {
                             Label(point.device, systemImage: "circle.fill").foregroundStyle(Palette.accent(point.colorIndex))

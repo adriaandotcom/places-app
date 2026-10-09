@@ -55,6 +55,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     private var observers: [NSObjectProtocol] = []
 
     private(set) var state: TrackingState = .paused
+    var reserveTraccarRegion = false { didSet { if oldValue != reserveTraccarRegion { configureRegions() } } }
     private(set) var authorization: CLAuthorizationStatus = .notDetermined
     private(set) var accuracy: CLAccuracyAuthorization = .reducedAccuracy
     private(set) var motionAuthorization = CMMotionActivityManager.authorizationStatus()
@@ -199,7 +200,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             configureRegions()
         } else {
             passive.stopMonitoringSignificantLocationChanges(); passive.stopMonitoringVisits()
-            for region in passive.monitoredRegions { passive.stopMonitoring(for: region) }
+            for region in passive.monitoredRegions where region.identifier != "traccar.stationary" { passive.stopMonitoring(for: region) }
             monitoredRegionCount = 0
         }
         reconcileMotion()
@@ -224,7 +225,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
         live.stopUpdatingLocation(); standardActive = false
         energy.setStandardLocation(active: false, uptime: ProcessInfo.processInfo.systemUptime)
         passive.stopMonitoringSignificantLocationChanges(); passive.stopMonitoringVisits()
-        for region in passive.monitoredRegions { passive.stopMonitoring(for: region) }
+        for region in passive.monitoredRegions where region.identifier != "traccar.stationary" { passive.stopMonitoring(for: region) }
         monitoredRegionCount = 0
         activity.stopActivityUpdates(); motionActive = false
         candidate = nil; confirmation.reset()
@@ -371,8 +372,8 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
             let current = Coordinate(latitude: currentLocation.coordinate.latitude, longitude: currentLocation.coordinate.longitude)
             return current.distance(to: $0.coordinate) < current.distance(to: $1.coordinate)
         }
-        let wanted = Array(sorted.prefix(19))
-        for region in passive.monitoredRegions where region.identifier != "temporary-stop" {
+        let wanted = Array(sorted.prefix(reserveTraccarRegion ? 18 : 19))
+        for region in passive.monitoredRegions where region.identifier != "temporary-stop" && region.identifier != "traccar.stationary" {
             if let place = wanted.first(where: { $0.id == region.identifier }), let circle = region as? CLCircularRegion,
                circle.center.latitude == place.coordinate.latitude, circle.center.longitude == place.coordinate.longitude,
                abs(circle.radius - place.radius) < 1 { continue }
@@ -633,7 +634,7 @@ final class TrackingController: NSObject, @preconcurrency CLLocationManagerDeleg
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) { regionChanged(region, entering: true) }
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) { regionChanged(region, entering: false) }
     private func regionChanged(_ region: CLRegion, entering: Bool) {
-        guard hasStarted else { return }
+        guard hasStarted, region.identifier != "traccar.stationary" else { return }
         // A queued circular callback can arrive after a place changes to an area.
         guard !places.contains(where: { $0.id == region.identifier && $0.area != nil }) else { return }
         onObservations?([SensorObservation(timestamp: now(), source: entering ? .regionEnter : .regionExit,

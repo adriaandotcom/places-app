@@ -73,7 +73,7 @@ enum BackupReadable {
         Places data. Export its current history first if you want to keep it.
 
         INCLUDES: all recorded evidence (including imported companion and photo
-        locations), visits, routes, corrections, polygon areas, Wi-Fi knowledge,
+        locations), separate Traccar comparison points, visits, routes, corrections, polygon areas, Wi-Fi knowledge,
         trips, people, notes, mentions, photo order/captions, every photo saved
         inside Places, preferences and photo suggestion review state.
 

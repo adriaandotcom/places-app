@@ -18,6 +18,7 @@ struct BackupTable: Sendable {
     // Parents precede children. Delete in reverse order; never disable foreign keys.
     static let all: [Self] = [
         .init("settings", "key,value"),
+        .init("traccarPoints", "id,timestamp,payload"),
         .init("observations", "id,deduplicationKey,timestamp,source,payload"),
         .init("places", "id,name,address,payload"),
         .init("wifiNetworks", "id,ssid,payload"),
@@ -105,6 +106,9 @@ struct BackupTable: Sendable {
             guard !value.name.isEmpty, value.coordinate.isValid, (50...1000).contains(value.radius),
                   value.area?.isValid != false, photo(value.photoJPEG), value.name == row["name"] as? String,
                   value.address == row["address"] as? String else { throw BackupError.invalid }
+        case "traccarPoints":
+            let value = try check(TraccarPoint.self)
+            guard value.isValid, value.timestamp.timeIntervalSince1970 == (row["timestamp"] as? NSNumber)?.doubleValue else { throw BackupError.invalid }
         case "observations":
             let value = try check(SensorObservation.self)
             guard value.coordinate?.isValid != false, value.deduplicationKey == row["deduplicationKey"] as? String,

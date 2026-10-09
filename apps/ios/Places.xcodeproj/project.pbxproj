@@ -26,6 +26,7 @@
 		2DEED30D0157CF0DC566A67D /* OfflineMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB112752C31BE0AA36FF3DB /* OfflineMapView.swift */; };
 		2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */; };
 		300455B22DB5874297921CD9 /* PlaceWiFiPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113678CA5798BA16EBB3B196 /* PlaceWiFiPicker.swift */; };
+		306032F67A3B8B8E12A61C0F /* TraccarOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9F7487CC33826E3F2EE3E0 /* TraccarOutputTests.swift */; };
 		30CD0F688CCDED2E4D7FB26F /* PlacesMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E911E9A38B5A7EB7327F494A /* PlacesMarker.swift */; };
 		327E8C072E72C9E24B046093 /* PlaceColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A972E8FFE2B816017FB3CFD6 /* PlaceColorTests.swift */; };
 		32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074E8339AD3313BBFD04D7BA /* TrackingController.swift */; };
@@ -33,6 +34,7 @@
 		34D3AFF05BABD6B247482405 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */; };
 		390BD8A494B2BB1A5FCEFF3D /* PlacesCompanion in Frameworks */ = {isa = PBXBuildFile; productRef = 3230F1752DB79B5FCEB48946 /* PlacesCompanion */; };
 		3CFCC7F6185D1382A9020872 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = D2A07C0F4B1A7B4218C6F725 /* PlacesCore */; };
+		49D4CC7582C2D6653E0A1611 /* LocationCollectorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC77990A18BB23A926E66A44 /* LocationCollectorsView.swift */; };
 		4AD965B9D3AF1082C9FD06E9 /* RewindViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5712D6BB250F554AD0623178 /* RewindViews.swift */; };
 		4B3E927FE010B0E4E99E50CF /* BatteryActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */; };
 		4BB09FFB84861510F74BD203 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA197721E63F4B0F2F74FC75 /* AppModel.swift */; };
@@ -42,14 +44,16 @@
 		59003C6C578C09EE74CCC558 /* ZIPFoundation-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 78CD449D71D51A3B7F30A7F6 /* ZIPFoundation-LICENSE.txt */; };
 		595DA971976AEDA5373D9931 /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE309F70353EBEDB7069F031 /* MainView.swift */; };
 		5A855E355B92C7D190DAEBA1 /* PlacesMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9BFD85555F9A5A776D14F2 /* PlacesMacApp.swift */; };
+		5B3603C0042A76B7DD7D732E /* Traccar-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0A340E61D838C79CB74AFCC9 /* Traccar-LICENSE.txt */; };
 		5CFD873D521F99D2384FCAD5 /* MapPackFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = F347AFB671373CE3FDFD3977 /* MapPackFiles.swift */; };
 		5D2B4C3A49707483172B47E7 /* MapDetailPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37224AF580926BC83D6140E /* MapDetailPicker.swift */; };
 		5FD9FBF86AD3822E430BE2D0 /* MapsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67E766F77511EDADA6182DA6 /* MapsSettings.swift */; };
 		60E1ED003E6B7C1B9FA108AA /* TimelinePager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB102BB0DB953EC91699D45 /* TimelinePager.swift */; };
 		623C2AF45C1C0C3BF3CC1AA7 /* CurrentLocationRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */; };
-		63A1610FD8C0AAE5BF00CDD5 /* PlacesCompanion in Frameworks */ = {isa = PBXBuildFile; productRef = E2E5EEFA2298C075AB0B68FE /* PlacesCompanion */; };
+		63A1610FD8C0AAE5BF00CDD5 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 6F34812A8C1EB34B9C7A7931 /* MapLibre */; };
 		65C95FE61BB85A6DFC20E4B7 /* PlacesMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E911E9A38B5A7EB7327F494A /* PlacesMarker.swift */; };
 		66549826CB59C29A042DBFAB /* PlacesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19157741242CE715116913F2 /* PlacesView.swift */; };
+		6A83AB6B381C287B2945C440 /* PlacesCompanion in Frameworks */ = {isa = PBXBuildFile; productRef = E2E5EEFA2298C075AB0B68FE /* PlacesCompanion */; };
 		6BE534398985AF0328AA92CD /* WatchStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FAB89CB7816AF999CCAE81 /* WatchStorage.swift */; };
 		6D35334C531006235285972A /* PlacesComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5EE937BF2598F99C9585DBB /* PlacesComplication.swift */; };
 		6F2A64643DF8EBE2C7D4255C /* OfflineMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D5BEBE17D2BE0926E0AE70 /* OfflineMapTests.swift */; };
@@ -68,6 +72,7 @@
 		8647C674E084BD7A59785677 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 4A0FD5DD320094D0C71ADC76 /* OFL.txt */; };
 		8812FE1C51F71A4A1F71B860 /* CompanionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD51F4A2DD5EF97EFB6F4746 /* CompanionSettings.swift */; };
 		8888A5DEED94C2A22499FD15 /* MergePlacePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A63B1A334A170B4704AB4BF2 /* MergePlacePicker.swift */; };
+		8B877B07424C424D846379CD /* TraccarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4151CE7A962204DBF3C822 /* TraccarController.swift */; };
 		8BB1D71DC4F9F465A025CF86 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9F8FAD56FA5CF7F3EA25B16E /* Assets.xcassets */; };
 		8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738274611DA8F1F53B88808E /* HistoryCalendar.swift */; };
 		9162EEFC324833E93A1486AF /* OfflineMaps in Resources */ = {isa = PBXBuildFile; fileRef = 3D4D0C7A10D98A0969FDD33A /* OfflineMaps */; };
@@ -98,7 +103,7 @@
 		D2CC4FB79F9D9EEBFA596703 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA29D2F244CDCEC41CCBFC07 /* SettingsView.swift */; };
 		D2F3D55DC34DFAF82D780991 /* TimelineDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BC98DC57490A57BCFD6D259 /* TimelineDetail.swift */; };
 		D39E32808EE109D32D743656 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */; };
-		D414EAFD38C1EB439C7C1793 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 6F34812A8C1EB34B9C7A7931 /* MapLibre */; };
+		D414EAFD38C1EB439C7C1793 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5B36C3B3E2E85B7532E1B16A /* PlacesCore */; };
 		D4439794DA7E0DA048A41EE6 /* WatchConnectionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */; };
 		D4E68E2E7B8CA381E6C51CF5 /* AddPastVisits.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8683E4F2F033E292992D7CAC /* AddPastVisits.swift */; };
 		DC70013C8EECEAF7F2EF04C8 /* BricolageGrotesque-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4E0B356B8C8668C3A1D59A8F /* BricolageGrotesque-Regular.ttf */; };
@@ -114,7 +119,7 @@
 		F55A662BFEBD2DFE92275C9A /* SupportReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D9BE8B37414C7567A82F2FB /* SupportReportView.swift */; };
 		F64465C0066D4DF8C71911BA /* MemoryPhotoDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F3E9E483AB8609D59EFDEB /* MemoryPhotoDraft.swift */; };
 		F6928873294AD66BED4711A5 /* WatchConnectionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */; };
-		FA2762FE9E093C51EC46D4D6 /* PlacesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5B36C3B3E2E85B7532E1B16A /* PlacesCore */; };
+		FA2762FE9E093C51EC46D4D6 /* TraccarClientSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 81B69105CDC43D4C5E68BDF5 /* TraccarClientSDK */; };
 		FA596101EE4C9EAC8807681D /* OfflineMapStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142945BC6C090A8B8874AC76 /* OfflineMapStyle.swift */; };
 		FC0E7C6EDFA0A46D50E99053 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3D555F183B14B66A5744E434 /* PrivacyInfo.xcprivacy */; };
 		FCA8850734BE84EF7E2B31EE /* PlacesCompanion in Frameworks */ = {isa = PBXBuildFile; productRef = 43682CA1352C8965E043C9D4 /* PlacesCompanion */; };
@@ -185,6 +190,7 @@
 		06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceRegionLookupTests.swift; sourceTree = "<group>"; };
 		06A9CEBDAA36315546F8C683 /* SavedPlaceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlaceRow.swift; sourceTree = "<group>"; };
 		074E8339AD3313BBFD04D7BA /* TrackingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingController.swift; sourceTree = "<group>"; };
+		0A340E61D838C79CB74AFCC9 /* Traccar-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Traccar-LICENSE.txt"; sourceTree = "<group>"; };
 		0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0D6889ECCD09B57772DA0030 /* PlaceEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceEditor.swift; sourceTree = "<group>"; };
 		0E0914E2F6C1361BCFAF40D5 /* PermissionAccessRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionAccessRow.swift; sourceTree = "<group>"; };
@@ -202,6 +208,7 @@
 		2B8F72C7C69401B63C982A1C /* PhotoLibraryEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryEvidence.swift; sourceTree = "<group>"; };
 		2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiTrackingControllerTests.swift; sourceTree = "<group>"; };
 		2E3AF2034F175BEBB7BC68CD /* RawMapPointDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RawMapPointDetail.swift; sourceTree = "<group>"; };
+		2F4151CE7A962204DBF3C822 /* TraccarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraccarController.swift; sourceTree = "<group>"; };
 		35F40DB5D2D3B4D70BE2C86C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesApp.swift; sourceTree = "<group>"; };
 		3D4D0C7A10D98A0969FDD33A /* OfflineMaps */ = {isa = PBXFileReference; lastKnownFileType = folder; name = OfflineMaps; path = Places/Resources/OfflineMaps; sourceTree = SOURCE_ROOT; };
@@ -268,6 +275,7 @@
 		B68532DD126DBA8B7A9433BD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B978FA70A4E4F1BC0AC749E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BC561C16FC292C3569B4C390 /* AppleSuggestionsFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSuggestionsFlow.swift; sourceTree = "<group>"; };
+		BD9F7487CC33826E3F2EE3E0 /* TraccarOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraccarOutputTests.swift; sourceTree = "<group>"; };
 		BF42AB0FAF8CB1BEDBE4CABB /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		C13DAA6DAE19600F077CB9BA /* BatteryActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryActivityView.swift; sourceTree = "<group>"; };
 		CA197721E63F4B0F2F74FC75 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -278,6 +286,7 @@
 		D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentLocationRequest.swift; sourceTree = "<group>"; };
 		DBC06C622D86AE06DCD94F53 /* MemoryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryViews.swift; sourceTree = "<group>"; };
 		DBEA9C65BB61838DFB0CC890 /* MemoryPhotoBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryPhotoBrowser.swift; sourceTree = "<group>"; };
+		DC77990A18BB23A926E66A44 /* LocationCollectorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCollectorsView.swift; sourceTree = "<group>"; };
 		DD51F4A2DD5EF97EFB6F4746 /* CompanionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSettings.swift; sourceTree = "<group>"; };
 		DE309F70353EBEDB7069F031 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		E2484224F90AFD4F0609C882 /* PlacesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -333,9 +342,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FA2762FE9E093C51EC46D4D6 /* PlacesCore in Frameworks */,
-				D414EAFD38C1EB439C7C1793 /* MapLibre in Frameworks */,
-				63A1610FD8C0AAE5BF00CDD5 /* PlacesCompanion in Frameworks */,
+				FA2762FE9E093C51EC46D4D6 /* TraccarClientSDK in Frameworks */,
+				D414EAFD38C1EB439C7C1793 /* PlacesCore in Frameworks */,
+				63A1610FD8C0AAE5BF00CDD5 /* MapLibre in Frameworks */,
+				6A83AB6B381C287B2945C440 /* PlacesCompanion in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -347,6 +357,7 @@
 			children = (
 				D98389F70FB16BF8909074FE /* CurrentLocationRequest.swift */,
 				2B8F72C7C69401B63C982A1C /* PhotoLibraryEvidence.swift */,
+				2F4151CE7A962204DBF3C822 /* TraccarController.swift */,
 				074E8339AD3313BBFD04D7BA /* TrackingController.swift */,
 			);
 			path = Tracking;
@@ -366,6 +377,7 @@
 				8A52B3ADCC1C7C3FB8E0A34A /* ExportPeriodPicker.swift */,
 				738274611DA8F1F53B88808E /* HistoryCalendar.swift */,
 				4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */,
+				DC77990A18BB23A926E66A44 /* LocationCollectorsView.swift */,
 				DE309F70353EBEDB7069F031 /* MainView.swift */,
 				A37224AF580926BC83D6140E /* MapDetailPicker.swift */,
 				7F1606887387E5B16905FC86 /* MapPresentation.swift */,
@@ -495,6 +507,7 @@
 				06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */,
 				87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */,
 				FF08421EECCC59F8F65FDDEC /* SupportReportTests.swift */,
+				BD9F7487CC33826E3F2EE3E0 /* TraccarOutputTests.swift */,
 				2CAD952B841450FA0E91C6F8 /* WiFiTrackingControllerTests.swift */,
 			);
 			path = PlacesTests;
@@ -598,6 +611,7 @@
 				6ED1792B97EE623188206D05 /* Assets.xcassets */,
 				96D599ACF42438EAD7C338D9 /* GRDB-LICENSE.txt */,
 				0A7A81CB8D3A38E4D72CEC9D /* PrivacyInfo.xcprivacy */,
+				0A340E61D838C79CB74AFCC9 /* Traccar-LICENSE.txt */,
 				78CD449D71D51A3B7F30A7F6 /* ZIPFoundation-LICENSE.txt */,
 			);
 			path = Resources;
@@ -697,6 +711,7 @@
 			);
 			name = Places;
 			packageProductDependencies = (
+				81B69105CDC43D4C5E68BDF5 /* TraccarClientSDK */,
 				5B36C3B3E2E85B7532E1B16A /* PlacesCore */,
 				6F34812A8C1EB34B9C7A7931 /* MapLibre */,
 				E2E5EEFA2298C075AB0B68FE /* PlacesCompanion */,
@@ -806,6 +821,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				2D587D9018EEECF4FB30B1C4 /* XCRemoteSwiftPackageReference "maplibre-native-distribution" */,
+				47A41ABF36F77D486D065C4F /* XCRemoteSwiftPackageReference "traccar-client-sdk" */,
 				76809A93D08C4331F09DDF5D /* XCLocalSwiftPackageReference "../../packages/PlacesCompanion" */,
 				897C92EF8142DB418D792668 /* XCLocalSwiftPackageReference "../../packages/PlacesCore" */,
 			);
@@ -864,6 +880,7 @@
 				8647C674E084BD7A59785677 /* OFL.txt in Resources */,
 				9162EEFC324833E93A1486AF /* OfflineMaps in Resources */,
 				D39E32808EE109D32D743656 /* PrivacyInfo.xcprivacy in Resources */,
+				5B3603C0042A76B7DD7D732E /* Traccar-LICENSE.txt in Resources */,
 				59003C6C578C09EE74CCC558 /* ZIPFoundation-LICENSE.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -918,6 +935,7 @@
 				2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */,
 				CB030EB2FECF48BC78AE2A32 /* RewindNotificationTests.swift in Sources */,
 				ED2E77DD3DC2B9024FDF292D /* SupportReportTests.swift in Sources */,
+				306032F67A3B8B8E12A61C0F /* TraccarOutputTests.swift in Sources */,
 				BA60D0E791CB46DE7E6E47DF /* WiFiTrackingControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -943,6 +961,7 @@
 				8EAD429381A9851A84A24D85 /* HistoryCalendar.swift in Sources */,
 				7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */,
 				FFB0367248F37BB0D15ABB78 /* LocalDiagnostics.swift in Sources */,
+				49D4CC7582C2D6653E0A1611 /* LocationCollectorsView.swift in Sources */,
 				595DA971976AEDA5373D9931 /* MainView.swift in Sources */,
 				5D2B4C3A49707483172B47E7 /* MapDetailPicker.swift in Sources */,
 				0406B697C7B67839B5EA122A /* MapDownloads.swift in Sources */,
@@ -987,6 +1006,7 @@
 				F55A662BFEBD2DFE92275C9A /* SupportReportView.swift in Sources */,
 				D2F3D55DC34DFAF82D780991 /* TimelineDetail.swift in Sources */,
 				60E1ED003E6B7C1B9FA108AA /* TimelinePager.swift in Sources */,
+				8B877B07424C424D846379CD /* TraccarController.swift in Sources */,
 				32EFF00AF43D617CE910871C /* TrackingController.swift in Sources */,
 				292FF27672027218EC112975 /* TripViews.swift in Sources */,
 				4C8059CBABE8F045A1CF08E9 /* WiFiClassificationPicker.swift in Sources */,
@@ -1478,6 +1498,14 @@
 				version = 6.31.0;
 			};
 		};
+		47A41ABF36F77D486D065C4F /* XCRemoteSwiftPackageReference "traccar-client-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/adriaandotcom/traccar-client-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = "1.1.1-places.1";
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1497,6 +1525,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 2D587D9018EEECF4FB30B1C4 /* XCRemoteSwiftPackageReference "maplibre-native-distribution" */;
 			productName = MapLibre;
+		};
+		81B69105CDC43D4C5E68BDF5 /* TraccarClientSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 47A41ABF36F77D486D065C4F /* XCRemoteSwiftPackageReference "traccar-client-sdk" */;
+			productName = TraccarClientSDK;
 		};
 		ABCCF06121583DDCAD2471EA /* PlacesCompanion */ = {
 			isa = XCSwiftPackageProductDependency;

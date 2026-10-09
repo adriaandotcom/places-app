@@ -394,3 +394,28 @@ import PlacesCore
         XCTAssertGreaterThan(try Data(contentsOf: greekGlyphs).count, 1_000)
     }
 }
+
+extension OfflineMapTests {
+    func testComparisonMapKeepsCollectorsSeparateAndTogglesEveryPoint() {
+        let date = Date(timeIntervalSince1970: 1_780_000_000)
+        let observations = (0..<2).map { index in
+            SensorObservation(id: "fixture-\(index)", timestamp: date.addingTimeInterval(Double(index) * 100), source: .location,
+                coordinate: .init(latitude: 52.36, longitude: 4.88 + Double(index) / 1000), horizontalAccuracy: 10)
+        }
+        let traccar = (0..<2).map { index in
+            TraccarPoint(timestamp: date.addingTimeInterval(Double(index) * 100 + 1),
+                coordinate: .init(latitude: 52.361, longitude: 4.88 + Double(index) / 1000), accuracy: 20)
+        }
+        let both = MapPresentation(observations: observations, photos: [], traccar: traccar, showPlaces: true, showTraccar: true)
+        XCTAssertEqual(both.rawPoints.count, 4)
+        XCTAssertEqual(both.paths.count, 2)
+        XCTAssertEqual(both.paths.map(\.colorIndex), [0, 2])
+        XCTAssertEqual(both.paths[1].coordinates, traccar.map(\.coordinate))
+        XCTAssertEqual(both.rawPoints.map(\.collector), ["Places", "Traccar", "Places", "Traccar"])
+        let sdkOnly = MapPresentation(observations: observations, photos: [], traccar: traccar, showPlaces: false, showTraccar: true)
+        XCTAssertEqual(sdkOnly.rawPoints.count, 2)
+        XCTAssertTrue(sdkOnly.rawPoints.allSatisfy { $0.collector == "Traccar" })
+        let neither = MapPresentation(observations: observations, photos: [], traccar: traccar, showPlaces: false, showTraccar: false)
+        XCTAssertTrue(neither.coordinates.isEmpty)
+    }
+}

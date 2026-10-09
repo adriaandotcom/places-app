@@ -236,3 +236,25 @@ private func repack(_ root: URL, change: (URL) throws -> Void, updateChecksums: 
 extension PlacesStore {
     fileprivate func addFutureTableForBackupTest() throws { try queue.write { try $0.execute(sql: "CREATE TABLE futureData(id TEXT)") } }
 }
+
+@Test func legacyBackupWithoutTraccarTableStillRestores() async throws {
+    let root = try backupWorkspace(); defer { try? FileManager.default.removeItem(at: root) }
+    let source = try await populatedBackupStore()
+    _ = try await source.makeBackup(in: root)
+    let legacy = try repack(root) { contents in
+        let url = contents.appendingPathComponent("manifest.json")
+        var manifest = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        manifest["version"] = 1
+        var counts = try #require(manifest["counts"] as? [String: Int]); counts["traccarPoints"] = nil
+        manifest["counts"] = counts
+        let files = try #require(manifest["files"] as? [[String: Any]])
+        manifest["files"] = files.filter { $0["path"] as? String != "data/traccarPoints.jsonl" }
+        try JSONSerialization.data(withJSONObject: manifest).write(to: url)
+        try FileManager.default.removeItem(at: contents.appendingPathComponent("data/traccarPoints.jsonl"))
+    }
+    let prepared = try PlacesBackup.prepare(zip: legacy, in: root)
+    let target = try PlacesStore()
+    try await target.restoreBackup(prepared)
+    #expect(try await target.memoryLibrary().memories.count == 1)
+    #expect(try await target.traccarPointCount() == 0)
+}

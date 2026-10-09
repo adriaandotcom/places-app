@@ -24,6 +24,7 @@ struct MapPath: Equatable, Identifiable, Sendable {
     var id: String
     var coordinates: [Coordinate]
     var dashed: Bool
+    var colorIndex: Int?
 }
 
 struct RawMapPoint: Equatable, Identifiable, Sendable {
@@ -36,9 +37,10 @@ struct RawMapPoint: Equatable, Identifiable, Sendable {
     var accuracy: Double?
     var speed: Double?
     var colorIndex: Int
+    var collector = "Places"
     var number = 0
     var timeLabel: String { timestamp.formatted(date: .omitted, time: .standard) }
-    var accessibilityLabel: String { "Raw point \(number), \(timeLabel), \(device)" }
+    var accessibilityLabel: String { "Raw point \(number), \(timeLabel), \(collector), \(device)" }
 }
 
 struct MapPresentation: Equatable, Sendable {
@@ -104,6 +106,26 @@ struct MapPresentation: Equatable, Sendable {
         if rawPoints.count > 1 {
             paths = [MapPath(id: "raw-observation-order", coordinates: rawPoints.map(\.coordinate), dashed: true)]
         }
+    }
+    init(observations: [SensorObservation], photos: [PhotoLocationEvidence], traccar: [TraccarPoint],
+         showPlaces: Bool, showTraccar: Bool) {
+        self.init(observations: showPlaces ? observations : [], photos: showPlaces ? photos : [])
+        // Each collector has its own time-order line. Never connect the two engines.
+        paths = rawPoints.count > 1 ? [MapPath(id: "places-order", coordinates: rawPoints.map(\.coordinate), dashed: true, colorIndex: 0)] : []
+        for index in rawPoints.indices { rawPoints[index].colorIndex = 0 }
+        if showTraccar {
+            let points = traccar.filter(\.isValid).sorted { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+            rawPoints += points.map {
+                RawMapPoint(id: "traccar:" + $0.id, coordinate: $0.coordinate, timestamp: $0.timestamp,
+                    source: "Traccar location", device: "iPhone", accuracy: $0.accuracy, speed: $0.speed,
+                    colorIndex: 2, collector: "Traccar")
+            }
+            if points.count > 1 {
+                paths.append(MapPath(id: "traccar-order", coordinates: points.map(\.coordinate), dashed: true, colorIndex: 2))
+            }
+        }
+        rawPoints.sort { ($0.timestamp, $0.id) < ($1.timestamp, $1.id) }
+        for index in rawPoints.indices { rawPoints[index].number = index + 1 }
     }
     init(place: Place) {
         pins = [MapPin(id: place.id, name: place.name, coordinate: place.coordinate,

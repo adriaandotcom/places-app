@@ -120,7 +120,7 @@ private struct AppleMapSurface: View {
             }
             ForEach(presentation.paths) { path in
                 MapPolyline(coordinates: path.coordinates.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) })
-                    .stroke(path.dashed ? Palette.muted : Palette.green,
+                    .stroke(path.colorIndex.map { Palette.accent($0) } ?? (path.dashed ? Palette.muted : Palette.green),
                             style: StrokeStyle(lineWidth: path.dashed ? 3 : 4, dash: path.dashed ? [6, 6] : []))
             }
             ForEach(presentation.rawPoints) { point in
@@ -166,6 +166,7 @@ struct MapScreen: View {
     @State private var periodHeight: CGFloat = 60
     @State private var selectedRawPoint: RawMapPoint?
     @State private var changingMode = false
+    @State private var collectors = false
     var body: some View {
         GeometryReader { geometry in
             VStack {
@@ -191,6 +192,12 @@ struct MapScreen: View {
                             .accessibilityLabel("Nerd mode").accessibilityIdentifier("map-nerd-mode")
                             .accessibilityValue(model.nerdMode ? "On" : "Off")
                         if model.nerdMode {
+                            Button { collectors = true } label: {
+                                Image(systemName: "line.3.horizontal.decrease.circle")
+                                    .font(.title3).frame(width: Layout.touchTarget, height: Layout.touchTarget)
+                                    .contentShape(Rectangle())
+                            }.buttonStyle(.plain).accessibilityLabel("Location collectors")
+                                .accessibilityIdentifier("map-collectors")
                             if let raw = model.mapRawPresentation {
                                 Button { selectedRawPoint = raw.rawPoints.first } label: {
                                     Text(raw.rawPoints.isEmpty ? "No raw points" : "\(raw.rawPoints.count) raw points")
@@ -224,6 +231,11 @@ struct MapScreen: View {
         }.background(Palette.background).foregroundStyle(Palette.ink)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settings) { NavigationStack { SettingsView() } }
+            .sheet(isPresented: $collectors) {
+                NavigationStack { LocationCollectorsView().toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { collectors = false } }
+                } }
+            }
             .sheet(item: $selectedRawPoint) { point in
                 RawMapPointDetail(points: model.mapRawPresentation?.rawPoints ?? [], initialID: point.id)
                     .presentationDetents([.medium, .large])

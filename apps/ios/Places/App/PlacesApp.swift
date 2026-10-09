@@ -61,13 +61,16 @@ import BackgroundTasks
             .environment(model)
             .tint(Palette.green)
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in model.start() }
+            .onChange(of: model.tracking.authorization) { _, _ in
+                Task { await model.reconcileTraccar() }
+            }
             .onChange(of: scenePhase) { _, phase in
                 if !model.uiTesting {
                     model.tracking.sceneChanged(isForeground: phase != .background)
                     if phase == .active { LocalDiagnostics.shared.record(.foreground) }
                     else if phase == .background { LocalDiagnostics.shared.record(.background) }
                 }
-                if phase == .active { Task { await model.refresh(); if !model.uiTesting { model.photoLibrary.updateAuthorization(); model.photoLibrary.requestScan(); await model.companions.sync() } } }
+                if phase == .active { Task { await model.reconcileTraccar(); await model.refresh(); if !model.uiTesting { model.photoLibrary.updateAuthorization(); model.photoLibrary.requestScan(); await model.companions.sync() } } }
             }
             .alert("Places needs your attention", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
                 if !model.ready { Button("Retry") { model.errorMessage = nil; model.start() } }

@@ -1,5 +1,5 @@
 {
-  "originHash" : "4bb12be9f69863663b3e6c886ff7668bcb6ced99dad6959c6f40dd2f2846f46f",
+  "originHash" : "29bdf1b298b18239e16c67aebd93a0440b19564f9ad603e9e1d8970a412434c4",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "13e41ab3d77ff5113e7e5d4ee87803b1f81f5683",
         "version" : "6.31.0"
+      }
+    },
+    {
+      "identity" : "traccar-client-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/adriaandotcom/traccar-client-sdk",
+      "state" : {
+        "revision" : "6b6f614755980c85c992c71ad9525ea0e36e680a",
+        "version" : "1.1.1-places.1"
       }
     },
     {

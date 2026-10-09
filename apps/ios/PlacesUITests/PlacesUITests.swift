@@ -989,6 +989,47 @@ import XCTest
         }
     }
 
+    func testCollectorLayersStaySeparateAndRememberDateAcrossTabs() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-map-periods", "--ui-traccar"] + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            let day = app.buttons["timeline-day--2"]
+            XCTAssertTrue(day.waitForExistence(timeout: 10)); day.tap()
+            app.buttons["tab-map"].tap()
+            if !offline { enableAppleMaps(in: app) }
+            app.buttons["map-nerd-mode"].tap()
+            let count = app.buttons["raw-map-count"]
+            XCTAssertTrue(count.waitForExistence(timeout: 10))
+            XCTAssertEqual(count.label, "10 raw points")
+            let date = app.buttons["map-period-picker"].label
+            app.buttons["map-collectors"].tap()
+            let places = app.switches["show-places-points"]
+            XCTAssertTrue(places.waitForExistence(timeout: 5)); places.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            let controls = XCTAttachment(screenshot: app.screenshot())
+            controls.name = "Collector controls \(offline ? "offline" : "Apple")"
+            controls.lifetime = .keepAlways; add(controls)
+            app.buttons["Done"].tap()
+            let onlyTraccar = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "2 raw points"), object: count)
+            XCTAssertEqual(XCTWaiter.wait(for: [onlyTraccar], timeout: 5), .completed)
+            count.tap()
+            XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Traccar")).firstMatch.waitForExistence(timeout: 5))
+            app.buttons["Done"].tap()
+            app.buttons["tab-timeline"].tap(); app.buttons["tab-map"].tap()
+            XCTAssertEqual(count.label, "2 raw points")
+            XCTAssertEqual(app.buttons["map-period-picker"].label, date)
+            let capture = XCTAttachment(screenshot: app.screenshot())
+            capture.name = "Traccar comparison \(offline ? "offline" : "Apple")"
+            capture.lifetime = .keepAlways; add(capture)
+            app.buttons["map-collectors"].tap()
+            XCTAssertEqual(app.switches["show-places-points"].value as? String, "0")
+            app.switches["show-traccar-points"].coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            app.buttons["Done"].tap()
+            let hidden = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "No raw points"), object: count)
+            XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed)
+        }
+    }
+
     func testNerdMapFollowsDatesAndPersistsAcrossTabsOnBothProviders() {
         for offline in [true, false] {
             let app = XCUIApplication()

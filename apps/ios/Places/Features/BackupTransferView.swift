@@ -39,7 +39,7 @@ struct BackupTransferView: View {
             if let preview {
                 Section("Ready to restore") {
                     LabeledContent("Created", value: preview.manifest.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    ForEach([("places", "Places"), ("memories", "Memories"), ("memoryPhotos", "Saved photos"), ("trips", "Trips"), ("people", "People"), ("observations", "Observations")], id: \.0) { key, title in
+                    ForEach([("places", "Places"), ("memories", "Memories"), ("memoryPhotos", "Saved photos"), ("trips", "Trips"), ("people", "People"), ("observations", "Places observations"), ("traccarPoints", "Traccar points")], id: \.0) { key, title in
                         LabeledContent(title, value: (preview.manifest.counts[key] ?? 0).formatted())
                     }
                     Button { confirmRestore = true } label: { Label("Restore this backup", systemImage: "square.and.arrow.down") }

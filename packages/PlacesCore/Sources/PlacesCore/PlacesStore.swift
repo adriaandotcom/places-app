@@ -98,6 +98,12 @@ public actor PlacesStore {
             try db.execute(sql: "DELETE FROM evidenceLinks; DELETE FROM routePoints")
             try StoreSQL.rebuild(db: db, since: nil)
         }
+        migrator.registerMigration("v12-traccar-offline-history") { db in
+            try db.execute(sql: """
+                CREATE TABLE traccarPoints (id TEXT PRIMARY KEY, timestamp REAL NOT NULL, payload BLOB NOT NULL);
+                CREATE INDEX traccarPoints_time ON traccarPoints(timestamp);
+                """)
+        }
         try migrator.migrate(queue)
     }
 
@@ -451,6 +457,7 @@ public actor PlacesStore {
     }
     public func fullHistoryArchive(in period: DateInterval? = nil, includePhotos: Bool = true) throws -> HistoryArchive {
         var archive = try historyArchive(in: period)
+        archive.traccarPoints = try traccarPoints(from: period?.start ?? .distantPast, to: period?.end ?? .distantFuture)
         archive.memories = try memoryArchive(in: period, includePhotos: includePhotos)
         archive.photoEvidence = try photoEvidence(since: period?.start ?? .distantPast, includeHistory: true)
         return archive.limited(to: period, includePhotos: includePhotos)
@@ -494,7 +501,7 @@ public actor PlacesStore {
     public func eraseHistory(resetSettings: Bool = false) throws {
         try queue.write { db in
             try db.execute(sql: """
-                DELETE FROM photoEvidence; DELETE FROM photoScan; DELETE FROM photoReview;
+                DELETE FROM traccarPoints; DELETE FROM photoEvidence; DELETE FROM photoScan; DELETE FROM photoReview;
                 DELETE FROM memoryPhotos; DELETE FROM memories; DELETE FROM trips; DELETE FROM people;
                 DELETE FROM evidenceLinks; DELETE FROM routePoints; DELETE FROM timeline; DELETE FROM overrides; DELETE FROM timelineSeparations;
                 DELETE FROM observations; DELETE FROM placeWifiLinks; DELETE FROM wifiAccessPoints;
