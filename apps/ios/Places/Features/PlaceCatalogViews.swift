@@ -43,6 +43,7 @@ struct PlaceCatalogSearch: View {
     @Environment(\.dismiss) private var dismiss
     let anchor: Coordinate?
     let select: (CatalogPlace) -> Void
+    let useName: (String) -> Void
     @State private var query = ""
     @FocusState private var queryFocused: Bool
     @State private var results: [CatalogPlace] = []
@@ -51,6 +52,7 @@ struct PlaceCatalogSearch: View {
     @State private var allRegions = false
     private var searchAnchor: Coordinate? { allRegions ? nil : anchor }
     private var searchKey: String { "\(allRegions):\(query)" }
+    private var enteredName: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     var body: some View {
         List {
             Section {
@@ -65,10 +67,17 @@ struct PlaceCatalogSearch: View {
                 }
             } footer: { Text(searchAnchor == nil ? "Amsterdam & Kos · Offline" : "Near this location · Offline") }
             if loading { ProgressView("Searching…") }
-            else if failed { Text("Place suggestions are unavailable. You can still enter a place yourself.") }
-            else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && results.isEmpty {
-                Text(searchAnchor == nil ? "No matching places. Try another name, or enter it yourself."
-                    : "No matches within 15 km. Try another name or search all regions.").foregroundStyle(Palette.muted)
+            else if failed || (!enteredName.isEmpty && results.isEmpty) {
+                Section {
+                    Text(failed ? "Place suggestions are unavailable. You can still enter a place yourself."
+                        : searchAnchor == nil ? "No matching places. Try another name, or use the name you entered."
+                        : "No matches within 15 km. Search all regions, or use the name you entered.").foregroundStyle(Palette.muted)
+                    if !enteredName.isEmpty {
+                        Button("Use this name", systemImage: "pencil") { useName(enteredName); dismiss() }
+                            .foregroundStyle(Palette.green)
+                            .accessibilityIdentifier("catalog-use-name")
+                    }
+                }
             }
             ForEach(results) { place in
                 Button { select(place); dismiss() } label: {

@@ -16,6 +16,7 @@ struct MapPin: Equatable, Identifiable, Sendable {
     var customColorHex: String?
     var photoJPEG: Data?
     var placeID: String?
+    var unnamedStay: TimelineItem?
     var letter: String?
     var isRecordedLocation = false
 }
@@ -140,7 +141,7 @@ struct MapPresentation: Equatable, Sendable {
         }
         for item in items {
             if item.kind == .stay, !places.contains(where: { $0.id == item.placeID }), let coordinate = item.coordinate, coordinate.isValid {
-                pins.append(MapPin(id: item.id, name: "Somewhere new", coordinate: coordinate, symbol: "mappin", colorIndex: 4))
+                pins.append(MapPin(id: item.id, name: "Somewhere new", coordinate: coordinate, symbol: "mappin", colorIndex: 4, unnamedStay: item))
             }
             // A grouped walking visit can contain an unrecorded interval. Draw
             // each recorded member separately instead of connecting across it.

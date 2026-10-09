@@ -1430,6 +1430,40 @@ import XCTest
         XCTAssertFalse(app.maps.firstMatch.exists)
     }
 
+    func testUnnamedMapPinOpensNamingAndUsesUnmatchedSearchNameOnBothProviders() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-airport-stay"] + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10)); app.buttons["tab-map"].tap()
+            if !offline { enableAppleMaps(in: app) }
+            let pin = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "map-place-")).firstMatch
+            XCTAssertTrue(pin.waitForExistence(timeout: 10)); pin.tap()
+            XCTAssertTrue(app.navigationBars["Name this place"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["assign-place"].exists)
+            app.buttons["Cancel"].tap()
+            XCTAssertTrue(pin.waitForExistence(timeout: 5)); XCTAssertEqual(pin.label, "Somewhere new")
+            pin.tap(); app.buttons["find-catalog-place"].tap()
+            let query = app.textFields["catalog-query"]
+            XCTAssertTrue(query.waitForExistence(timeout: 5)); query.tap(); query.typeText("  Fixture Hidden Café  \n")
+            let useName = app.buttons["catalog-use-name"]
+            XCTAssertTrue(useName.waitForExistence(timeout: 10))
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Use unmatched name \(offline ? "offline" : "Apple")"; screenshot.lifetime = .keepAlways; add(screenshot)
+            useName.tap()
+            XCTAssertTrue(app.navigationBars["Name this place"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.textFields["place-name"].value as? String, "Fixture Hidden Café")
+            XCTAssertFalse(query.exists)
+            app.buttons["save-place"].tap()
+            XCTAssertTrue(app.textFields["place-name"].waitForNonExistence(timeout: 5))
+            XCTAssertTrue(pin.waitForExistence(timeout: 5)); XCTAssertEqual(pin.label, "Fixture Hidden Café")
+            pin.tap()
+            XCTAssertTrue(app.buttons["Edit place"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.textFields["place-name"].exists)
+            app.terminate()
+        }
+    }
+
     func testOfflineCatalogSearchReviewSaveAndReuseWithoutMaps() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-unnamed-stay"]

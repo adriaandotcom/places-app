@@ -331,7 +331,11 @@ struct PlaceEditor: View {
             .sheet(isPresented: $choosingCatalog, onDismiss: {
                 existingSuggestion = pendingSavedSuggestion; pendingSavedSuggestion = nil
             }) {
-                NavigationStack { PlaceCatalogSearch(anchor: searchAnchor, select: selectCatalog) }
+                NavigationStack {
+                    PlaceCatalogSearch(anchor: searchAnchor, select: selectCatalog, useName: {
+                        name = $0; focusedField = nil
+                    })
+                }
             }
             .confirmationDialog("This place is already saved", isPresented: Binding(get: { existingSuggestion != nil }, set: { if !$0 { existingSuggestion = nil } }), titleVisibility: .visible) {
                 if let existingSuggestion {

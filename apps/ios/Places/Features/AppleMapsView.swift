@@ -85,7 +85,7 @@ private struct AppleMapSurface: View {
     var customPresentation: MapPresentation?
     let chromeInsets: EdgeInsets
     let rawPointSelected: ((RawMapPoint) -> Void)?
-    @State private var selectedPlace: Place?
+    @State private var selectedPin: MapPin?
     @State private var camera: MapCameraPosition = .automatic
     @State private var hasFramed = false
     private var presentation: MapPresentation {
@@ -106,9 +106,10 @@ private struct AppleMapSurface: View {
                         .tint(Palette.accent(pin.colorIndex)).annotationTitles(.hidden)
                 } else {
                     Annotation(pin.name, coordinate: CLLocationCoordinate2D(latitude: pin.coordinate.latitude, longitude: pin.coordinate.longitude)) {
-                        if let place = model.places.first(where: { $0.id == pin.placeID }) {
-                            Button { selectedPlace = place } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40) }
+                        if pin.unnamedStay != nil || model.places.contains(where: { $0.id == pin.placeID }) {
+                            Button { selectedPin = pin } label: { PlaceIcon(symbol: pin.symbol, colorIndex: pin.colorIndex, customColorHex: pin.customColorHex, photoJPEG: pin.photoJPEG, size: 40) }
                                 .accessibilityLabel(pin.name)
+                                .accessibilityIdentifier("map-place-\(pin.id)")
                         } else if let letter = pin.letter {
                             Text(letter).font(.headline.bold()).foregroundStyle(Palette.iconInk(pin.colorIndex, hex: pin.customColorHex))
                                 .frame(width: 32, height: 32).background(Palette.accent(pin.colorIndex, hex: pin.customColorHex), in: Circle())
@@ -147,7 +148,7 @@ private struct AppleMapSurface: View {
         .onAppear { frame(restoreViewport: true); hasFramed = true }
         .onChange(of: presentation.coordinates) { _, _ in frame(restoreViewport: false) }
         .onChange(of: focusRequest) { _, _ in frame(restoreViewport: false) }
-        .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) }.environment(\.hasMainNavigation, false) }
+        .sheet(item: $selectedPin) { MapPlaceDestination(pin: $0) }
     }
     private func frame(restoreViewport: Bool) {
         if restoreViewport, let viewport {
@@ -157,6 +158,19 @@ private struct AppleMapSurface: View {
             camera = .region(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: region.center.latitude, longitude: region.center.longitude),
                 span: MKCoordinateSpan(latitudeDelta: region.latitudeSpan, longitudeDelta: region.longitudeSpan)))
         } else { camera = .automatic }
+    }
+}
+
+struct MapPlaceDestination: View {
+    let pin: MapPin
+    var body: some View {
+        NavigationStack {
+            if let placeID = pin.placeID {
+                PlaceDetail(placeID: placeID)
+            } else if let stay = pin.unnamedStay {
+                PlaceEditor(coordinate: stay.coordinate, assigning: stay)
+            }
+        }.environment(\.hasMainNavigation, false)
     }
 }
 

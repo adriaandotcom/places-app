@@ -29,7 +29,7 @@ struct OfflineMapView: View {
     var chromeInsets = EdgeInsets()
     var pinChanged: ((Coordinate) -> Void)?
     var rawPointSelected: ((RawMapPoint) -> Void)?
-    @State private var selectedPlace: Place?
+    @State private var selectedPin: MapPin?
     @State private var showSettings = false
     @State private var suggestedPack: MapPack?
     @State private var offered: Set<MapPack.ID> = []
@@ -38,7 +38,9 @@ struct OfflineMapView: View {
     var body: some View {
         OfflineMapSurface(presentation: presentation, installed: model.mapDownloads.installed, viewport: $viewport, focusRequest: focusRequest, chromeInsets: chromeInsets,
             pinChanged: pinChanged,
-            selected: { pin in selectedPlace = model.places.first { $0.id == pin.placeID } },
+            selected: { pin in
+                if pin.unnamedStay != nil || model.places.contains(where: { $0.id == pin.placeID }) { selectedPin = pin }
+            },
             settled: suggestCountry, failed: { mapIssue = "The downloaded map could not be displayed." },
             rawPointSelected: rawPointSelected)
             .accessibilityIdentifier(pinChanged == nil ? "on-device-map" : "place-pin-map")
@@ -72,7 +74,7 @@ struct OfflineMapView: View {
             .sheet(isPresented: $showSettings) {
                 NavigationStack { MapsSettings().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showSettings = false } } } }
             }
-            .sheet(item: $selectedPlace) { place in NavigationStack { PlaceDetail(placeID: place.id) }.environment(\.hasMainNavigation, false) }
+            .sheet(item: $selectedPin) { MapPlaceDestination(pin: $0) }
     }
     private var banner: String? {
         if let mapIssue { return mapIssue + " Manage maps" }
@@ -332,6 +334,10 @@ struct OfflineMapSurface: UIViewRepresentable {
             }
             view.frame = CGRect(x: 0, y: 0, width: 140, height: 70)
             view.isAccessibilityElement = true; view.accessibilityLabel = pin.name
+            if pin.placeID != nil || pin.unnamedStay != nil {
+                view.accessibilityTraits.insert(.button)
+                view.accessibilityIdentifier = "map-place-\(pin.id)"
+            }
             let badge = UIView(frame: CGRect(x: 50, y: 0, width: 40, height: 40))
             badge.backgroundColor = UIColor(Palette.accent(pin.colorIndex, hex: pin.customColorHex)); badge.layer.cornerRadius = 14
             if let letter = pin.letter {
