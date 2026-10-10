@@ -138,8 +138,8 @@ struct DiagnosticsView: View {
 private struct LicensesView: View {
     var body: some View {
         List {
-            ForEach(["OFL", "GRDB-LICENSE", "ZIPFoundation-LICENSE", "Traccar-LICENSE", "MapLibre-LICENSE", "Map-data", "Map-fonts"], id: \.self) { name in
-                Section(["OFL": "Bricolage Grotesque", "GRDB-LICENSE": "GRDB.swift", "ZIPFoundation-LICENSE": "ZIPFoundation", "Traccar-LICENSE": "Traccar offline SDK (Apache 2.0)", "MapLibre-LICENSE": "MapLibre", "Map-data": "On-device map data", "Map-fonts": "Noto Sans map labels"][name] ?? name) {
+            ForEach(["OFL", "GRDB-LICENSE", "ZIPFoundation-LICENSE", "Traccar-LICENSE", "Valhalla-LICENSE", "MapLibre-LICENSE", "Map-data", "Map-fonts"], id: \.self) { name in
+                Section(["OFL": "Bricolage Grotesque", "GRDB-LICENSE": "GRDB.swift", "ZIPFoundation-LICENSE": "ZIPFoundation", "Traccar-LICENSE": "Traccar offline SDK (Apache 2.0)", "Valhalla-LICENSE": "Valhalla offline route matching", "MapLibre-LICENSE": "MapLibre", "Map-data": "On-device map data", "Map-fonts": "Noto Sans map labels"][name] ?? name) {
                     Text(license(name)).font(.caption).textSelection(.enabled)
                 }
             }

@@ -24,6 +24,7 @@ struct MainView: View {
             MainNavigationIsland()
         }
         .background(Palette.background)
+        .onChange(of: model.selectedTab) { _, _ in model.matchingTabChanged() }
         .modifier(DeleteUndoPresentation(undo: model.deleteUndo))
         .environment(\.hasMainNavigation, true)
         .sheet(item: Binding(get: { model.rewindRequest }, set: { model.rewindRequest = $0 })) { request in

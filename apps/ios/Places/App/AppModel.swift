@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import UserNotifications
 import PlacesCore
 import PlacesCompanion
+import PlacesRouting
 
 @MainActor @Observable
 final class AppModel {
@@ -47,6 +48,16 @@ final class AppModel {
     private(set) var traccarEnabled = false
     private(set) var showPlacesPoints = true
     private(set) var showTraccarPoints = true
+    private(set) var valhallaEnabled = false
+    private(set) var valhallaMode = TraccarMatchingMode.walking
+    private(set) var routingPack: RoutingPack?
+    private(set) var routeComparison: TraccarRouteResult?
+    private(set) var routeComparisonStatus: String?
+    private(set) var installingRoutingPack = false
+    @ObservationIgnored private let routeExperiment = TraccarRouteExperiment(testing: ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+    @ObservationIgnored private var routeTask: Task<Void, Never>?
+    private var routeRequest = UUID()
+    private var matchingForeground = true
     private(set) var trackingEnabled = true
     private(set) var onboardingComplete = false
     private(set) var replayingOnboarding = false
@@ -162,6 +173,9 @@ final class AppModel {
                     traccarEnabled = try await opened.setting("traccarEnabled") == "true"
                     showPlacesPoints = try await opened.setting("showPlacesPoints") != "false"
                     showTraccarPoints = try await opened.setting("showTraccarPoints") != "false"
+                    valhallaEnabled = try await opened.setting("valhallaEnabled") == "true"
+                    valhallaMode = TraccarMatchingMode(rawValue: try await opened.setting("valhallaMode") ?? "") ?? .walking
+                    routingPack = await routeExperiment.installed()
                     monthlyRewindReminders = try await opened.setting("monthlyRewindReminders") == "true"
                     weeklyReviewReminders = try await opened.setting("weeklyReviewReminders") == "true"
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
@@ -317,11 +331,13 @@ final class AppModel {
                 mapPoints = try await store.routePoints(from: period.interval.start, to: period.interval.end)
             } else { mapItems = newTimeline; mapPoints = newPoints }
             let rawMap: MapPresentation?
+            var comparisonPoints: [TraccarPoint] = []
             if showingRawPoints {
                 let range = period?.interval ?? interval
                 let observations = placesLayer ? try await store.observations(from: range.start, to: range.end) : []
                 let photos = placesLayer ? try await store.photoEvidence(from: range.start, to: range.end) : []
                 let traccarPoints = traccarLayer ? try await store.traccarPoints(from: range.start, to: range.end) : []
+                comparisonPoints = traccarPoints
                 rawMap = await Task.detached(priority: .userInitiated) {
                     MapPresentation(observations: observations, photos: photos, traccar: traccarPoints,
                         showPlaces: placesLayer, showTraccar: traccarLayer)
@@ -346,6 +362,7 @@ final class AppModel {
                 // Commit the framing request together with the loaded period, never
                 // while the map still contains the previous selection's places.
                 mapFocusRequest = selectionRequest
+                startRouteComparison(points: comparisonPoints, presentation: rawMap)
             }
             if showingRawPoints == nerdMode {
                 recentObservations = newObservations; events = newEvents
@@ -403,11 +420,13 @@ final class AppModel {
     }
 
     func selectDay(_ day: Date) {
+        stopRouteComparison()
         selectedDay = min(day, Date()); mapPeriod = nil; mapSelectionRequest = UUID()
         mapRawPresentation = nil
         Task { await refresh() }
     }
     func selectPeriod(_ period: HistoryPeriod) {
+        stopRouteComparison()
         mapPeriod = period; mapSelectionRequest = UUID()
         mapRawPresentation = nil
         Task { await refresh() }
@@ -510,15 +529,18 @@ final class AppModel {
     }
     func setMapsEnabled(_ value: Bool) async { await setMapProvider(value ? .apple : .off) }
     func setMapProvider(_ provider: MapProvider) async {
+        stopRouteComparison()
         let preference = UUID(); mapPreference = preference
         // Stop an Apple surface immediately, including if saving consent fails.
         if provider != .apple { mapProvider = .off }
+        if provider == .off { Task { await routeExperiment.close() } }
         do {
             guard let store else { return }
             try await store.setSetting("mapProvider", value: provider.rawValue)
             try await store.setSetting("mapsChoiceMade", value: "true")
             guard mapPreference == preference, !deleting else { return }
             mapsChoiceMade = true; mapProvider = provider
+            await refresh()
         } catch {
             guard mapPreference == preference, !deleting else { return }
             fail("Could not save your map preference. Maps remain off for this session."); mapProvider = .off
@@ -584,6 +606,8 @@ final class AppModel {
         enrichRegions()
     }
     func setNerdMode(_ value: Bool) async {
+        stopRouteComparison()
+        if !value { Task { await routeExperiment.close() } }
         guard let store, !deleting else { return }
         let epoch = generation
         do {
@@ -596,6 +620,8 @@ final class AppModel {
         catch { fail("Could not save this setting.") }
     }
     func setComparisonLayer(traccar: Bool, visible: Bool) async {
+        stopRouteComparison()
+        if traccar && !visible { Task { await routeExperiment.close() } }
         guard let store, !deleting else { return }
         let epoch = generation
         do {
@@ -604,6 +630,83 @@ final class AppModel {
             if traccar { showTraccarPoints = visible } else { showPlacesPoints = visible }
             mapSelectionRequest = UUID(); await refresh()
         } catch { fail("Could not save this map setting.") }
+    }
+    func stopRouteComparison() {
+        routeRequest = UUID(); routeTask?.cancel(); routeTask = nil
+        routeComparison = nil; routeComparisonStatus = nil
+    }
+    func matchingSceneChanged(active: Bool) {
+        matchingForeground = active
+        if !active { stopRouteComparison(); Task { await routeExperiment.close() } }
+    }
+    func matchingTabChanged() {
+        if selectedTab == .map { Task { await refresh() } }
+        else { stopRouteComparison(); Task { await routeExperiment.close() } }
+    }
+    private func startRouteComparison(points: [TraccarPoint], presentation: MapPresentation?) {
+        stopRouteComparison()
+        guard valhallaEnabled, nerdMode, showTraccarPoints, mapsAvailable,
+              selectedTab == .map, matchingForeground, !installingRoutingPack,
+              let presentation else { return }
+        guard routingPack != nil else { routeComparisonStatus = "Import a routing pack to compare routes."; return }
+        guard points.count >= 2 else { routeComparisonStatus = "Not enough orange points in this period."; return }
+        let request = routeRequest, epoch = generation, mode = valhallaMode
+        routeComparisonStatus = "Matching orange points…"
+        routeTask = Task {
+            do {
+                let result = try await routeExperiment.match(points, mode: mode)
+                guard !Task.isCancelled, request == routeRequest, epoch == generation, !deleting else { return }
+                routeComparison = result
+                mapRawPresentation = presentation.comparing(result)
+                routeComparisonStatus = result.matches.isEmpty ? "No continuous sections could be matched. Original points remain visible." : nil
+            } catch is CancellationError { }
+            catch {
+                guard request == routeRequest, epoch == generation, !deleting else { return }
+                routeComparisonStatus = points.count > 10_000 ? "Choose a shorter period to compare up to 10,000 points." : "Could not match this period locally. Original points remain visible."
+            }
+        }
+    }
+    func setValhalla(enabled: Bool, mode: TraccarMatchingMode) async {
+        guard let store, !deleting else { return }
+        let epoch = generation
+        stopRouteComparison()
+        do {
+            try await store.setSetting("valhallaEnabled", value: String(enabled))
+            try await store.setSetting("valhallaMode", value: mode.rawValue)
+            if enabled {
+                try await store.setSetting("nerdMode", value: "true")
+                try await store.setSetting("showTraccarPoints", value: "true")
+            }
+            guard epoch == generation, !deleting else { return }
+            valhallaEnabled = enabled; valhallaMode = mode
+            if enabled { nerdMode = true; showTraccarPoints = true }
+            else { await routeExperiment.close() }
+            mapSelectionRequest = UUID(); await refresh()
+        } catch { fail("Could not save this comparison setting.") }
+    }
+    func importRoutingPack(_ url: URL) async {
+        guard !installingRoutingPack, !deleting else { return }
+        installingRoutingPack = true; stopRouteComparison()
+        let epoch = generation
+        defer { installingRoutingPack = false }
+        do {
+            let pack = try await routeExperiment.install(url)
+            guard epoch == generation, !deleting else { return }
+            routingPack = pack
+        } catch { if epoch == generation, !deleting { fail("Could not import this routing pack. Use the Places Valhalla pack and make sure there is enough free storage.") } }
+        installingRoutingPack = false
+        await refresh()
+    }
+    func deleteRoutingPack() async {
+        guard !installingRoutingPack, !deleting else { return }
+        let epoch = generation
+        stopRouteComparison()
+        do {
+            try await routeExperiment.remove()
+            guard epoch == generation, !deleting else { return }
+            routingPack = nil
+            await setValhalla(enabled: false, mode: valhallaMode)
+        } catch { fail("Could not remove the routing pack. Please try again.") }
     }
     func setTraccarEnabled(_ value: Bool) async {
         guard let store, !deleting else { return }
@@ -732,6 +835,7 @@ final class AppModel {
     }
 
     func restoreBackup(_ backup: PreparedBackup) async throws {
+        stopRouteComparison(); await routeExperiment.clear()
         guard let store, !deleting else { throw CancellationError() }
         deleting = true; generation += 1
         await traccar.stop()
@@ -773,6 +877,8 @@ final class AppModel {
         nerdMode = (try? await store.setting("nerdMode")) == "true"
         showPlacesPoints = (try? await store.setting("showPlacesPoints")) != "false"
         showTraccarPoints = (try? await store.setting("showTraccarPoints")) != "false"
+        valhallaEnabled = (try? await store.setting("valhallaEnabled")) == "true"
+        valhallaMode = TraccarMatchingMode(rawValue: (try? await store.setting("valhallaMode")) ?? "") ?? .walking
         deleting = false
         await photoLibrary.start(store: store)
         await refresh()
@@ -786,6 +892,7 @@ final class AppModel {
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
+        stopRouteComparison(); await routeExperiment.clear()
         await traccar.stop()
         photoLibrary.reset()
         deleteUndo.clear()
@@ -801,6 +908,7 @@ final class AppModel {
         do {
             if !uiTesting { try await companions.erase() }
             try mapDownloads.deleteAll()
+            try await routeExperiment.remove(); routingPack = nil; valhallaEnabled = false; valhallaMode = .walking
             try MemoryPhotoDraft.clearAbandonedImports()
             try BackupTransferView.clearAbandonedTransfers()
             try await store.eraseHistory(resetSettings: true)

@@ -134,6 +134,17 @@ struct MapPresentation: Equatable, Sendable {
         radius = place.area == nil ? place.radius : nil
         areas = place.area.map { [$0] } ?? []
     }
+
+    func comparing(_ result: TraccarRouteResult) -> Self {
+        var presentation = self
+        presentation.paths.removeAll { $0.id == "traccar-order" || $0.id.hasPrefix("traccar-match-") }
+        for (index, section) in result.trace.sections.enumerated() {
+            let match = result.matches.first { $0.pointIDs == section.map(\.id) }
+            presentation.paths.append(MapPath(id: "traccar-match-\(index)",
+                coordinates: match?.coordinates ?? section.map(\.coordinate), dashed: match == nil, colorIndex: 2))
+        }
+        return presentation
+    }
     init(items: [TimelineItem], routePoints: [RoutePoint], places: [Place]) {
         let ids = Set(items.compactMap(\.placeID))
         pins = places.filter { ids.contains($0.id) }.map {

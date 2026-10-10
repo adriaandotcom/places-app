@@ -65,6 +65,7 @@ import BackgroundTasks
                 Task { await model.reconcileTraccar() }
             }
             .onChange(of: scenePhase) { _, phase in
+                model.matchingSceneChanged(active: phase == .active)
                 if !model.uiTesting {
                     model.tracking.sceneChanged(isForeground: phase != .background)
                     if phase == .active { LocalDiagnostics.shared.record(.foreground) }

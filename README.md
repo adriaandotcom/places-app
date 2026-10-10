@@ -23,6 +23,11 @@ bundled Bricolage Grotesque fonts retain their own licenses.
 GRDB is pinned to 7.11.1. Package downloads happen during development/builds;
 the app does not download dependencies or executable code at runtime.
 
+The opt-in [Valhalla route experiment](VALHALLA.md) matches only the independent
+orange Traccar points using an explicitly imported local routing pack. It does
+not change recording or timeline inference. See the measured pack sizes and
+limitations before enabling it.
+
 ## Repository
 
 | Path | Responsibility |

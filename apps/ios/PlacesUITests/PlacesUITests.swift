@@ -989,6 +989,43 @@ import XCTest
         }
     }
 
+    func testRouteExperimentKeepsProfileAndDateWithoutEnablingRecording() {
+        for offline in [true, false] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-map-periods", "--ui-traccar"] + (offline ? ["--ui-on-device-map"] : [])
+            app.launch()
+            XCTAssertTrue(app.buttons["timeline-day--2"].waitForExistence(timeout: 10))
+            app.buttons["timeline-day--2"].tap(); app.buttons["tab-map"].tap()
+            if !offline { enableAppleMaps(in: app) }
+            app.buttons["map-nerd-mode"].tap()
+            let count = app.buttons["raw-map-count"]
+            XCTAssertTrue(count.waitForExistence(timeout: 10))
+            let date = app.buttons["map-period-picker"].label
+            app.buttons["map-collectors"].tap()
+            let form = app.collectionViews.firstMatch
+            let mode = app.buttons["valhalla-mode"]
+            for _ in 0..<3 where !mode.isHittable { form.swipeUp() }
+            XCTAssertTrue(mode.waitForExistence(timeout: 5)); mode.tap()
+            let driving = app.buttons["Driving"]
+            XCTAssertTrue(driving.waitForExistence(timeout: 5)); driving.tap()
+            XCTAssertTrue(mode.label.contains("Driving"))
+            let enabled = app.switches["valhalla-toggle"]
+            XCTAssertFalse(enabled.isEnabled, "A missing local pack must not trigger online matching")
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "Valhalla controls \(offline ? "offline" : "Apple")"; shot.lifetime = .keepAlways; add(shot)
+            app.buttons["Done"].tap()
+            app.buttons["tab-timeline"].tap(); app.buttons["tab-map"].tap()
+            XCTAssertEqual(count.label, "10 raw points")
+            XCTAssertEqual(app.buttons["map-period-picker"].label, date)
+            app.buttons["map-collectors"].tap()
+            for _ in 0..<3 where !mode.isHittable { app.collectionViews.firstMatch.swipeUp() }
+            XCTAssertTrue(mode.label.contains("Driving"))
+            let recording = app.switches["traccar-recording-toggle"]
+            for _ in 0..<4 where !recording.isHittable { app.collectionViews.firstMatch.swipeDown() }
+            XCTAssertEqual(recording.value as? String, "0")
+        }
+    }
+
     func testCollectorLayersStaySeparateAndRememberDateAcrossTabs() {
         for offline in [true, false] {
             let app = XCUIApplication()

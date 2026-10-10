@@ -239,6 +239,7 @@ class TestFlightSmokeTests(unittest.TestCase):
     def test_workflow_only_releases_main_and_runs_tests_locally(self):
         root = SCRIPT.parents[1]
         workflow = (root / '.github/workflows/testflight.yml').read_text()
+        self.assertIn("'packages/PlacesRouting/**'", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
         self.assertIn("vars.PLACES_TESTFLIGHT_ENABLED == 'true'", workflow)
         self.assertNotIn('pull_request:', workflow)

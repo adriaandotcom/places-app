@@ -214,7 +214,7 @@ struct MapScreen: View {
                                 .accessibilityIdentifier("map-collectors")
                             if let raw = model.mapRawPresentation {
                                 Button { selectedRawPoint = raw.rawPoints.first } label: {
-                                    Text(raw.rawPoints.isEmpty ? "No raw points" : "\(raw.rawPoints.count) raw points")
+                                    Text(rawPointLabel(raw))
                                         .font(.caption.weight(.medium)).padding(.horizontal, Layout.compact)
                                         .frame(minHeight: Layout.touchTarget)
                                 }.buttonStyle(.glass).disabled(raw.rawPoints.isEmpty)
@@ -256,6 +256,13 @@ struct MapScreen: View {
             }
             .onChange(of: model.mapFocusRequest) { _, _ in selectedRawPoint = nil }
             .onChange(of: model.nerdMode) { _, _ in selectedRawPoint = nil }
+    }
+    private func rawPointLabel(_ raw: MapPresentation) -> String {
+        guard !raw.rawPoints.isEmpty else { return "No raw points" }
+        if let result = model.routeComparison, !result.matches.isEmpty {
+            return "\(raw.rawPoints.count) points · ≈\((result.distanceMeters / 1_000).formatted(.number.precision(.fractionLength(1)))) km"
+        }
+        return "\(raw.rawPoints.count) raw points"
     }
 }
 

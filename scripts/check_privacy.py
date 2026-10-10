@@ -93,7 +93,7 @@ def audit(root):
         errors += check_css(css.read_text(), css.parent, website)
     native = root / 'apps/ios/Places'
     sources = list(native.rglob('*.swift')) + list((root / 'packages/PlacesCore/Sources').rglob('*.swift'))
-    for path in ['apps/macos', 'apps/watch', 'apps/shared', 'packages/PlacesCompanion/Sources']:
+    for path in ['apps/macos', 'apps/watch', 'apps/shared', 'packages/PlacesCompanion/Sources', 'packages/PlacesRouting/Sources']:
         sources += list((root / path).rglob('*.swift'))
     cloud = root / 'packages/PlacesCompanion/Sources/PlacesCompanion/CloudInbox.swift'
     for source in sources:
@@ -109,6 +109,18 @@ def audit(root):
         if has_remote_url(text, source == root / 'packages/PlacesCore/Sources/PlacesCore/GPXExport.swift'):
             errors.append(f'{source.name}: native runtime must not use remote URLs')
     errors += check_companion_cloud(cloud.read_text())
+    routing = root / 'packages/PlacesRouting/Sources'
+    if routing.exists():
+        bridge = (routing / 'PlacesRoutingNative/PlacesRoutingNative.mm').read_text()
+        if 'make_unique<ValhallaActor>(configPath.UTF8String, nullptr)' not in bridge:
+            errors.append('Offline routing must provide no HTTP client')
+        if 'logging::Configure({{"type", ""}})' not in bridge:
+            errors.append('Native routing logs must be disabled before graph access')
+        if re.search(r'\b(NSURLSession|URLSession|NSURLRequest|NSLog|printf)\b', bridge):
+            errors.append('Native routing bridge must not add network/logging entry points')
+        config = json.loads((routing / 'PlacesRouting/Resources/config.json').read_text())
+        if re.search(r'https?://|"tile_url"|"httpd"|"statsd"', json.dumps(config)):
+            errors.append('Offline routing configuration must not contain remote resources or telemetry')
     maps = (native / 'Features/AppleMapsView.swift').read_text()
     if not re.search(r'if model\.mapsEnabled\s*\{\s*AppleMapSurface\(', maps):
         errors.append('MapKit surface is not behind the consent gate')

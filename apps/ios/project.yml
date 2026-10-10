@@ -16,6 +16,11 @@ packages:
     path: ../../packages/PlacesCore
   PlacesCompanion:
     path: ../../packages/PlacesCompanion
+  PlacesRouting:
+    path: ../../packages/PlacesRouting
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    exactVersion: 0.9.20
 settings:
   base:
     SWIFT_VERSION: '6.0'
@@ -40,6 +45,7 @@ targets:
       - package: PlacesCore
       - package: MapLibre
       - package: PlacesCompanion
+      - package: PlacesRouting
       - target: PlacesWatch
         embed: true
     settings:
@@ -228,6 +234,8 @@ targets:
     dependencies:
       - target: Places
       - package: PlacesCore
+      - package: PlacesRouting
+      - package: ZIPFoundation
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

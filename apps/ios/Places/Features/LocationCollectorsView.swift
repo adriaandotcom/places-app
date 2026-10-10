@@ -1,8 +1,11 @@
 import SwiftUI
+import PlacesCore
+import UniformTypeIdentifiers
 
 struct LocationCollectorsView: View {
     @Environment(AppModel.self) private var model
     @State private var changing = false
+    @State private var importingPack = false
     var body: some View {
         Form {
             Section {
@@ -49,8 +52,42 @@ struct LocationCollectorsView: View {
             } header: { Text("Map layers") } footer: {
                 Text("Nerd mode shows each collector’s points for the selected date or period. Dashed lines connect points from the same collector in time order. Hiding a layer does not stop recording.")
             }
+            Section {
+                Toggle("Valhalla routes", isOn: Binding(get: { model.valhallaEnabled }, set: { enabled in
+                    Task { await model.setValhalla(enabled: enabled, mode: model.valhallaMode) }
+                })).disabled(model.installingRoutingPack || (model.routingPack == nil && !model.valhallaEnabled))
+                    .accessibilityIdentifier("valhalla-toggle")
+                Picker("Match as", selection: Binding(get: { model.valhallaMode }, set: { mode in
+                    Task { await model.setValhalla(enabled: model.valhallaEnabled, mode: mode) }
+                })) {
+                    ForEach(TraccarMatchingMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                }.disabled(model.installingRoutingPack).accessibilityIdentifier("valhalla-mode")
+                if let pack = model.routingPack {
+                    LabeledContent("Routing data", value: pack.name)
+                    LabeledContent("Storage", value: ByteCountFormatter.string(fromByteCount: Int64(pack.bytes), countStyle: .file))
+                }
+                Button("Import routing pack", systemImage: "square.and.arrow.down") { importingPack = true }
+                    .disabled(model.installingRoutingPack).accessibilityIdentifier("import-routing-pack")
+                if model.routingPack != nil {
+                    Button("Delete routing pack", systemImage: "trash", role: .destructive) {
+                        Task { await model.deleteRoutingPack() }
+                    }.foregroundStyle(.red).disabled(model.installingRoutingPack)
+                }
+                if model.installingRoutingPack { ProgressView("Installing routing data…") }
+                if let result = model.routeComparison, !result.matches.isEmpty {
+                    LabeledContent("Matched points", value: "\(result.matchedPointCount) of \(result.pointCount)")
+                    LabeledContent("Estimated distance", value: Measurement(value: result.distanceMeters, unit: UnitLength.meters).formatted(.measurement(width: .abbreviated)))
+                    LabeledContent("Observed span", value: Duration.seconds(result.observedSeconds).formatted(.time(pattern: .hourMinuteSecond)))
+                }
+                if let status = model.routeComparisonStatus { Text(status).foregroundStyle(.secondary) }
+            } header: { Text("Route experiment") } footer: {
+                Text("Matches only orange Traccar points using local routing data. Enabling this turns on Nerd mode and leaves recording unchanged. Solid orange lines are estimates; dashed sections remain unmatched. Gaps and poor fixes break the trace. Time comes from recorded points, including stops. Import the Places Valhalla ZIP through Files. Matching happens on this iPhone; routing packs are excluded from backups.")
+            }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .tint(Palette.controlGreen).navigationTitle("Location collectors").navigationBarTitleDisplayMode(.inline)
+            .fileImporter(isPresented: $importingPack, allowedContentTypes: [.zip]) { result in
+                if case .success(let url) = result { Task { await model.importRoutingPack(url) } }
+            }
     }
     private var status: String {
         if model.traccar.storageFailed { return "Could not save; recording stopped" }
