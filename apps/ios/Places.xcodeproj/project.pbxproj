@@ -18,6 +18,7 @@
 		0ED2B97434350FC9C53E3D25 /* MapPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1606887387E5B16905FC86 /* MapPresentation.swift */; };
 		1046BFCE12CAAD28AD400F14 /* PlacesMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E911E9A38B5A7EB7327F494A /* PlacesMarker.swift */; };
 		1BE484548285A1988C171A4C /* PlaceIconPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A16521D795B7F9A477DDF9 /* PlaceIconPicker.swift */; };
+		1C3A53B58ADB7D7423A2B7F6 /* RoutingDownloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D816DC8CC1427F3392B7154 /* RoutingDownloadTests.swift */; };
 		1E5C243E0C19CAC1EE52D6FC /* PlaceDetailsContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA177269E86CDC2DB2D08CA /* PlaceDetailsContent.swift */; };
 		212AC9F9C092746DDB6CE649 /* SupportLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AEC3546003ABC01BD8BE9A9 /* SupportLog.swift */; };
 		224E79B89600320590F3F8FE /* MemoryPhotoBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEA9C65BB61838DFB0CC890 /* MemoryPhotoBrowser.swift */; };
@@ -71,6 +72,7 @@
 		7B892893E077E5D9B53F28C7 /* HistoryDatePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4110CBD5AFD1554FAE290740 /* HistoryDatePicker.swift */; };
 		7D8274BFBC6054B26A47EEBB /* ProtectedStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B116AB54E14230415ABC727 /* ProtectedStorage.swift */; };
 		7EBB269AAA837E5F5C546BFC /* PlacesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D0A7415EE349A00D122FC5 /* PlacesUITests.swift */; };
+		820070A5BD9F089A2F3FD7ED /* RoutingPackDownloads.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0D618DE96CBBDD7DF35E410 /* RoutingPackDownloads.swift */; };
 		83E8962290BF83C020CB0CD3 /* WatchLocationSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1B8DCA0C7287DCD5F87347 /* WatchLocationSnapshot.swift */; };
 		841E94E0B0181A9A68A8E9A7 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19E16CB5D0FBE5CF702B4018 /* SearchView.swift */; };
 		8647C674E084BD7A59785677 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 4A0FD5DD320094D0C71ADC76 /* OFL.txt */; };
@@ -239,6 +241,7 @@
 		5AB6E8D9747F18FE83122B3D /* WatchConnectionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectionMonitor.swift; sourceTree = "<group>"; };
 		5B3A7B9EDCAFC4FF60BDE911 /* valhalla-andorra.tar */ = {isa = PBXFileReference; lastKnownFileType = archive.tar; path = "valhalla-andorra.tar"; sourceTree = "<group>"; };
 		5B5950296CF6A9A52EA68CAD /* BackupTransferView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupTransferView.swift; sourceTree = "<group>"; };
+		5D816DC8CC1427F3392B7154 /* RoutingDownloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingDownloadTests.swift; sourceTree = "<group>"; };
 		5F4DFDBA047D9418E8CC566F /* PlacesWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesWatchApp.swift; sourceTree = "<group>"; };
 		64BC8DA68ADA65041875513D /* WiFiClassificationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiClassificationPicker.swift; sourceTree = "<group>"; };
 		677B848C9A186B52AB7FA48E /* TripViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripViews.swift; sourceTree = "<group>"; };
@@ -300,6 +303,7 @@
 		DC77990A18BB23A926E66A44 /* LocationCollectorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCollectorsView.swift; sourceTree = "<group>"; };
 		DD51F4A2DD5EF97EFB6F4746 /* CompanionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionSettings.swift; sourceTree = "<group>"; };
 		DE309F70353EBEDB7069F031 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		E0D618DE96CBBDD7DF35E410 /* RoutingPackDownloads.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingPackDownloads.swift; sourceTree = "<group>"; };
 		E2484224F90AFD4F0609C882 /* PlacesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PlacesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E3572E6AA534B1A12C5149AD /* PhotoGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGrid.swift; sourceTree = "<group>"; };
 		E45130BF15D65319CD26697F /* SharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedComponents.swift; sourceTree = "<group>"; };
@@ -523,6 +527,7 @@
 				A972E8FFE2B816017FB3CFD6 /* PlaceColorTests.swift */,
 				06711CAA60FFFAABA9CAEEEA /* PlaceRegionLookupTests.swift */,
 				87A373459F1283B8F6CDC7A1 /* RewindNotificationTests.swift */,
+				5D816DC8CC1427F3392B7154 /* RoutingDownloadTests.swift */,
 				FF08421EECCC59F8F65FDDEC /* SupportReportTests.swift */,
 				BD9F7487CC33826E3F2EE3E0 /* TraccarOutputTests.swift */,
 				43C83A2A0FFCB48DBD6F3D07 /* TraccarRouteTests.swift */,
@@ -666,6 +671,7 @@
 				4182BCBFD5ADB5FB51576601 /* PhoneCompanions.swift */,
 				3C4EA2E84B11DD2961492D9A /* PlacesApp.swift */,
 				3DCC98798B0BC98DBB97827D /* RewindNotifications.swift */,
+				E0D618DE96CBBDD7DF35E410 /* RoutingPackDownloads.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -977,6 +983,7 @@
 				327E8C072E72C9E24B046093 /* PlaceColorTests.swift in Sources */,
 				2DF6ED1B98F57A269C2042A5 /* PlaceRegionLookupTests.swift in Sources */,
 				CB030EB2FECF48BC78AE2A32 /* RewindNotificationTests.swift in Sources */,
+				1C3A53B58ADB7D7423A2B7F6 /* RoutingDownloadTests.swift in Sources */,
 				ED2E77DD3DC2B9024FDF292D /* SupportReportTests.swift in Sources */,
 				306032F67A3B8B8E12A61C0F /* TraccarOutputTests.swift in Sources */,
 				7A4C49DEFE5E5FD34532A945 /* TraccarRouteTests.swift in Sources */,
@@ -1041,6 +1048,7 @@
 				A55650CE28B84355735D91BE /* RawMapPointDetail.swift in Sources */,
 				AC5D8EB614CF98D32A744990 /* RewindNotifications.swift in Sources */,
 				4AD965B9D3AF1082C9FD06E9 /* RewindViews.swift in Sources */,
+				820070A5BD9F089A2F3FD7ED /* RoutingPackDownloads.swift in Sources */,
 				3340619B2B86C05B3A118E63 /* SavedPlaceRow.swift in Sources */,
 				841E94E0B0181A9A68A8E9A7 /* SearchView.swift in Sources */,
 				D2CC4FB79F9D9EEBFA596703 /* SettingsView.swift in Sources */,

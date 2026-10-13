@@ -920,6 +920,8 @@ import XCTest
         reveal(choose, in: app); choose.tap()
         let suggested = app.buttons["Suggested photo 1"]
         XCTAssertTrue(suggested.waitForExistence(timeout: 15))
+        // Thumbnails appear incrementally; take the count only after the scan finishes.
+        XCTAssertTrue(app.staticTexts["Finding photos on this iPhone…"].waitForNonExistence(timeout: 15))
         let suggestionCount = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Suggested photo ")).count
         // Opening/cancelling Photos and crop must not restart and duplicate the grid.
         app.buttons["choose-crop-photo"].tap()
@@ -987,6 +989,31 @@ import XCTest
             XCTAssertGreaterThanOrEqual(selected.frame.minX, days.frame.minX - 1)
             XCTAssertLessThanOrEqual(selected.frame.maxX, days.frame.maxX + 1)
         }
+    }
+
+    func testRoutingDownloadRequiresMeasuredMeteredApprovalAndLeavesRecordingOff() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "--ui-map-periods", "--ui-traccar", "--ui-on-device-map", "--ui-metered-maps"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-map"].waitForExistence(timeout: 10)); app.buttons["tab-map"].tap()
+        app.buttons["map-nerd-mode"].tap()
+        XCTAssertTrue(app.buttons["map-collectors"].waitForExistence(timeout: 5)); app.buttons["map-collectors"].tap()
+        let button = app.buttons["download-routing-netherlands"]
+        for _ in 0..<5 where !button.isHittable { app.collectionViews.firstMatch.swipeUp() }
+        XCTAssertTrue(button.waitForExistence(timeout: 5)); button.tap()
+        let confirmation = app.alerts["Download routing data?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "mobile data")).firstMatch.exists)
+        XCTAssertTrue(confirmation.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Bunny.net")).firstMatch.exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Routing download size confirmation"; shot.lifetime = .keepAlways; add(shot)
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertFalse(app.switches["valhalla-toggle"].isEnabled)
+        XCTAssertTrue(button.exists)
+        XCTAssertFalse(app.progressIndicators["Downloading routing data"].exists)
+        let recording = app.switches["traccar-recording-toggle"]
+        for _ in 0..<5 where !recording.isHittable { app.collectionViews.firstMatch.swipeDown() }
+        XCTAssertEqual(recording.value as? String, "0")
     }
 
     func testRouteExperimentKeepsProfileAndDateWithoutEnablingRecording() {

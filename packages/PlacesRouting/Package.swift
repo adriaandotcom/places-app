@@ -13,7 +13,7 @@ let package = Package(
         .target(name: "PlacesRoutingNative", dependencies: ["ValhallaWrapper"],
                 linkerSettings: [.linkedLibrary("z")]),
         .target(name: "PlacesRouting", dependencies: ["PlacesRoutingNative", "ZIPFoundation"],
-                resources: [.copy("Resources/config.json"), .copy("Resources/tzdata"), .copy("Resources/packs.json")])
+                resources: [.copy("Resources/config.json"), .copy("Resources/tzdata"), .copy("Resources/packs.json"), .copy("Resources/downloads.json")])
     ],
     cxxLanguageStandard: .cxx20
 )

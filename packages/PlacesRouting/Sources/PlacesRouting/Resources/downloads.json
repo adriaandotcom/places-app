@@ -1,0 +1,18 @@
+[
+  {
+    "country": "netherlands",
+    "pack": {
+      "name": "Netherlands",
+      "version": "2026.10.08",
+      "engine": "3.9.1",
+      "bytes": 943237120,
+      "sha256": "d0297503e005b7b191a52d2d787d8d975f12c9e1981cd27481c0890f3d80d799",
+      "south": 50.75,
+      "west": 3.2,
+      "north": 53.7,
+      "east": 7.24
+    },
+    "bytes": 347647021,
+    "sha256": "02d0eee0d1bb30704c70701711178638b907ea030ed8f8eee1550ce5730bdf84"
+  }
+]

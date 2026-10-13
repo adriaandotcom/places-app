@@ -102,8 +102,8 @@ def audit(root):
             errors.append(f'{source.name}: unapproved runtime network entry point')
         if re.search(r'\bCKContainer\b', text) and source != cloud:
             errors.append(f'{source.name}: CloudKit must stay inside the encrypted, consent-gated adapter')
-        if re.search(r'\bURLSession\b', text) and source != native / 'App/MapDownloads.swift':
-            errors.append(f'{source.name}: downloads must stay in the approved map pack adapter')
+        if re.search(r'\bURLSession\b', text) and source not in [native / 'App/MapDownloads.swift', native / 'App/RoutingPackDownloads.swift']:
+            errors.append(f'{source.name}: downloads must stay in the approved public pack adapters')
         if ('import MapKit' in text or 'MKReverseGeocodingRequest(' in text) and source.name != 'AppleMapsView.swift':
             errors.append(f'{source.name}: Maps must stay inside the consent-gated adapter')
         if has_remote_url(text, source == root / 'packages/PlacesCore/Sources/PlacesCore/GPXExport.swift'):
@@ -136,6 +136,12 @@ def audit(root):
                       'configuration.allowsCellularAccess = approved', 'configuration.allowsConstrainedNetworkAccess = approved']:
         if safeguard not in downloads:
             errors.append(f'Map downloads missing safeguard: {safeguard}')
+    route_downloads = (native / 'App/RoutingPackDownloads.swift').read_text()
+    for safeguard in ['source.isValid', 'catalog.contains(source)', 'source.validate(file)', 'MapDownloadPolicy.canStart(',
+                      'configuration.allowsCellularAccess = approved', 'configuration.allowsConstrainedNetworkAccess = approved',
+                      'responseURL == current.source.url', 'configuration.httpCookieStorage = nil']:
+        if safeguard not in route_downloads:
+            errors.append(f'Routing downloads missing safeguard: {safeguard}')
     offline = (native / 'Features/OfflineMapView.swift').read_text()
     if 'configuration.protocolClasses = [OfflineMapNetworkBlocker.self]' not in offline or 'URLError(.notConnectedToInternet)' not in offline:
         errors.append('Offline renderer must block remote requests')

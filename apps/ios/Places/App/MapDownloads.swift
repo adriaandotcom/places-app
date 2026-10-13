@@ -27,6 +27,7 @@ final class MapDownloads: NSObject {
     private(set) var transfers: [MapPack.ID: MapPackTransfer] = [:]
     private(set) var installed: [MapPack.ID: URL] = [:]
     private(set) var network: MapDownloadNetwork = .unavailable
+    var onNetworkChanged: ((MapDownloadNetwork) -> Void)?
     private(set) var ready = false
     private(set) var issue: String?
     private var backgroundCompletions: [String: () -> Void] = [:]
@@ -336,6 +337,7 @@ final class MapDownloads: NSObject {
         let value = state
         #endif
         network = value
+        onNetworkChanged?(value)
         for (id, transfer) in transfers where transfer.phase == .downloading && !transfer.approvedMetered && value != .unmetered {
             pause(id, message: value == .needsApproval ? "Waiting for Wi-Fi or your approval." : "Waiting for a connection.")
         }

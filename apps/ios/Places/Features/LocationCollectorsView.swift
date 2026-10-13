@@ -1,11 +1,14 @@
 import SwiftUI
 import PlacesCore
+import PlacesRouting
 import UniformTypeIdentifiers
 
 struct LocationCollectorsView: View {
     @Environment(AppModel.self) private var model
     @State private var changing = false
     @State private var importingPack = false
+    @State private var confirmDownload: RoutingPackDownload?
+    private var downloads: RoutingPackDownloads { model.routingDownloads }
     var body: some View {
         Form {
             Section {
@@ -66,8 +69,47 @@ struct LocationCollectorsView: View {
                     LabeledContent("Routing data", value: pack.name)
                     LabeledContent("Storage", value: ByteCountFormatter.string(fromByteCount: Int64(pack.bytes), countStyle: .file))
                 }
+                ForEach(downloads.catalog.filter { $0.pack != model.routingPack }) { source in
+                    VStack(alignment: .leading, spacing: Layout.compact) {
+                        Text(source.pack.name).font(.body.weight(.semibold))
+                        Text("\(ByteCountFormatter.string(fromByteCount: source.bytes, countStyle: .file)) download · \(ByteCountFormatter.string(fromByteCount: Int64(source.pack.bytes), countStyle: .file)) installed")
+                            .font(.footnote).foregroundStyle(Palette.muted)
+                        if let transfer = downloads.transfer, transfer.source == source, downloads.pending {
+                            if transfer.phase == .downloading {
+                                ProgressView(value: Double(transfer.received), total: Double(source.bytes))
+                                    .accessibilityLabel("Downloading routing data")
+                                HStack {
+                                    Button("Pause", systemImage: "pause") { downloads.pause() }
+                                    Spacer()
+                                    Button("Cancel", systemImage: "xmark") { downloads.cancel() }
+                                }
+                            } else {
+                                HStack {
+                                    ProgressView(transfer.phase == .pausing ? "Pausing…" : "Checking and installing…")
+                                    Spacer()
+                                    Button("Cancel", systemImage: "xmark") { downloads.cancel() }
+                                }
+                            }
+                        } else {
+                            if let transfer = downloads.transfer, transfer.source == source, let message = transfer.message {
+                                Text(message).font(.footnote).foregroundStyle(Palette.muted)
+                            }
+                            HStack {
+                                Button(downloads.transfer?.source != source ? "Download routing data" : downloads.transfer?.phase == .failed ? "Retry download" : "Resume download", systemImage: "arrow.down.circle") {
+                                    if downloads.network == .needsApproval && downloads.transfer?.approvedMetered != true { confirmDownload = source }
+                                    else { downloads.download(source, approvedMetered: downloads.transfer?.approvedMetered == true) }
+                                }.disabled(!downloads.ready || model.installingRoutingPack)
+                                    .accessibilityIdentifier("download-routing-" + source.country)
+                                if downloads.transfer?.source == source {
+                                    Spacer()
+                                    Button("Cancel", systemImage: "xmark") { downloads.cancel() }
+                                }
+                            }
+                        }
+                    }.padding(.vertical, Layout.compact).buttonStyle(.borderless)
+                }
                 Button("Import routing pack", systemImage: "square.and.arrow.down") { importingPack = true }
-                    .disabled(model.installingRoutingPack).accessibilityIdentifier("import-routing-pack")
+                    .disabled(model.installingRoutingPack || downloads.pending).accessibilityIdentifier("import-routing-pack")
                 if model.routingPack != nil {
                     Button("Delete routing pack", systemImage: "trash", role: .destructive) {
                         Task { await model.deleteRoutingPack() }
@@ -81,13 +123,27 @@ struct LocationCollectorsView: View {
                 }
                 if let status = model.routeComparisonStatus { Text(status).foregroundStyle(.secondary) }
             } header: { Text("Route experiment") } footer: {
-                Text("Matches only orange Traccar points using local routing data. Enabling this turns on Nerd mode and leaves recording unchanged. Solid orange lines are estimates; dashed sections remain unmatched. Gaps and poor fixes break the trace. Time comes from recorded points, including stops. Import the Places Valhalla ZIP through Files. Matching happens on this iPhone; routing packs are excluded from backups.")
+                Text("Matches orange Traccar points on this iPhone. Enabling this turns on Nerd mode and leaves recording unchanged. Solid lines are estimates; gaps and poor fixes break the trace. Time includes stops. Routing downloads come from Bunny.net and contain no location history. You can also import a pack through Files. Routing data is excluded from backups.")
             }
         }.scrollContentBackground(.hidden).background(Palette.background).foregroundStyle(Palette.ink)
             .tint(Palette.controlGreen).navigationTitle("Location collectors").navigationBarTitleDisplayMode(.inline)
             .fileImporter(isPresented: $importingPack, allowedContentTypes: [.zip]) { result in
                 if case .success(let url) = result { Task { await model.importRoutingPack(url) } }
             }
+            .alert("Download routing data?", isPresented: Binding(get: { confirmDownload != nil }, set: { if !$0 { confirmDownload = nil } })) {
+                Button("Cancel", role: .cancel) { confirmDownload = nil }
+                Button("Download") {
+                    if let source = confirmDownload { downloads.download(source, approvedMetered: true) }
+                    confirmDownload = nil
+                }
+            } message: {
+                if let source = confirmDownload {
+                    Text("This connection may use mobile data or Low Data Mode. Download \(ByteCountFormatter.string(fromByteCount: downloads.remaining(source), countStyle: .file)) from Bunny.net? Routing data uses \(ByteCountFormatter.string(fromByteCount: Int64(source.pack.bytes), countStyle: .file)) after installation.")
+                }
+            }
+            .alert("Routing download", isPresented: Binding(get: { downloads.issue != nil }, set: { if !$0 { downloads.clearIssue() } })) {
+                Button("OK") { downloads.clearIssue() }
+            } message: { Text(downloads.issue ?? "") }
     }
     private var status: String {
         if model.traccar.storageFailed { return "Could not save; recording stopped" }

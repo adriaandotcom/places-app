@@ -1,6 +1,7 @@
 # Orange-point route experiment
 
-In **Map → Nerd mode → Location collectors**, import the Places Valhalla ZIP,
+In **Map → Nerd mode → Location collectors**, download the Netherlands routing
+data from Bunny or import the Places Valhalla ZIP through Files,
 choose Walking, Bicycle or Driving, then enable **Valhalla routes**. The setting
 and profile persist across screen switches and launches. The existing date/range
 picker selects the evidence. Recording is unchanged and remains independently
@@ -62,15 +63,29 @@ do not change the observed-time calculation.
 - ZIP SHA-256: `02d0eee0d1bb30704c70701711178638b907ea030ed8f8eee1550ce5730bdf84`.
 - Graph SHA-256: `d0297503e005b7b191a52d2d787d8d975f12c9e1981cd27481c0890f3d80d799`.
 
-The ZIP lives in ignored `build/artifacts/Places-Valhalla-Netherlands-2026.10.08.zip`.
-Transfer it through AirDrop/Files and import explicitly; Places does not download
-it automatically. Keep the ZIP plus roughly 1 GB free for installation. The ZIP
+The ZIP is available at
+`https://places-app.b-cdn.net/maps/routing/netherlands/2026.10.08/valhalla.zip`
+and in ignored `build/artifacts/Places-Valhalla-Netherlands-2026.10.08.zip`.
+Downloads start only after tapping Download. The app shares map downloads’
+connection classification, asks for measured-size approval on metered or Low
+Data connections, supports background progress and pause/resume, and verifies
+the complete ZIP size and SHA-256 before installation. Requests use a fixed
+public URL without coordinates, history, identifiers, cookies or query parameters.
+Keep roughly 1.3 GB free for downloading and installation, plus space for an
+existing pack if replacing it. AirDrop/Files import remains available. The ZIP
 contains `pack.json`, `tiles.tar` and a human-readable `README.txt`. Import streams
 the graph, verifies CRC, size and SHA-256, and accepts only an exact entry in the
 bundled catalog. No imported configuration or arbitrary native graph is accepted.
 Installation uses staging/rollback recovery. Routing data is protected after
 first unlock, excluded from device backups and removable in the same screen.
 Data is © OpenStreetMap contributors, ODbL 1.0; attribution is bundled in the app.
+
+Publication uses the existing `BUNNY_STORAGE_KEY` Actions secret. Upload the public
+ZIP as `Places-Valhalla-Netherlands-2026.10.08.zip` on the `routing-2026.10.08`
+GitHub release, then dispatch **Publish routing data to Bunny** on validated main.
+`scripts/publish_routing_pack.py` checks the bundled descriptor, local bytes and
+public CDN bytes. Existing immutable objects are never overwritten. The ZIP is
+public OSM routing data; no app history or user data belongs in that release.
 
 To build a new pack from public OSM data:
 

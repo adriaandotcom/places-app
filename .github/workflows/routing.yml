@@ -1,0 +1,34 @@
+name: Publish routing data to Bunny
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: routing-data-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check publisher and verify storage access
+        env:
+          BUNNY_STORAGE_KEY: ${{ secrets.BUNNY_STORAGE_KEY }}
+        run: |
+          python3 -m py_compile scripts/publish_routing_pack.py
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts/maps')
+          from publish_maps import Storage
+          Storage().request('GET', '/maps/metadata.json')
+          print('Existing Bunny storage access verified')
+          PY
+      - name: Download, verify, publish immutable ZIP and verify public bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNNY_STORAGE_KEY: ${{ secrets.BUNNY_STORAGE_KEY }}
+        run: python3 scripts/publish_routing_pack.py --download-release

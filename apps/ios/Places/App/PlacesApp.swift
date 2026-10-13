@@ -17,9 +17,13 @@ import BackgroundTasks
     }
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
-        guard identifier.hasPrefix(MapDownloads.sessionID) else { completionHandler(); return }
-        AppModel.shared.mapDownloads.start()
-        AppModel.shared.mapDownloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
+        if identifier.hasPrefix(MapDownloads.sessionID) {
+            AppModel.shared.mapDownloads.start()
+            AppModel.shared.mapDownloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
+        } else if [RoutingPackDownloads.sessionID + ".wifi", RoutingPackDownloads.sessionID + ".any"].contains(identifier) {
+            AppModel.shared.routingDownloads.start()
+            AppModel.shared.routingDownloads.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
+        } else { completionHandler() }
     }
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         if !AppModel.shared.uiTesting { LocalDiagnostics.shared.start() }

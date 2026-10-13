@@ -55,6 +55,10 @@ final class AppModel {
     private(set) var routeComparisonStatus: String?
     private(set) var installingRoutingPack = false
     @ObservationIgnored private let routeExperiment = TraccarRouteExperiment(testing: ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+    @ObservationIgnored lazy var routingDownloads = RoutingPackDownloads(testing: uiTesting) { [weak self] file in
+        guard let self else { throw CancellationError() }
+        return try await self.installRoutingPack(file)
+    }
     @ObservationIgnored private var routeTask: Task<Void, Never>?
     private var routeRequest = UUID()
     private var matchingForeground = true
@@ -176,6 +180,9 @@ final class AppModel {
                     valhallaEnabled = try await opened.setting("valhallaEnabled") == "true"
                     valhallaMode = TraccarMatchingMode(rawValue: try await opened.setting("valhallaMode") ?? "") ?? .walking
                     routingPack = await routeExperiment.installed()
+                    routingDownloads.start()
+                    routingDownloads.networkChanged(mapDownloads.network)
+                    mapDownloads.onNetworkChanged = { [weak self] network in self?.routingDownloads.networkChanged(network) }
                     monthlyRewindReminders = try await opened.setting("monthlyRewindReminders") == "true"
                     weeklyReviewReminders = try await opened.setting("weeklyReviewReminders") == "true"
                     trackingEnabled = try await opened.setting("trackingEnabled") != "false"
@@ -685,23 +692,29 @@ final class AppModel {
         } catch { fail("Could not save this comparison setting.") }
     }
     func importRoutingPack(_ url: URL) async {
-        guard !installingRoutingPack, !deleting else { return }
+        routingDownloads.cancel()
+        do { _ = try await installRoutingPack(url) }
+        catch is CancellationError { }
+        catch { if !deleting { fail("Could not import this routing pack. Use the Places Valhalla pack and make sure there is enough free storage.") } }
+    }
+    private func installRoutingPack(_ url: URL) async throws -> RoutingPack {
+        guard !installingRoutingPack, !deleting else { throw CancellationError() }
         installingRoutingPack = true; stopRouteComparison()
         let epoch = generation
         defer { installingRoutingPack = false }
-        do {
-            let pack = try await routeExperiment.install(url)
-            guard epoch == generation, !deleting else { return }
-            routingPack = pack
-        } catch { if epoch == generation, !deleting { fail("Could not import this routing pack. Use the Places Valhalla pack and make sure there is enough free storage.") } }
+        let pack = try await routeExperiment.install(url)
+        guard epoch == generation, !deleting else { throw CancellationError() }
+        routingPack = pack
         installingRoutingPack = false
         await refresh()
+        return pack
     }
     func deleteRoutingPack() async {
         guard !installingRoutingPack, !deleting else { return }
         let epoch = generation
         stopRouteComparison()
         do {
+            try routingDownloads.erase()
             try await routeExperiment.remove()
             guard epoch == generation, !deleting else { return }
             routingPack = nil
@@ -835,6 +848,7 @@ final class AppModel {
     }
 
     func restoreBackup(_ backup: PreparedBackup) async throws {
+        routingDownloads.cancel()
         stopRouteComparison(); await routeExperiment.clear()
         guard let store, !deleting else { throw CancellationError() }
         deleting = true; generation += 1
@@ -892,6 +906,7 @@ final class AppModel {
     func deleteAllDataAndRestart() async -> Bool {
         guard let store, !deleting else { return false }
         deleting = true; generation += 1
+        routingDownloads.cancel()
         stopRouteComparison(); await routeExperiment.clear()
         await traccar.stop()
         photoLibrary.reset()
@@ -908,6 +923,7 @@ final class AppModel {
         do {
             if !uiTesting { try await companions.erase() }
             try mapDownloads.deleteAll()
+            try routingDownloads.erase()
             try await routeExperiment.remove(); routingPack = nil; valhallaEnabled = false; valhallaMode = .walking
             try MemoryPhotoDraft.clearAbandonedImports()
             try BackupTransferView.clearAbandonedTransfers()
